@@ -7,6 +7,9 @@ left behind.
 
 import os
 import sys
+import time
+
+import psutil
 from ansys.aedt.core import Hfss
 
 
@@ -19,12 +22,26 @@ def main() -> int:
         non_graphical=False,
         design="probe_design",
     ) as hfss:
-        print("step 3: desktop version:", hfss.aedt_version)
-        print("step 4: product:", hfss.product_name)
+        print("step 3: desktop version:", hfss.desktop_class.aedt_version)
+        print("step 4: project:", hfss.project_name)
         print("step 5: design:", hfss.design_name)
+        print("step 5b: solution type:", hfss.solution_type)
         print("step 6: throwaway design created OK")
-    print("step 7: releasing desktop...")
-    hfss.release_desktop(close_projects=True, close_desktop=True)
+    pid = hfss.desktop_class.aedt_process_id
+    print("step 7: releasing desktop, closing AEDT (pid", pid, ")...")
+    hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True)
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        if not psutil.pid_exists(pid):
+            break
+        try:
+            psutil.Process(pid).kill()
+        except psutil.NoSuchProcess:
+            break
+        time.sleep(1)
+    gone = not psutil.pid_exists(pid)
+    print("step 8: AEDT process gone ->", gone)
+    assert gone, "AEDT process did not exit after release + kill"
     print("PROBE PASS")
     sys.stdout.flush()
     os._exit(0)

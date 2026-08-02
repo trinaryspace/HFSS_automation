@@ -1,81 +1,65 @@
-# env-probe workspace summary — Ticket 01 (hard-gate escalation)
+# env-probe workspace summary — Ticket 01 (RESOLVED 2026-08-02)
 
-Date: 2026-08-02. Status of ticket 01: **BLOCKED/ESCALATED** — the trivial
-desktop launch works, but no HFSS design can be opened on this box because
-the AEDT license prerequisite (the plan's open item) is unmet.
+Ticket 01 acceptance passed: `import ansys.aedt.core` at 1.3.0, trivial
+graphical desktop launch against AEDT 2024 R1, throwaway HFSS design
+created, clean exit with zero orphan processes.
 
-## Verified environment facts
+## Blocker history (root cause)
 
-- Python 3.10.0 (`C:\Users\afpim\AppData\Local\Programs\Python\Python310`),
-  pip 25.1, `pip check` clean.
-- pyAEDT reinstalled at 1.3.0 (user reinstall; same version as before).
-- **`import pyaedt` does not exist, by design**: the official PyPI
-  `pyaedt-1.3.0-py3-none-any.whl` contains zero `pyaedt/` files (verified
-  from the wheel). The namespace is `ansys.aedt.core` (imports fine, 1.3.0).
-  PLAN task "verify import pyaedt" premise corrected → use `ansys.aedt.core`.
-- AEDT 2024 R1 `v241` installed at `C:\Program Files\AnsysEM\v241\Win64`,
-  `ANSYSEM_ROOT241` set, `ansysedt.exe` present. Only v241 on disk
-  (`%APPDATA%\Ansys\v252` residue exists but no install).
-- pyAEDT 1.3.0 transport is gRPC-only ("wnua"), **in-process**: the client
-  loads AEDT's own `PyDesktopPlugin.dll` (`PyDLL`, holds the GIL during
-  calls). `settings.use_grpc_api=False` does not change the transport
-  (verified in logs). No remote-server components in the install.
+- Design-open froze in every pyAEDT path until the license was fixed.
+- Stock-AEDT scripting showed the cause: `FlexNet error -15,10032`,
+  `Feature: hfss_gui`, `Server name: 141.211.4.186`,
+  `License path: 1055@LICENSE-ANSYS.ENGIN.UMICH.EDU`.
+- Both hosts were unreachable on TCP 1055; no license env override
+  existed; `%APPDATA%\Ansys\v241\licensing` empty.
+- **User fixed the license by restoring/connecting the UM license server;
+  the server requires the UM VPN (Cisco Secure Connect).** After that the
+  host pair became reachable on 1055 and the probe passed unchanged.
+- The plan's open item ("license availability unverified") is now
+  RESOLVED with the caveat: **VPN access to the UM network is a standing
+  prerequisite for any AEDT work on this box.**
 
-## Probe matrix (all against live 2024 R1)
+## Verified environment facts (feed ticket 02's environment-compat entry)
 
-| path | result |
-|---|---|
-| pyaedt 1.3.0 launch, graphical `Hfss(design=...)` | desktop up + project created; **freeze at design-open** |
-| pyaedt 1.3.0 launch, non-graphical | same freeze |
-| pyaedt 1.2.0 (isolated venv), launch | same freeze |
-| interactive scheduled task (user session) | same freeze |
-| pyaedt attach (`new_desktop=False`, native gRPC :50051) | fails earlier: `GetActiveProjectName` GrpcApiError |
-| stock `ansysedt.exe` GUI launch | **works**, window "Ansys Electronics Desktop 2024 R1", responding |
-| stock `ansysedt.exe -RunScriptAndExit` (IronPython, create HFSS design) | **fails with license error** (see below) |
-
-Call-surface detail (through the gRPC plugin): `NewProject`, `GetActiveProject`,
-`GetName`, `InsertDesign("HFSS",·,"HFSS Modal Network",·)` work;
-`SetActiveDesign`, `GetDesignNames`, `GetNumDesigns`, `GetActiveProjectName`
-raise GrpcApiError; `GetActiveDesign` returns None with no design and
-hard-freezes the client when a design exists (DLL call holds the GIL; even
-watchdog threads stop). `InsertDesign("CIRCUIT",...)` → AEDT-side macro
-error "unsupported design type = circuit".
-
-## Root cause (license)
-
-Stock-AEDT script error message, verbatim:
-
-```
-[error] Cannot connect to license server system.
-Feature: hfss_gui
-Server name: 141.211.4.186
-License path: 1055@LICENSE-ANSYS.ENGIN.UMICH.EDU;
-FlexNet Licensing error -15,10032
-```
-
-- Both `LICENSE-ANSYS.ENGIN.UMICH.EDU` and `141.211.4.186` unreachable on
-  TCP 1055 (verified with Test-NetConnection).
-- No `ANSYSLMD_LICENSE_FILE` / `LM_LICENSE_FILE` env override.
-- `%APPDATA%\Ansys\v241\licensing` is empty; no stale config found under
-  `%APPDATA%\Ansys`, `ProgramData\Ansys`, `HKCU\SOFTWARE\Ansys\Ansoft`.
-- So: design-open (`hfss_gui` feature checkout) stalls on the dead server;
-  every pyAEDT design flow wedges at that point. Secondary observation:
-  `HFSSCOMENGINE.exe` exits with code -3 standalone (no WER report found).
-
-## What feeds ticket 02 (environment-compat entry)
-
-1. `ansys.aedt.core` (not `pyaedt`) is the importable namespace at 1.3.0.
-2. pyAEDT 1.3.0 = gRPC-only in-process hosting of AEDT 2024 R1; broad COM
-   objects work; `GetActiveDesign`/`SetActiveDesign` broken with a design
-   present; attach-mode session broken.
-3. License: the box is not licensed for AEDT 2024 R1 (dead UMich server) —
-   a hard prerequisite, currently unmet.
-4. pyaedt 1.2.0 behaves identically — not a client-version issue.
+- Python 3.10.0, pip 25.1, `pip check` clean.
+- pyAEDT **1.3.0** installed. **`import pyaedt` does not exist by design**
+  (official 1.3.0 wheel ships zero `pyaedt/` files); the importable
+  namespace is `ansys.aedt.core`. PLAN's "verify import pyaedt" premise is
+  corrected.
+- AEDT 2024 R1 `v241` at `C:\Program Files\AnsysEM\v241\Win64`;
+  `ANSYSEM_ROOT241` set.
+- pyaedt 1.3.0 transport is gRPC "wnua" (in-process client DLL loading
+  AEDT's `PyDesktopPlugin.dll`); it LAUNCHES a real `ansysedt.exe` process
+  (aedt_process_id). `settings.use_grpc_api=False` does not change the
+  transport (verified in logs). pyaedt 1.2.0 behaved identically.
+- Working over gRPC on 2024 R1: launch, NewProject, GetActiveProject,
+  InsertDesign("HFSS", name, "HFSS Modal Network", ""), full Hfss()
+  lifecycle now that licensing works.
+- Known awkward: previously-broken design discovery calls
+  (GetActiveDesign/SetActiveDesign/GetDesignNames/GetActiveProjectName)
+  behaved as suspected only under the dead-license stall; they were NOT
+  re-bisected after the license fix — retest them in ticket 02's matrix
+  before trusting them. The successful `Hfss()` path implies
+  GetActiveDesign works when licensed.
+- **Release behavior:** `release_desktop(close_on_exit=True)` logs
+  "released" but does NOT terminate the launched `ansysedt.exe` in all
+  cases; the probe therefore kills the `aedt_process_id` until gone
+  (psutil) and asserts exit. Staged scripts in the skill should account
+  for this (server reuse is the intended attach story, explicit quit is
+  the probe's).
+- **New HFSS design default solution type under 1.3.0/2024 R1 is
+  "Terminal"** (observed on `Hfss(design=...)` with no solution_type).
+  Recipe/Clarification work must set `solution_type="Modal"` explicitly
+  for driven-modal recipes.
+- Secondary observation: `HFSSCOMENGINE.exe` exits with code -3 standalone
+  (no WER report); not blocking — investigate only if a later stage
+  needs it.
 
 ## Artifacts
 
-- `src/env_probe.py` — acceptance probe (launch → design → release + exit).
-- `src/env_probe_ipc.py`, `src/env_probe_nongraphical.py` — transport/mode variants.
-- `src/diag_design_hang.py`, `src/diag_transport_bisect.py`,
-  `src/diag_call_surface.py`, `src/diag_gui_windows.py`,
-  `src/diag_attach_mode.py` — call-surface and mode bisections.
+- `src/env_probe.py` — acceptance probe (launch → create design →
+  release → assert zero orphan). Passing.
+- `src/env_probe_ipc.py`, `src/env_probe_nongraphical.py` — transport/mode
+  variants (kept as records; non-graphical path passes since license fix).
+- `src/diag_*.py` — call-surface/mode bisection scripts from the blocker
+  investigation (historical; useful for ticket 02's matrix).

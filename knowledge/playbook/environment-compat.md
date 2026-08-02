@@ -1,0 +1,174 @@
+# Environment-compat entry
+
+**The single accumulation point for backend-compat facts** (ADR 0004). Facts
+here are appendable only through the smoke-matrix ceremony or an approved
+learning-loop amendment (ADR 0002). Readers: the hfss-agent skill consults
+this entry before promising any API on this machine.
+
+Last updated: 2026-08-02 (ticket 02 matrix). Machine context: local Windows,
+AEDT 2024 R1 (`v241`, `C:\Program Files\AnsysEM\v241\Win64`), Python 3.10.0,
+pyAEDT **1.3.0** (importable namespace `ansys.aedt.core`; `pip check` clean).
+
+## Standing prerequisites
+
+- **License**: AEDT requires the UM license server
+  (`1055@LICENSE-ANSYS.ENGIN.UMICH.EDU`); the server is reachable **only
+  with the UM VPN (Cisco Secure Connect) connected**. Without VPN+license,
+  design-open and every solve stall. (FlexNet `-15,10032`, feature
+  `hfss_gui`, observed verbatim in stock-AEDT scripting.)
+- **No `pyaedt` top-level import**: by design at 1.3.0 (verified against
+  the official wheel — zero `pyaedt/` files). Always `import ansys.aedt.core`.
+
+## Transport
+
+- pyAEDT 1.3.0 on Windows uses the gRPC "wnua" transport **exclusively**:
+  the client loads (in-process via ctypes/PyDLL) AEDT's own
+  `PyDesktopPlugin.dll` and launches a real `ansysedt.exe` server process
+  (`aedt_process_id`). `settings.use_grpc_api=False` does **not** change the
+  transport (verified in logs). pyaedt 1.2.0 behaved identically
+  (venv-tested) — not a client-version issue.
+- DLL calls hold the GIL: a blocked call freezes the entire client process
+  (watchdog threads stop). Guard against indefinite stalls by design.
+
+## Matrix outcomes (probe verdicts + route-around decisions)
+
+### 1. Launch new graphical desktop — WORKS
+`Hfss(version="2024.1", new_desktop=True, non_graphical=False, design=...)`
+launches, creates project + design, writes objects, and releases. Cold
+start 6–23 s; then project operations ~instant.
+**Route-around**: none needed; this is the baseline launch preamble.
+Artifact: `workspaces/env-probe/src/env_probe.py` (PASS).
+
+### 2. Attach onto running desktop — WORKS (cross-process)
+Launch script releases with `release_desktop(close_projects=False,
+close_on_exit=False)`, leaving the server alive; a **second python
+process** re-attaches with `Desktop(new_desktop=False)` /
+`Hfss(project=..., new_desktop=False)`: discovers the session
+("Found active AEDT gRPC session on port …"), reads launcher-written state
+(design variables), works. Attach to a stock-launched `ansysedt.exe`
+(native gRPC :50051) also connects.
+**Route-around**: staged scripts may attach instead of relaunching; keep
+the server alive between stages (that matches "session state lives in the
+AEDT project"). Artifact: `workspaces/smoke-matrix/src/launch_keep.py` +
+`attach_reuse.py` (PASS).
+
+### 3. Raw COM call surface over gRPC — PARTIALLY BROKEN (use high-level API)
+On project/design objects: `NewProject`, `GetActiveProject`, `GetName`,
+`InsertDesign("HFSS", name, "HFSS Modal Network", "")` work.
+`SetActiveDesign`, `GetDesignNames`, `GetNumDesigns`,
+`GetActiveProjectName`, `GetMessages` raise GrpcApiError (even licensed);
+`GetActiveDesign` returns None with no design; `InsertDesign("CIRCUIT",…)`
+→ server-side "unsupported design type = circuit". pyaedt 1.3.0's own
+high-level paths (Hfss etc.) sidestep the broken surface and work
+end-to-end.
+**Route-around**: never call the raw COM surface directly; use the
+high-level `ansys.aedt.core` API everywhere. A plain high-level flow is
+the only supported pattern. Artifact: `workspaces/env-probe/src/
+diag_call_surface.py`, `diag_transport_bisect.py` (evidence).
+
+### 4. Blocking solve — WORKS
+Minimal valid Modal design (wave port on face of PEC solid + radiation
+airbox, 3-pass adaptive 2.4 GHz, 101-pt discrete sweep 2–3 GHz):
+`validate_simple()` True; `analyze(setup="Setup1", blocking=True)` returns
+True after ~147 s (mesh+solve+sweep).
+**Route-around**: none; the reference outcome for recipe QA.
+Artifact: `workspaces/smoke-matrix/src/probe_solve_blocking.py` (PASS).
+
+### 5. Non-blocking solve — WORKS (submission), solve completes in background
+`analyze(blocking=False)` returns `True` in ~3 s (submission only, as
+documented); the solve then runs to completion in the background on the
+same server process (verified by the on-disk `.asol` and by the blocking
+reference taking ~150 s).
+**Route-around**: launched with `blocking=False`, then poll for completion
+(see 6); do NOT treat the `True` return as "solved".
+Artifact: `workspaces/smoke-matrix/src/probe_solve.py` (PASS).
+
+### 6. Reading results (`post.get_solution_data`) — WORKS, FLAKY
+`hfss.post.get_solution_data(expressions="dB(S(1,1))")` on the solved
+project returns real S11 data (observed S11 min ≈ 0.47 dB for the smoke
+antenna) — once, on a fresh attach to a solved project. Repeatedly
+elsewhere (same session post-solve, and on reopens) it returns an
+**unfilled `SolutionData`** (has `primary_sweep_values`, no `data_real`)
+with AEDT warnings "Solution Data failed to load / No Data Available";
+retries within a session don't reliably heal it. Explicit
+`setup_sweep_name` must use the *actual* sweep name (auto-generated with a
+random suffix, e.g. `Setup1 : Sweep_2AGE6M`).
+**Route-around**: treat an unfilled SolutionData as "not ready"; retry
+with backoff; prefer re-attaching (fresh session) to read results; print
+what is observed — a flaky readout is expected, a missing `.asol` is not.
+Artifact: `workspaces/smoke-matrix/src/s11_readout.py` + `diag_readout*.py`.
+
+### 7. Excitation assignments — WORKS with caveats (pattern matters)
+`wave_port(<face object>, ...)` works (boundary created). Assigning by
+**id** (int) or edge breaks: pyaedt maps ids to the `Objects` selection
+kind and the 2024 R1 macro layer rejects it ("a geometry selection is
+required for assignment"); `lumped_port(edge_id)` same failure; passing an
+`EdgePrimitive` as `integration_line` crashes pyaedt (`'<' not supported
+between edgeprimitive and int`).
+**Route-around**: always pass the **face object** (`<sheet>.faces[0]`) to
+wave_port; never pass int ids; a port sheet auto-integration has
+validation risk (see 8) — the solid-face port with default integration is
+the reliable shape.
+Artifact: `workspaces/smoke-matrix/src/micro_probe_excitation.py`.
+
+### 8. Validation gates — MUST use before solve
+`validate_simple()` returns int (1 = valid). The sheet-based wave port
+with auto integration line produced an INVALID design; the solid-face port
+pattern validates True. Reusing a project file with same-name objects
+silently duplicates geometry/ports and invalidates — always build from a
+clean project (fresh path or wipe; see 9).
+**Route-around**: `validate_simple()` before every solve; rebuild fresh
+projects deterministically (probes wipe their project dir first).
+
+### 9. Project files and locks — manage explicitly
+AEDT writes `<name>.aedt` + `<name>.aedtresults/` beside the project
+(probe projects live in the probe workspace). Killed sessions leave
+`.lock` files; `Hfss(remove_lock=True)` clears them. Crash-killed runs
+leave the `ansysedt.exe` server process alive and the project locked.
+**Route-around**: pass `remove_lock=True`; after any crashed run, kill
+stray `ansysedt.exe` (kill `aedt_process_id` until gone; psutil) before
+the next run.
+
+### 10. Release / process hygiene — kill-until-gone required
+`release_desktop(close_on_exit=True)` closes AEDT in the attach case but
+sometimes only logs "released" without terminating the launched server;
+interpreter exit also hangs on gRPC teardown.
+**Route-around**: probe pattern = release, then kill the
+`aedt_process_id` until gone (psutil), assert exit, then `os._exit(0)` —
+never rely on release to reap the process. (See env_probe.py.)
+
+### 11. Solution-type default — Terminal, not Modal
+`Hfss(design=..., solution_type=None)` creates the design with
+**Terminal** solution default (observed 2026-08-02, 1.3.0/2024 R1).
+**Route-around**: recipe Clarification must pass `solution_type="Modal"`
+explicitly for driven-modal recipes.
+
+### 12. RCS/SBR+ surface — PRESENT BUT NOT USABLE ON THIS BOX
+`Hfss.get_rcs_data` attribute exists; `MonostaticRCSExporter` imports.
+Calling `get_rcs_data([2.4], setup=...)` on a plain Modal design fails
+past a chain of optional deps (pandas — installed 2.3.3 → pyvista — absent)
+into the geometry export, and could only ever proceed with a licensed SBR+
+design/solve anyway (SBR+ feature not evidenced on this license).
+`frequencies` must be a list (float raises `len()` TypeError client-side).
+**Route-around**: do not promise `get_rcs_data`/`MonostaticRCSExporter`
+for 2024 R1 flows (matches ADR 0004's expectation); keep optional deps of
+the client surface documented (pandas installed, pyvista missing — install
+only if an SBR flow is ever licensed). Artifact: `probe_rcs.py`.
+
+### 13. `HFSSCOMENGINE.exe` — not investigated further
+Exits with code -3 standalone; no WER report. Not on any current flow's
+path; revisit only if a stage needs it.
+
+## Appendix: environment state the matrix left behind
+
+- pandas 2.3.3 installed (needed by rcs_exporter import chain).
+- Probe workspaces: `workspaces/env-probe/` (ticket 01) and
+  `workspaces/smoke-matrix/` (ticket 02), each with `projects/` outputs.
+- No `ansysedt.exe` / probe python processes left running.
+
+## Verification of this entry
+
+Cross-checked by the final full-matrix run (2026-08-02): attach pair PASS,
+blocking solve True @147 s, non-blocking submission True @3.3 s,
+readout flakiness reproduced as recorded, RCS chain stops at optional-dep
+as recorded.

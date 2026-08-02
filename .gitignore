@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.pyc
+
+# AEDT / probe workspace outputs (regenerable; probes wipe these)
+workspaces/**/projects/
+
+# Stray artifacts from AEDT scripting runs
+batch.log

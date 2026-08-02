@@ -1,13 +1,12 @@
 """Matrix probe: blocking solve on the shared smoke design (reference outcome)."""
 
 import os
-import shutil
 import sys
 import time
 
-import psutil
 from ansys.aedt.core import Hfss
 
+from aedt_helpers import AEDT_VERSION, kill_aedt_tree, wipe_project_dir
 from s11_readout import fetch_s11_db, s11_summary
 from smoke_design import build_smoke_design
 
@@ -15,34 +14,21 @@ PROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pr
 PROJECT = os.path.join(PROJECT_DIR, "smoke_solve2.aedt")
 
 
-def kill_new_aedt(start_time):
-    for p in psutil.process_iter(["pid", "name", "create_time"]):
-        try:
-            if p.info["name"] == "ansysedt.exe" and p.info["create_time"] > start_time:
-                p.kill()
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-
-
 def main() -> int:
-    start_time = time.time()
-    if os.path.isdir(PROJECT_DIR):
-        for leftover in os.listdir(PROJECT_DIR):
-            p = os.path.join(PROJECT_DIR, leftover)
-            if os.path.isdir(p):
-                shutil.rmtree(p, ignore_errors=True)
-            else:
-                os.remove(p)
+    lingering_pid = [None]
+    os.makedirs(PROJECT_DIR, exist_ok=True)
+    wipe_project_dir(PROJECT_DIR)
     exit_code = 0
     try:
         with Hfss(
-            version="2024.1",
+            version=AEDT_VERSION,
             new_desktop=True,
             non_graphical=False,
             project=PROJECT,
             design="solve_design2",
             solution_type="Modal",
         ) as hfss:
+            lingering_pid[0] = hfss.desktop_class.aedt_process_id
             build_smoke_design(hfss)
             hfss.save_project()
             print("built + saved; validate:",
@@ -59,7 +45,7 @@ def main() -> int:
                 lo, at = s11_summary(data)
                 print(f"S11 min = {lo:.2f} dB; S11 at 2.4GHz = {at:.2f} dB", flush=True)
     finally:
-        kill_new_aedt(start_time)
+        kill_aedt_tree(lingering_pid[0])
     sys.stdout.flush()
     os._exit(exit_code)
 

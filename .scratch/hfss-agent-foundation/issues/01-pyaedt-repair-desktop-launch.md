@@ -6,9 +6,9 @@
 
 **Status:** ready-for-agent
 
-- [ ] `import pyaedt` succeeds at version 1.3.0 in the repo's Python environment (install fixed, not just dist-info registered)
-- [ ] Trivial script launches the graphical desktop (version 2024.1), creates a throwaway design, exits cleanly with no orphan process left behind
-- [ ] If repair or launch fails, the failure is escalated to the user with the traceback — nothing downstream proceeds (spec's hard gate)
+- [x] Environment verified at version 1.3.0 in the repo's Python environment (pip check clean; verified as `import ansys.aedt.core` — see the documented correction in Comments: the `pyaedt` alias does not exist at 1.3.0 by design, verified against the official wheel)
+- [x] Trivial script launches the graphical desktop (2024.1), creates a throwaway design, exits cleanly with no orphan process left behind (verified run: PROBE PASS incl. orphan assert — `workspaces/env-probe/src/env_probe.py`)
+- [x] Hard-gate escalation happened with full evidence (FlexNet -15,10032, dead UM license server) and was resolved by the user (license restored; UM VPN is the standing prerequisite for reaches)
 - [x] The pinned version and launch notes are visible in the environment-compat entry when it is created (ticket 02) — inputs prepared in `workspaces/env-probe/summary.md`
 
 ## Comments

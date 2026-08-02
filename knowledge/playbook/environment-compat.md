@@ -74,29 +74,40 @@ True after ~147 s (mesh+solve+sweep).
 **Route-around**: none; the reference outcome for recipe QA.
 Artifact: `workspaces/smoke-matrix/src/probe_solve_blocking.py` (PASS).
 
-### 5. Non-blocking solve — WORKS (submission), solve completes in background
-`analyze(blocking=False)` returns `True` in ~3 s (submission only, as
-documented); the solve then runs to completion in the background on the
-same server process (verified by the on-disk `.asol` and by the blocking
-reference taking ~150 s).
+### 5. Non-blocking solve — WORKS (submission); background completion INFERRED
+`analyze(blocking=False)` returns `True` in ~3 s — submission only, as
+documented (a `True` return does not mean solved). Background completion
+is *inferred* from two observations, not directly asserted by the probe:
+(a) the same design solves in ~150 s when run `blocking=True` (item 4),
+and (b) solver artifacts (`solve_design.asol`, per-frequency `.sd` files)
+appeared on disk in the project results folder while the non-blocking run
+polled. The non-blocking probe itself can only confirm submission + poll
+for data (whose readout is flaky, item 6); it cannot fail on "solve did
+not complete". Follow-up ticket 07 exists to close this gap for Proof 1.
 **Route-around**: launched with `blocking=False`, then poll for completion
-(see 6); do NOT treat the `True` return as "solved".
-Artifact: `workspaces/smoke-matrix/src/probe_solve.py` (PASS).
+(see 6); do NOT treat the `True` return as "solved"; verify completion by
+an independent signal (results-on-disk growth or a blocking re-analyze).
+Artifact: `workspaces/smoke-matrix/src/probe_solve.py` (submission PASS).
 
-### 6. Reading results (`post.get_solution_data`) — WORKS, FLAKY
-`hfss.post.get_solution_data(expressions="dB(S(1,1))")` on the solved
-project returns real S11 data (observed S11 min ≈ 0.47 dB for the smoke
-antenna) — once, on a fresh attach to a solved project. Repeatedly
-elsewhere (same session post-solve, and on reopens) it returns an
-**unfilled `SolutionData`** (has `primary_sweep_values`, no `data_real`)
-with AEDT warnings "Solution Data failed to load / No Data Available";
-retries within a session don't reliably heal it. Explicit
+### 6. Reading results (`post.get_solution_data`) — WORKS, FLAKY (single observation)
+`hfss.post.get_solution_data(expressions="dB(S(1,1))")` returned real S11
+data (min ≈ 0.47 dB for the smoke antenna) exactly once — on a fresh
+attach to a project solved by an earlier session (`diag_readout.py`).
+Every other attempt was an **unfilled `SolutionData`** (has
+`primary_sweep_values`, no `data_real`) with AEDT warnings "Solution Data
+failed to load / No Data Available": in the solving session right after
+`analyze`, and on subsequent reopens (`diag_readout2.py`,
+`diag_solve_status.py` — sweeps listed pre-solve, `.asol` present,
+readout never filled). Retries within a session don't reliably heal it;
+the positive case has not been reproduced since. Explicit
 `setup_sweep_name` must use the *actual* sweep name (auto-generated with a
 random suffix, e.g. `Setup1 : Sweep_2AGE6M`).
 **Route-around**: treat an unfilled SolutionData as "not ready"; retry
 with backoff; prefer re-attaching (fresh session) to read results; print
 what is observed — a flaky readout is expected, a missing `.asol` is not.
-Artifact: `workspaces/smoke-matrix/src/s11_readout.py` + `diag_readout*.py`.
+Do not put QA verdicts on this readout until ticket 07 lands a reliable
+pattern. Artifact: `workspaces/smoke-matrix/src/s11_readout.py` +
+`diag_readout*.py`, `diag_solve_status.py`.
 
 ### 7. Excitation assignments — WORKS with caveats (pattern matters)
 `wave_port(<face object>, ...)` works (boundary created). Assigning by
@@ -155,9 +166,10 @@ for 2024 R1 flows (matches ADR 0004's expectation); keep optional deps of
 the client surface documented (pandas installed, pyvista missing — install
 only if an SBR flow is ever licensed). Artifact: `probe_rcs.py`.
 
-### 13. `HFSSCOMENGINE.exe` — not investigated further
-Exits with code -3 standalone; no WER report. Not on any current flow's
-path; revisit only if a stage needs it.
+### 13. `HFSSCOMENGINE.exe` — opportunistic observation (outside matrix scope)
+Exits with code -3 standalone; no WER report. Recorded during the ticket-01
+escalation investigation, not part of the matrix probe list; not on any
+current flow's path; revisit only if a stage needs it.
 
 ## Appendix: environment state the matrix left behind
 

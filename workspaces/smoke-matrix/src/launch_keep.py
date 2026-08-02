@@ -10,6 +10,8 @@ import sys
 
 from ansys.aedt.core import Hfss
 
+from aedt_helpers import AEDT_VERSION, PROBE_VALUE
+
 PROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "projects")
 
 
@@ -17,7 +19,7 @@ def main() -> int:
     os.makedirs(PROJECT_DIR, exist_ok=True)
     print("step 1: launching new graphical desktop (2024.1)...", flush=True)
     with Hfss(
-        version="2024.1",
+        version=AEDT_VERSION,
         new_desktop=True,
         non_graphical=False,
         project=os.path.join(PROJECT_DIR, "smoke_attach.aedt"),
@@ -27,7 +29,7 @@ def main() -> int:
         print("step 2: project:", hfss.project_name, flush=True)
         print("step 3: design:", hfss.design_name, flush=True)
         print("step 4: solution type:", hfss.solution_type, flush=True)
-        hfss["probe_var"] = "1.5mm"
+        hfss["probe_var"] = PROBE_VALUE
         print("step 5: variable probe_var=1.5mm set", flush=True)
         hfss.save_project()
         print("step 6: project saved to workspace", flush=True)

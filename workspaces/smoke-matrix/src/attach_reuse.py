@@ -11,6 +11,8 @@ import time
 
 from ansys.aedt.core import Desktop
 
+from aedt_helpers import PROBE_VALUE
+
 PROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "projects")
 
 
@@ -29,7 +31,7 @@ def main() -> int:
     print("step E: attached design:", hfss.design_name, flush=True)
     print("step F: solution type:", hfss.solution_type, flush=True)
     print("step G: probe_var value:", hfss["probe_var"], flush=True)
-    assert hfss["probe_var"] == "1.5mm", "variable written by launcher not visible on attach"
+    assert hfss["probe_var"] == PROBE_VALUE, "variable written by launcher not visible on attach"
     print("ATTACH REUSE PASS", flush=True)
     hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True)
     sys.stdout.flush()

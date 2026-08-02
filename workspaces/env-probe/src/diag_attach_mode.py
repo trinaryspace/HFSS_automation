@@ -47,9 +47,11 @@ def main() -> int:
     if od is not None:
         print("step I: childnames:", od.GetChildNames(), flush=True)
     print("ATTACH DIAG COMPLETE", flush=True)
-    d.release_desktop(close_projects=False)
-    sys.stdout.flush()
-    os._exit(0)
+    try:
+        d.release_desktop(close_projects=False)
+    finally:
+        sys.stdout.flush()
+        os._exit(0)
 
 
 if __name__ == "__main__":

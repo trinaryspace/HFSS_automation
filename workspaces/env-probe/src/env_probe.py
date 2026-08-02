@@ -35,7 +35,13 @@ def main() -> int:
         if not psutil.pid_exists(pid):
             break
         try:
-            psutil.Process(pid).kill()
+            proc = psutil.Process(pid)
+            for child in proc.children(recursive=True):
+                try:
+                    child.kill()
+                except psutil.NoSuchProcess:
+                    pass
+            proc.kill()
         except psutil.NoSuchProcess:
             break
         time.sleep(1)

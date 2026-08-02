@@ -26,5 +26,5 @@ def fetch_s11_db(hfss, timeout=60):
 def s11_summary(data):
     freqs = [float(f) for f in data.primary_sweep_values]
     vals = data.data_real()
-    i2p4 = min(range(len(freqs)), key=lambda i: abs(freqs[i] - 2.4))
-    return round(min(vals), 2), round(vals[i2p4], 2)
+    idx_2p4 = min(range(len(freqs)), key=lambda i: abs(freqs[i] - 2.4))
+    return round(min(vals), 2), round(vals[idx_2p4], 2)

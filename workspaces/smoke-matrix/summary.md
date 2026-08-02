@@ -1,5 +1,13 @@
 # smoke-matrix workspace — Ticket 02 (DONE 2026-08-02)
 
+> Archival note: `src/diag_*.py` and `src/micro_probe_*.py` are a one-time
+> investigation record — not maintained tooling (that's why the shared
+> cleanup helper is only wired into the live probes). The maintained set is
+> `aedt_helpers.py`, `smoke_design.py`, `s11_readout.py`, `probe_solve.py`,
+> `probe_solve_blocking.py`, `probe_rcs.py`, `launch_keep.py`,
+> `attach_reuse.py`. Findings are authoritative in
+> `knowledge/playbook/environment-compat.md`.
+
 One-time smoke-test matrix against the live AEDT 2024 R1 backend; all
 outcomes recorded in `knowledge/playbook/environment-compat.md` (the
 single accumulation point per ADR 0004). No other playbook content was

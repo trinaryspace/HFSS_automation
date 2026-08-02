@@ -1,5 +1,10 @@
 # env-probe workspace summary — Ticket 01 (RESOLVED 2026-08-02)
 
+> Archival note: the `src/diag_*.py` and `env_probe_{ipc,nongraphical}.py`
+> files are a one-time investigation record from the ticket-01 escalation —
+> not maintained tooling. `src/env_probe.py` remains the acceptance probe.
+> Findings are authoritative in `knowledge/playbook/environment-compat.md`.
+
 Ticket 01 acceptance passed: `import ansys.aedt.core` at 1.3.0, trivial
 graphical desktop launch against AEDT 2024 R1, throwaway HFSS design
 created, clean exit with zero orphan processes.

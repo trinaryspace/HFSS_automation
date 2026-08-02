@@ -1,0 +1,3 @@
+# The review gate is the visual model, not the scripts
+
+Execution is staged scripts written to `src/` and run chunk-by-chunk against the live desktop HFSS window. The pre-solve review gate is the user *seeing the built setup* in the AEDT UI and tweaking it there — not reading or editing the generated `.py` files. The scripts are an archival, re-runnable record, not the primary review surface. Reason: the user cannot visualize geometry quality from code; the intrinsic review is watching the 3D model. Trade-off: staged, chunked execution costs latency and desktop focus that a single monolithic script would not.

@@ -1,0 +1,220 @@
+---
+title: ""
+url: "https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.html"
+category: "boundaries_and_ports"
+domain: "PyAEDT / HFSS"
+---
+
+# MaxwellReducedMatrix 
+
+class ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix(_app_ , _parent_matrix : [MaxwellMatrix](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix")_, _name : [str](https://docs.python.org/3.11/library/stdtypes.html#str "\(in Python v3.11\)")_, _operations_reduction : [list](https://docs.python.org/3.11/library/stdtypes.html#list "\(in Python v3.11\)")[[MaxwellReducedMatrixOperation](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation")] | [MaxwellReducedMatrixOperation](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation") | [None](https://docs.python.org/3.11/library/constants.html#None "\(in Python v3.11\)") = None_) 
+    
+Provides methods to interact with reduced matrices in Maxwell. 
+
+Parameters: 
+     
+
+**app**`ansys.aedt.core.Maxwell3d` , `ansys.aedt.core.Maxwell2d` 
+    
+Parent Maxwell application instance. 
+
+**parent_matrix**[`MaxwellMatrix`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix") 
+    
+Parent matrix object. 
+
+**name**[`str`](https://docs.python.org/3.11/library/stdtypes.html#str "\(in Python v3.11\)") 
+    
+Name of the reduced matrix. 
+
+**operations_reduction**[`list`](https://docs.python.org/3.11/library/stdtypes.html#list "\(in Python v3.11\)")[[`MaxwellReducedMatrixOperation`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation")], [`MaxwellReducedMatrixOperation`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation"), `optional` 
+    
+List of reduced matrix operations or a single reduced matrix operation. The default is `None`.
+Examples
+Create a Maxwell 3D model in AC Magnetic solver. >>> from ansys.aedt.core import Maxwell3d >>> from ansys.aedt.core.generic.constants import SolutionsMaxwell3D >>> from ansys.aedt.core.modules.boundary.maxwell_boundary import SourceACMagnetic, MatrixACMagnetic
+
+```
+>>> m3d = Maxwell3d(version="2026.1", solution_type=SolutionsMaxwell3D.ACMagnetic)
+
+```
+Copy to clipboard
+
+```
+>>> box1 = m3d.modeler.create_box([0.5, 1.5, 0.5], [2.5, 5, 5], material="copper")
+>>> box2 = m3d.modeler.create_box([9, 1.5, 0.5], [2.5, 5, 5], material="copper")
+>>> box3 = m3d.modeler.create_box([16.5, 1.5, 0.5], [2.5, 5, 5], material="copper")
+>>> box4 = m3d.modeler.create_box([20, 1.5, 0.5], [2.5, 5, 5], material="copper")
+
+```
+Copy to clipboard
+
+```
+>>> current1 = m3d.assign_current([box1.top_face_z], amplitude=1, name="Current1")
+>>> current2 = m3d.assign_current([box2.top_face_z], amplitude=1, name="Current2")
+>>> current3 = m3d.assign_current([box3.top_face_z], amplitude=1, name="Current3")
+>>> current4 = m3d.assign_current([box4.top_face_z], amplitude=1, name="Current4")
+>>> m3d.assign_current([box1.bottom_face_z], amplitude=1, name="Current5", swap_direction=True)
+>>> m3d.assign_current([box2.bottom_face_z], amplitude=1, name="Current6", swap_direction=True)
+>>> m3d.assign_current([box3.bottom_face_z], amplitude=1, name="Current7", swap_direction=True)
+>>> m3d.assign_current([box4.bottom_face_z], amplitude=1, name="Current8", swap_direction=True)
+
+```
+Copy to clipboard
+Assign matrix. >>> signal_source_1 = SourceACMagnetic(name=current1.name) >>> signal_source_2 = SourceACMagnetic(name=current2.name) >>> signal_source_3 = SourceACMagnetic(name=current3.name) >>> signal_source_4 = SourceACMagnetic(name=current4.name)
+
+```
+>>> matrix_args = MatrixACMagnetic(
+...     signal_sources=[signal_source_1, signal_source_2, signal_source_3, signal_source_4],
+...     matrix_name="test_matrix",
+... )
+>>> matrix = m3d.assign_matrix(matrix_args)
+
+```
+Copy to clipboard
+Join sources in series to create a reduced matrix. >>> reduced_matrix = matrix.join_series( … sources=[“Current1”, “Current2”], matrix_name=”ReducedMatrix1”, join_name=”JoinSeries1” … ) >>> m3d.release_desktop(True, True)
+Methods  
+| [`MaxwellReducedMatrix.delete`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.delete.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.delete "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.delete")(name)  | Delete a specific reduction operation.  |  
+| --- | --- |  
+| [`MaxwellReducedMatrix.update`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.update.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.update "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.update")(name, operation_type)  | Update the reduced matrix.  |  
+# MaxwellReducedMatrix 
+
+class ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix(_app_ , _parent_matrix : [MaxwellMatrix](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix")_, _name : [str](https://docs.python.org/3.11/library/stdtypes.html#str "\(in Python v3.11\)")_, _operations_reduction : [list](https://docs.python.org/3.11/library/stdtypes.html#list "\(in Python v3.11\)")[[MaxwellReducedMatrixOperation](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation")] | [MaxwellReducedMatrixOperation](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation") | [None](https://docs.python.org/3.11/library/constants.html#None "\(in Python v3.11\)") = None_) 
+    
+Provides methods to interact with reduced matrices in Maxwell. 
+
+Parameters: 
+     
+
+**app**`ansys.aedt.core.Maxwell3d` , `ansys.aedt.core.Maxwell2d` 
+    
+Parent Maxwell application instance. 
+
+**parent_matrix**[`MaxwellMatrix`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix") 
+    
+Parent matrix object. 
+
+**name**[`str`](https://docs.python.org/3.11/library/stdtypes.html#str "\(in Python v3.11\)") 
+    
+Name of the reduced matrix. 
+
+**operations_reduction**[`list`](https://docs.python.org/3.11/library/stdtypes.html#list "\(in Python v3.11\)")[[`MaxwellReducedMatrixOperation`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation")], [`MaxwellReducedMatrixOperation`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation"), `optional` 
+    
+List of reduced matrix operations or a single reduced matrix operation. The default is `None`.
+Examples
+Create a Maxwell 3D model in AC Magnetic solver. >>> from ansys.aedt.core import Maxwell3d >>> from ansys.aedt.core.generic.constants import SolutionsMaxwell3D >>> from ansys.aedt.core.modules.boundary.maxwell_boundary import SourceACMagnetic, MatrixACMagnetic
+
+```
+>>> m3d = Maxwell3d(version="2026.1", solution_type=SolutionsMaxwell3D.ACMagnetic)
+
+```
+Copy to clipboard
+
+```
+>>> box1 = m3d.modeler.create_box([0.5, 1.5, 0.5], [2.5, 5, 5], material="copper")
+>>> box2 = m3d.modeler.create_box([9, 1.5, 0.5], [2.5, 5, 5], material="copper")
+>>> box3 = m3d.modeler.create_box([16.5, 1.5, 0.5], [2.5, 5, 5], material="copper")
+>>> box4 = m3d.modeler.create_box([20, 1.5, 0.5], [2.5, 5, 5], material="copper")
+
+```
+Copy to clipboard
+
+```
+>>> current1 = m3d.assign_current([box1.top_face_z], amplitude=1, name="Current1")
+>>> current2 = m3d.assign_current([box2.top_face_z], amplitude=1, name="Current2")
+>>> current3 = m3d.assign_current([box3.top_face_z], amplitude=1, name="Current3")
+>>> current4 = m3d.assign_current([box4.top_face_z], amplitude=1, name="Current4")
+>>> m3d.assign_current([box1.bottom_face_z], amplitude=1, name="Current5", swap_direction=True)
+>>> m3d.assign_current([box2.bottom_face_z], amplitude=1, name="Current6", swap_direction=True)
+>>> m3d.assign_current([box3.bottom_face_z], amplitude=1, name="Current7", swap_direction=True)
+>>> m3d.assign_current([box4.bottom_face_z], amplitude=1, name="Current8", swap_direction=True)
+
+```
+Copy to clipboard
+Assign matrix. >>> signal_source_1 = SourceACMagnetic(name=current1.name) >>> signal_source_2 = SourceACMagnetic(name=current2.name) >>> signal_source_3 = SourceACMagnetic(name=current3.name) >>> signal_source_4 = SourceACMagnetic(name=current4.name)
+
+```
+>>> matrix_args = MatrixACMagnetic(
+...     signal_sources=[signal_source_1, signal_source_2, signal_source_3, signal_source_4],
+...     matrix_name="test_matrix",
+... )
+>>> matrix = m3d.assign_matrix(matrix_args)
+
+```
+Copy to clipboard
+Join sources in series to create a reduced matrix. >>> reduced_matrix = matrix.join_series( … sources=[“Current1”, “Current2”], matrix_name=”ReducedMatrix1”, join_name=”JoinSeries1” … ) >>> m3d.release_desktop(True, True)
+Methods  
+| [`MaxwellReducedMatrix.delete`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.delete.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.delete "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.delete")(name)  | Delete a specific reduction operation.  |  
+| --- | --- |  
+| [`MaxwellReducedMatrix.update`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.update.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.update "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.update")(name, operation_type)  | Update the reduced matrix.  |  
+On this page 
+  * [Show Source](https://aedt.docs.pyansys.com/version/stable/_sources/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.rst.txt)
+
+# MaxwellReducedMatrix 
+
+class ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix(_app_ , _parent_matrix : [MaxwellMatrix](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix")_, _name : [str](https://docs.python.org/3.11/library/stdtypes.html#str "\(in Python v3.11\)")_, _operations_reduction : [list](https://docs.python.org/3.11/library/stdtypes.html#list "\(in Python v3.11\)")[[MaxwellReducedMatrixOperation](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation")] | [MaxwellReducedMatrixOperation](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation") | [None](https://docs.python.org/3.11/library/constants.html#None "\(in Python v3.11\)") = None_) 
+    
+Provides methods to interact with reduced matrices in Maxwell. 
+
+Parameters: 
+     
+
+**app**`ansys.aedt.core.Maxwell3d` , `ansys.aedt.core.Maxwell2d` 
+    
+Parent Maxwell application instance. 
+
+**parent_matrix**[`MaxwellMatrix`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellMatrix") 
+    
+Parent matrix object. 
+
+**name**[`str`](https://docs.python.org/3.11/library/stdtypes.html#str "\(in Python v3.11\)") 
+    
+Name of the reduced matrix. 
+
+**operations_reduction**[`list`](https://docs.python.org/3.11/library/stdtypes.html#list "\(in Python v3.11\)")[[`MaxwellReducedMatrixOperation`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation")], [`MaxwellReducedMatrixOperation`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrixOperation"), `optional` 
+    
+List of reduced matrix operations or a single reduced matrix operation. The default is `None`.
+Examples
+Create a Maxwell 3D model in AC Magnetic solver. >>> from ansys.aedt.core import Maxwell3d >>> from ansys.aedt.core.generic.constants import SolutionsMaxwell3D >>> from ansys.aedt.core.modules.boundary.maxwell_boundary import SourceACMagnetic, MatrixACMagnetic
+
+```
+>>> m3d = Maxwell3d(version="2026.1", solution_type=SolutionsMaxwell3D.ACMagnetic)
+
+```
+Copy to clipboard
+
+```
+>>> box1 = m3d.modeler.create_box([0.5, 1.5, 0.5], [2.5, 5, 5], material="copper")
+>>> box2 = m3d.modeler.create_box([9, 1.5, 0.5], [2.5, 5, 5], material="copper")
+>>> box3 = m3d.modeler.create_box([16.5, 1.5, 0.5], [2.5, 5, 5], material="copper")
+>>> box4 = m3d.modeler.create_box([20, 1.5, 0.5], [2.5, 5, 5], material="copper")
+
+```
+Copy to clipboard
+
+```
+>>> current1 = m3d.assign_current([box1.top_face_z], amplitude=1, name="Current1")
+>>> current2 = m3d.assign_current([box2.top_face_z], amplitude=1, name="Current2")
+>>> current3 = m3d.assign_current([box3.top_face_z], amplitude=1, name="Current3")
+>>> current4 = m3d.assign_current([box4.top_face_z], amplitude=1, name="Current4")
+>>> m3d.assign_current([box1.bottom_face_z], amplitude=1, name="Current5", swap_direction=True)
+>>> m3d.assign_current([box2.bottom_face_z], amplitude=1, name="Current6", swap_direction=True)
+>>> m3d.assign_current([box3.bottom_face_z], amplitude=1, name="Current7", swap_direction=True)
+>>> m3d.assign_current([box4.bottom_face_z], amplitude=1, name="Current8", swap_direction=True)
+
+```
+Copy to clipboard
+Assign matrix. >>> signal_source_1 = SourceACMagnetic(name=current1.name) >>> signal_source_2 = SourceACMagnetic(name=current2.name) >>> signal_source_3 = SourceACMagnetic(name=current3.name) >>> signal_source_4 = SourceACMagnetic(name=current4.name)
+
+```
+>>> matrix_args = MatrixACMagnetic(
+...     signal_sources=[signal_source_1, signal_source_2, signal_source_3, signal_source_4],
+...     matrix_name="test_matrix",
+... )
+>>> matrix = m3d.assign_matrix(matrix_args)
+
+```
+Copy to clipboard
+Join sources in series to create a reduced matrix. >>> reduced_matrix = matrix.join_series( … sources=[“Current1”, “Current2”], matrix_name=”ReducedMatrix1”, join_name=”JoinSeries1” … ) >>> m3d.release_desktop(True, True)
+Methods  
+| [`MaxwellReducedMatrix.delete`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.delete.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.delete "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.delete")(name)  | Delete a specific reduction operation.  |  
+| --- | --- |  
+| [`MaxwellReducedMatrix.update`](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.update.html#ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.update "ansys.aedt.core.modules.boundary.maxwell_boundary.MaxwellReducedMatrix.update")(name, operation_type)  | Update the reduced matrix.  |

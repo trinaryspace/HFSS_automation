@@ -5,5 +5,12 @@ __pycache__/
 # AEDT / probe workspace outputs (regenerable; probes wipe these)
 workspaces/**/projects/
 
+# Conversation workspace outputs (plan: tool/knowledge stay clean;
+# src/ staged scripts and summary.md stay tracked)
+workspaces/*/*.aedt
+workspaces/*/*.aedtresults/
+workspaces/*/results/
+workspaces/*/*.lock
+
 # Stray artifacts from AEDT scripting runs
 batch.log

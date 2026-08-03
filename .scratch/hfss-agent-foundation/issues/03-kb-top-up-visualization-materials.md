@@ -18,7 +18,8 @@
   (`/API/visualization/_autosummary/...visualization.post.*` — the docs moved the post-processing tree to
   `ansys.aedt.core.visualization.post`, which no older pattern matched) plus `--topup {visualization,materials}`
   incremental mode: gateway seeds are fetched only for link discovery, only focus-pattern links are followed,
-  and pages that already exist on disk are never re-fetched or re-written. Runs end by rebuilding the RAG
+  and pages that already exist on disk are never re-written — non-seed existing pages are not even enqueued,
+  seed pages are re-fetched for their links only and kept untouched. Runs end by rebuilding the RAG
   JSONL corpus from the per-page markdown files and appending a provenance record (scrape date, docs tree,
   documented pyAEDT line = stable docs → pinned client 1.3.0 per ADR 0004) to `provenance.md`.
 - Runs: visualization top-up 1,184 fetched / 1,182 new (`postprocessing/` 0 → 1,182 files, seed gateways

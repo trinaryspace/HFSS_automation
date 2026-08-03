@@ -60,9 +60,11 @@ TARGET_PATTERNS = {
 ALL_PATTERNS = [pattern for sublist in TARGET_PATTERNS.values() for pattern in sublist]
 
 # Incremental top-up targets: a "focus" set of URL patterns and gateway seed
-# pages. A top-up crawl fetches only pages matching the focus patterns (plus
-# the seeds themselves, used just for link discovery) and never re-writes
-# pages that already exist on disk.
+# pages. A top-up crawl follows only links matching the focus patterns (plus
+# the seeds themselves, used for link discovery) and never re-writes pages
+# that already exist on disk. Focus patterns must be a subset of the full
+# pattern set (every focus-matching page is stored under the category its
+# ALL-pattern match picks).
 TOP_UP_TARGETS = {
     "visualization": {
         "focus_patterns": [
@@ -194,11 +196,11 @@ def rebuild_rag_corpus() -> int:
 
 
 def write_provenance(record: str) -> None:
-    """Append a crawl-run record to provenance.md, keeping the run history."""
+    """Prepend a crawl-run record to provenance.md, preserving the run history verbatim."""
     provenance_file = OUTPUT_DIR / "provenance.md"
     if provenance_file.exists():
         current = provenance_file.read_text(encoding="utf-8")
-        runs_section = []
+        history = []
         in_runs = False
         for line in current.splitlines():
             if line.startswith("## Crawl runs"):
@@ -206,15 +208,19 @@ def write_provenance(record: str) -> None:
                 continue
             if in_runs and line.startswith("## "):
                 in_runs = False
-            if in_runs and line.startswith("- "):
-                runs_section.append(line)
-        notes = "\n".join(runs_section)
+                continue
+            if in_runs and line.strip():
+                history.append(line.strip())
     else:
-        notes = (
+        history = [
             "- pre-2026-08-02 \u2014 initial full crawl, 2,694 page files; "
             "scrape date was not recorded at the time (this provenance file "
             "was added 2026-08-02, ticket 03)"
-        )
+        ]
+
+    if record not in history:
+        history.insert(0, record)
+    notes = "\n".join(history)
 
     doc = f"""# Knowledge base provenance
 
@@ -231,7 +237,6 @@ The trailing edge of the facts in this corpus is knowable from this file.
 
 ## Crawl runs
 
-- {record}
 {notes}
 """
     provenance_file.write_text(doc, encoding="utf-8")
@@ -308,12 +313,13 @@ async def generate_ai_context(
                 ai_md = clean_markdown_for_ai(raw_md, title, url, category)
 
                 file_path = page_output_path(url)
-                if is_target_url(url) and not (skip_existing and file_path.exists()):
+                write_page = is_target_url(url) or not skip_existing
+                if write_page and not (skip_existing and file_path.exists()):
                     with open(file_path, "w", encoding="utf-8") as f:
                         f.write(ai_md)
                     written_new += 1
                     print(f"  [SAVED] [{category}]: {file_path.name}")
-                elif is_target_url(url):
+                elif skip_existing and file_path.exists():
                     existing_skipped += 1
                     print(f"  [EXISTS] [{category}]: {file_path.name} (kept)")
 
@@ -337,7 +343,10 @@ async def generate_ai_context(
 
     print("\n" + "=" * 60)
     print(f"SUCCESS! PyAEDT AI Context dataset generated successfully.")
-    print(f"Total Markdown files: {page_count}")
+    if top_up_label:
+        print(f"Total pages fetched ({mode}, incl. link-discovery seeds): {page_count}")
+    else:
+        print(f"Total Markdown files: {page_count}")
     print(f"Root Output Path: {OUTPUT_DIR.resolve()}")
     print(f"Unified RAG Dataset: {(OUTPUT_DIR / 'rag_knowledge_base.jsonl').resolve()}")
     print(f"Provenance: {OUTPUT_DIR / 'provenance.md'}")

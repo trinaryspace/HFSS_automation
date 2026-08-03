@@ -17,10 +17,17 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
 from generate_pyaedt_ai_context import split_frontmatter
 
 OUTPUT_DIR = Path(__file__).parent / "pyaedt_ai_context"
+
+
+def _is_method_page(file_path: Path) -> bool:
+    """A method/style page has a snake_case final component; class pages are PascalCase."""
+    stem = file_path.stem
+    if stem.endswith(".rst"):
+        stem = stem[:-4]
+    return bool(re.search(r"\.[a-z_][a-z0-9_]*$", stem))
 
 
 def main() -> int:
@@ -46,11 +53,11 @@ def main() -> int:
     viz_files = md_by_category.get("postprocessing", [])
     check(
         "postprocessing covers visualization.post.* surface",
-        all("visualization.post" in p.name for p in viz_files[:20]),
-        f"spot-check of first {min(20, len(viz_files))} files",
+        bool(viz_files) and all("visualization.post" in p.name for p in viz_files),
+        f"all {len(viz_files)} files",
     )
 
-    mat_methods = [p for p in md_by_category.get("materials", []) if p.stem.count(".") >= 2]
+    mat_methods = [p for p in md_by_category.get("materials", []) if _is_method_page(p)]
     check("materials method sub-pages captured", len(mat_methods) > 50, f"{len(mat_methods)} method/style pages")
 
     prov_path = OUTPUT_DIR / "provenance.md"

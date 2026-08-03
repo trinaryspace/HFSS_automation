@@ -1,10 +1,12 @@
 """Structural test for the hfss-agent skill deliverable (ticket 04).
 
 Checks that SKILL.md encodes every contract element and ADR, that the
-workspace template exists in the agreed shape, and that workspace outputs
-are gitignored. No AEDT or license required.
+execution reference carries the operational semantics (face-object ports,
+no estimation, cleanup), that the workspace template exists in the agreed
+shape, and that workspace outputs are gitignored. No AEDT or license
+required.
 
-Usage: python verify_skill.py   (run from the repo root)
+Usage: python verify_skill.py
 """
 
 import os
@@ -20,19 +22,27 @@ GITIGNORE = REPO / ".gitignore"
 
 CONTRACT_MARKERS = {
     "spine stages": ["Clarification", "solution type", "Design", "Geometry", "Materials",
-                     "excitations", "Mesh", "setup", "solve", "post-process", "reports"],
+                     "excitations", "Mesh", "Setup + sweep", "solve", "post-process", "reports"],
     "clarification contract": ["Recipe", "Assumption", "Result QA signals"],
     "staged scripts": ["staged script", "attach", "launch", "session state"],
     "parameterization": ["design variable"],
     "review gate": ["Review gate", "Math model", "never to the scripts", "before any solve"],
     "read-back sync": ["read-back sync", "amends the owning stage", "summary"],
-    "background solve": ["blocking=False", "poll"],
-    "self-correction": ["3", "escalate"],
-    "result qa": ["convergence", "ports", "energy", "in-band", "plausibility"],
+    "background solve": ["blocking=False", "poll", "Never estimate"],
+    "self-correction": ["3 consecutive failed", "escalate", "identical error twice"],
+    "result qa": ["convergence", "ports excited", "energy pass", "in-band", "plausibility"],
     "learning loop": ["Learning loop", "amendment", "approval"],
-    "high-level api rule": ["environment-compat", "high-level"],
+    "high-level api rule": ["environment-compat", "high-level", "route around"],
     "re-entry copy": ["copy", "never"],
     "glossary vocabulary": ["Spine", "Stage", "Run", "Workspace", "Recipe", "Assumption", "Model"],
+}
+
+REFERENCE_MARKERS = {
+    "preamble semantics": ["remove_lock", "Release", "os._exit", "environment-compat"],
+    "port guidance": ["face object", "solid's face", "Never pass int ids"],
+    "solve semantics": ["blocking=False", "Never estimate solve time"],
+    "self-correction detail": ["3 consecutive failed Runs", "GetMessages", "substitution"],
+    "read-back sync steps": ["Introspect", "Amend that script", "does not close until sync"],
 }
 
 ADRS = {
@@ -54,9 +64,14 @@ def check(label, ok, detail=""):
 def main() -> int:
     failures = 0
     text = SKILL.read_text(encoding="utf-8")
+    ref_text = REFERENCE.read_text(encoding="utf-8")
     for label, markers in CONTRACT_MARKERS.items():
         missing = [m for m in markers if m.lower() not in text.lower()]
         if not check(label, not missing, f"missing: {missing}"):
+            failures += 1
+    for label, markers in REFERENCE_MARKERS.items():
+        missing = [m for m in markers if m.lower() not in ref_text.lower()]
+        if not check(f"reference: {label}", not missing, f"missing: {missing}"):
             failures += 1
 
     for adr, needles in ADRS.items():
@@ -67,6 +82,7 @@ def main() -> int:
 
     if not check("reference file exists", REFERENCE.is_file()):
         failures += 1
+        ref_text = ""
     for f in TEMPLATE_FILES:
         target = TEMPLATE / f
         if not check(f"template has {f}", target.is_dir() if f == "src" else target.is_file()):

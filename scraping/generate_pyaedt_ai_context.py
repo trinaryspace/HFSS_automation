@@ -30,6 +30,7 @@ TARGET_PATTERNS = {
     ],
     "setup_and_mesh": [
         r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.(modules\.)?(SetupTemplates|Mesh)",
+        r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.modules\.(solve_setup|solve_sweeps|design_xploration|profile)",
         r"/API/Setup\.html",
         r"/API/Mesh\.html",
     ],
@@ -49,6 +50,19 @@ TARGET_PATTERNS = {
         # /API/visualization/_autosummary/...); no older pattern matches it.
         r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.visualization\.post",
     ],
+    # Sibling visualization subtrees, top-upped per ticket 08: the report-
+    # class surface (reports stage), the matplotlib/pyvista/pdf plotters
+    # (plots stage), and the advanced post-processing classes
+    # (`FfdSolutionData` far-field radiation readout etc.).
+    "reports": [
+        r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.visualization\.report",
+    ],
+    "plots": [
+        r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.visualization\.plot",
+    ],
+    "advanced_visualization": [
+        r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.visualization\.advanced",
+    ],
     "desktop_app": [
         r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.desktop",
         r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.application",
@@ -58,6 +72,25 @@ TARGET_PATTERNS = {
 }
 
 ALL_PATTERNS = [pattern for sublist in TARGET_PATTERNS.values() for pattern in sublist]
+
+# HFSS solve-setup class roots, per module, in scope for the KB. The
+# other-solver classes (SetupCircuit/SetupMaxwell/SetupQ3D/Setup3DLayout/
+# SetupSBR, SweepHFSS3DLayout/SweepMatrix) are deliberately out of scope
+# (ticket 08; SBR per ADR 0004) and listed separately so verify_kb can
+# assert their absence. Single source: the top-up focus patterns for
+# solve_setups derive from it, as do verify_kb's class-presence checks.
+# The profile module carries the convergence-QA classes (Profiles,
+# SimulationProfile, ...) and is crawled whole; design_xploration covers
+# the parametric/optimetric setups.
+HFSS_SETUP_CLASSES = {
+    "solve_setup": ("Setup", "SetupHFSS", "SetupHFSSAuto"),
+    "solve_sweeps": ("SweepHFSS",),
+    "design_xploration": ("SetupParam", "SetupOpti"),
+}
+NON_HFSS_SETUP_CLASSES = {
+    "solve_setup": ("SetupCircuit", "SetupMaxwell", "SetupQ3D", "Setup3DLayout", "SetupSBR"),
+    "solve_sweeps": ("SweepHFSS3DLayout", "SweepMatrix"),
+}
 
 # Incremental top-up targets: a "focus" set of URL patterns and gateway seed
 # pages. A top-up crawl follows only links matching the focus patterns (plus
@@ -84,6 +117,51 @@ TOP_UP_TARGETS = {
             DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.material.SurfaceMaterial.html",
             DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.material.SurfMatProperties.html",
             DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.material_lib.Materials.html",
+        ],
+    },
+    # Ticket 08 top-ups (user priority: report generation first, solve
+    # setup second; plots and advanced follow). Each is a gateway page (or
+    # class pages) used for link discovery plus a focused autosummary
+    # pattern; only focus-matching pages are fetched and stored.
+    "reports": {
+        "focus_patterns": TARGET_PATTERNS["reports"],
+        "seeds": [
+            DOCS_TREE_URL + "API/visualization/report.html",
+        ],
+    },
+    "solve_setups": {
+        # Tightened to the HFSS-relevant classes: Setup/SweepHFSS inherit
+        # surfaces used by every HFSS conversation, design_xploration covers
+        # the parametric/optimetric setups, profile covers the convergence
+        # QA classes. Other-solver setups (NON_HFSS_SETUP_CLASSES) are
+        # skipped per ticket 08 (out of HFSS scope; SBR per ADR 0004).
+        "focus_patterns": [
+            rf"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.modules\.{mod}\.(?:{'|'.join(classes)})(?:\.|$)"
+            for mod, classes in HFSS_SETUP_CLASSES.items()
+        ] + [
+            r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.modules\.profile\.",
+        ],
+        "seeds": [
+            DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.solve_setup.Setup.html",
+            DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.solve_setup.SetupHFSS.html",
+            DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.solve_setup.SetupHFSSAuto.html",
+            DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.solve_sweeps.SweepHFSS.html",
+            DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.design_xploration.SetupParam.html",
+            DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.design_xploration.SetupOpti.html",
+            DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.profile.Profiles.html",
+            DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.profile.SimulationProfile.html",
+        ],
+    },
+    "plots": {
+        "focus_patterns": TARGET_PATTERNS["plots"],
+        "seeds": [
+            DOCS_TREE_URL + "API/visualization/plot.html",
+        ],
+    },
+    "advanced": {
+        "focus_patterns": TARGET_PATTERNS["advanced_visualization"],
+        "seeds": [
+            DOCS_TREE_URL + "API/visualization/advanced.html",
         ],
     },
 }
@@ -335,7 +413,7 @@ async def generate_ai_context(
 
     written = rebuild_rag_corpus()
     record = (
-        f"{date.today().isoformat()} \u2014 {mode}: {page_count} pages fetched, "
+        f"- {date.today().isoformat()} \u2014 {mode}: {page_count} pages fetched, "
         f"{written_new} new page files written, {existing_skipped} existing page files kept; "
         f"RAG corpus rebuilt with {written} entries"
     )

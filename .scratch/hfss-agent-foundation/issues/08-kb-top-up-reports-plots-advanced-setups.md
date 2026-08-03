@@ -13,13 +13,13 @@ Gap inventory (unique autosummary pages counted from the `/version/stable/` site
 
 **Status:** ready-for-agent
 
-- [ ] `visualization.report.*` crawled: new KB category has a non-trivial file count (expected ~1,300–1,400 files), all filenames under the `report.` subtree
-- [ ] Solve-setup surfaces crawled: `setup_and_mesh/` grows from 155 files using focused seeds on the HFSS-relevant classes (`Setup`, `SetupHFSS`, `SetupHFSSAuto`, `SweepHFSS`, `SetupParam`, `SetupOpti`, profile classes)
-- [ ] `visualization.plot.*` crawled: new KB category populated (expected ~180 files)
-- [ ] `visualization.advanced.*` crawled: new KB category populated (expected ~250 files), with `FfdSolutionData` method sub-pages captured
-- [ ] The run is incremental per target: no pre-existing page is re-fetched or re-written (gateway seeds may be re-fetched for link discovery only); `git status` after all runs shows zero modifications to previously tracked KB pages
-- [ ] Provenance records appended for each target run (existing `provenance.md` mechanism: date, pages fetched/new/kept, corpus size); RAG JSONL corpus regenerated and consistent with the per-page files
-- [ ] `scraping/verify_kb.py` extended with the new categories and thresholds; all checks pass
+- [x] `visualization.report.*` crawled: new KB category has a non-trivial file count (expected ~1,300–1,400 files), all filenames under the `report.` subtree
+- [x] Solve-setup surfaces crawled: `setup_and_mesh/` grows from 155 files using focused seeds on the HFSS-relevant classes (`Setup`, `SetupHFSS`, `SetupHFSSAuto`, `SweepHFSS`, `SetupParam`, `SetupOpti`, profile classes)
+- [x] `visualization.plot.*` crawled: new KB category populated (expected ~180 files)
+- [x] `visualization.advanced.*` crawled: new KB category populated (expected ~250 files), with `FfdSolutionData` method sub-pages captured
+- [x] The run is incremental per target: no pre-existing page is re-fetched or re-written (gateway seeds may be re-fetched for link discovery only); `git status` after all runs shows zero modifications to previously tracked KB pages
+- [x] Provenance records appended for each target run (existing `provenance.md` mechanism: date, pages fetched/new/kept, corpus size); RAG JSONL corpus regenerated and consistent with the per-page files
+- [x] `scraping/verify_kb.py` extended with the new categories and thresholds; all checks pass
 
 ## Implementation notes
 
@@ -34,3 +34,6 @@ Gap inventory (unique autosummary pages counted from the `/version/stable/` site
 ## Comments
 
 - 2026-08-02: Filed after ticket 03 review — the gaps were verified against the docs sitemap and KB on disk (`solve_setup`, `solve_sweeps`, `design_xploration`, `modules.profile`, `visualization.report/plot/advanced` all at 0 files; counts above from the same sitemap analysis). `application.variables` (156 files, under `desktop_app`) and the full `visualization.post.*` tree are confirmed present — not gaps. Other-solver apps (circuit, icepak, maxwell, q3d, rmxprt, twinbuilder, emit, filtersolutions) remain out of scope per the HFSS-focused KB spec.
+- 2026-08-02: **DONE.** `TOP_UP_TARGETS` gained `reports`, `solve_setups`, `plots`, `advanced` (no new machinery); `categorize_url` gained the `reports`, `plots`, `advanced_visualization` categories and routed the solve/profile modules into the existing `setup_and_mesh`. The solve-setup focus is tightened to the HFSS-relevant class roots (`solve_setup.Setup|SetupHFSS|SetupHFSSAuto`, `solve_sweeps.SweepHFSS`, `design_xploration.SetupParam|SetupOpti`, the full `modules.profile` module) — the other-solver classes (`SetupCircuit`/`SetupMaxwell`/`SetupQ3D`/`Setup3DLayout`/`SetupSBR`, `SweepHFSS3DLayout`/`SweepMatrix`) stay out per the ticket and ADR 0004.
+- Runs (order = user priority), all incremental — 0 `[FAILED]` fetches, 0 pre-existing pages re-written (`git status`: only new KB pages; `provenance.md`/`rag_knowledge_base.jsonl` are the per-run records the mechanism regenerates): reports 1,391 fetched / 1,390 new (`reports/` 0 → 1,390); solve_setups 310 new (`setup_and_mesh/` 155 → 465: solve_setup 210, profile 42, design_xploration 42, solve_sweeps 16); plots 187 fetched / 186 new (`plots/` 0 → 186); advanced 257 fetched / 256 new (`advanced_visualization/` 0 → 256, incl. `FfdSolutionData` full method surface). Corpus 4,099 → 6,241 entries; one provenance record per run.
+- Checks: `scraping/verify_kb.py` extended with the four ticket-08 groups (subtree populated + surface-naming + HFSS class roots present + profile module + other-solver classes absent + `FfdSolutionData` present); all 22 checks pass. Pre-crawl baseline run failed exactly the 9 new checks — the gaps the ticket measured. The in-scope/out-of-scope setup class lists live once in the scraper (`HFSS_SETUP_CLASSES` / `NON_HFSS_SETUP_CLASSES`) and drive both the top-up focus patterns and the verify checks, so the two cannot drift. Also fixed a stray provenance bullet inconsistency (records now carry the `- ` bullet, matching the stored history, which also makes the dedupe check able to hit).

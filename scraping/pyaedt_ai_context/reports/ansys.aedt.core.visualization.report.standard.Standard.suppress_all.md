@@ -1,0 +1,94 @@
+---
+title: ""
+url: "https://aedt.docs.pyansys.com/version/stable/API/visualization/_autosummary/ansys.aedt.core.visualization.report.standard.Standard.suppress_all.html"
+category: "reports"
+domain: "PyAEDT / HFSS"
+---
+
+# suppress_all 
+
+Standard.suppress_all(_app : [object](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.mesh_icepak.Region.object.html#ansys.aedt.core.modules.mesh_icepak.Region.object "ansys.aedt.core.modules.mesh_icepak.Region.object")_) → [bool](https://docs.python.org/3.11/library/functions.html#bool "\(in Python v3.11\)") 
+    
+Activate suppress option for all the operations contained in the binary tree node. 
+
+Parameters: 
+     
+
+**app**[`object`](https://docs.python.org/3.11/library/functions.html#object "\(in Python v3.11\)") 
+    
+An AEDT application from `ansys.aedt.core.application`. 
+
+Returns: 
+     
+
+[bool](https://docs.python.org/3.11/library/stdtypes.html#bltin-boolean-values "\(in Python v3.11\)")
+    
+`True` when successful.
+Examples
+
+```
+>>> from ansys.aedt.core.modeler.cad.elements_3d import BinaryTreeNode
+>>> obj = BinaryTreeNode()
+>>> obj.suppress_all(app=1)
+
+```
+Copy to clipboard
+# suppress_all 
+
+Standard.suppress_all(_app : [object](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.mesh_icepak.Region.object.html#ansys.aedt.core.modules.mesh_icepak.Region.object "ansys.aedt.core.modules.mesh_icepak.Region.object")_) → [bool](https://docs.python.org/3.11/library/functions.html#bool "\(in Python v3.11\)") 
+    
+Activate suppress option for all the operations contained in the binary tree node. 
+
+Parameters: 
+     
+
+**app**[`object`](https://docs.python.org/3.11/library/functions.html#object "\(in Python v3.11\)") 
+    
+An AEDT application from `ansys.aedt.core.application`. 
+
+Returns: 
+     
+
+[bool](https://docs.python.org/3.11/library/stdtypes.html#bltin-boolean-values "\(in Python v3.11\)")
+    
+`True` when successful.
+Examples
+
+```
+>>> from ansys.aedt.core.modeler.cad.elements_3d import BinaryTreeNode
+>>> obj = BinaryTreeNode()
+>>> obj.suppress_all(app=1)
+
+```
+Copy to clipboard
+On this page 
+  * [Show Source](https://aedt.docs.pyansys.com/version/stable/_sources/API/visualization/_autosummary/ansys.aedt.core.visualization.report.standard.Standard.suppress_all.rst.txt)
+
+# suppress_all 
+
+Standard.suppress_all(_app : [object](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modules.mesh_icepak.Region.object.html#ansys.aedt.core.modules.mesh_icepak.Region.object "ansys.aedt.core.modules.mesh_icepak.Region.object")_) → [bool](https://docs.python.org/3.11/library/functions.html#bool "\(in Python v3.11\)") 
+    
+Activate suppress option for all the operations contained in the binary tree node. 
+
+Parameters: 
+     
+
+**app**[`object`](https://docs.python.org/3.11/library/functions.html#object "\(in Python v3.11\)") 
+    
+An AEDT application from `ansys.aedt.core.application`. 
+
+Returns: 
+     
+
+[bool](https://docs.python.org/3.11/library/stdtypes.html#bltin-boolean-values "\(in Python v3.11\)")
+    
+`True` when successful.
+Examples
+
+```
+>>> from ansys.aedt.core.modeler.cad.elements_3d import BinaryTreeNode
+>>> obj = BinaryTreeNode()
+>>> obj.suppress_all(app=1)
+
+```
+Copy to clipboard

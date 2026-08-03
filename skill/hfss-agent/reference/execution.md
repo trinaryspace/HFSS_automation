@@ -13,7 +13,7 @@ Session state lives in the AEDT project — never in a Python process. Each scri
 
 ## Per-stage checklist
 
-1. **Clarification** — deliver one block: request minimums, missing critical setup features, proposed Recipe + Assumptions, proposed Result QA signals. Record the confirmation verbatim in the summary.
+1. **Clarification** — deliver one block: request minimums, missing critical setup features, proposed Recipe + Assumptions, proposed Result QA signals. Record the confirmation verbatim in the summary. If `knowledge/reference-papers/` holds user PDFs, run the `analyze-papers` skill on the folder first and read the resulting agent notes before drafting the block (SKILL.md "Read first" #5) — the notes are context for the Recipe and QA signals, never automatic playbook material.
 2. **Solution type** — explicit, from the Recipe (do not rely on defaults; new designs default to Terminal — EC#11).
 3. **Design** — create + save; record design/project names in the summary.
 4. **Geometry** — all dims variables (`hfss["name"] = "value"`); sheet-vs-solid choices per Recipe; keep names stable across runs (same-name rebuilds on a dirty project duplicate silently — start from a clean project or wipe, EC#8).

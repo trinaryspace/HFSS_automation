@@ -13,6 +13,7 @@ Turn one conversation into a complete, correct HFSS simulation on the live AEDT 
 2. `docs/adr/0001..0005` — settled decisions; the hard rules below quote them.
 3. `knowledge/playbook/environment-compat.md` — the compat truth for this machine; **consult it before promising any pyAEDT API** (ADR 0004). The playbook's other entries hold Recipe technique.
 4. `scraping/pyaedt_ai_context/` — the KB: how to call each pyAEDT API. It teaches the API, not the design.
+5. **User-provided reference papers** — when the user drops PDFs (papers, book chapters) into `knowledge/reference-papers/`, run the `analyze-papers` skill (installed globally) on them and read the resulting agent notes before Clarification; they are context, and only a user-approved Learning-loop proposal may turn them into playbook amendments.
 
 ## Preconditions — block and escalate if unmet
 

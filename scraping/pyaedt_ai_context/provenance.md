@@ -13,6 +13,13 @@ The trailing edge of the facts in this corpus is knowable from this file.
 
 ## Crawl runs
 
+- 2026-08-02 — top-up crawl (generic): 11 pages fetched, 2 new page files written, 7 existing page files kept; RAG corpus rebuilt with 8411 entries
+- 2026-08-02 — top-up crawl (generic): 127 pages fetched, 122 new page files written, 3 existing page files kept; RAG corpus rebuilt with 8409 entries
+- 2026-08-02 — top-up crawl (generic): 121 pages fetched, 120 new page files written, 0 existing page files kept; RAG corpus rebuilt with 8287 entries
+- 2026-08-02 — top-up crawl (solve_setups): 123 pages fetched, 112 new page files written, 9 existing page files kept; RAG corpus rebuilt with 8167 entries
+- 2026-08-02 — top-up crawl (logger): 95 pages fetched, 94 new page files written, 0 existing page files kept; RAG corpus rebuilt with 8055 entries
+- 2026-08-02 — top-up crawl (modeler): 1027 pages fetched, 988 new page files written, 36 existing page files kept; RAG corpus rebuilt with 7961 entries
+- 2026-08-02 — top-up crawl (modeler): 735 pages fetched, 732 new page files written, 0 existing page files kept; RAG corpus rebuilt with 6973 entries
 - 2026-08-02 — top-up crawl (advanced): 257 pages fetched, 256 new page files written, 0 existing page files kept; RAG corpus rebuilt with 6241 entries
 - 2026-08-02 — top-up crawl (plots): 187 pages fetched, 186 new page files written, 0 existing page files kept; RAG corpus rebuilt with 5985 entries
 - 2026-08-02 — top-up crawl (solve_setups): 310 pages fetched, 310 new page files written, 0 existing page files kept; RAG corpus rebuilt with 5799 entries

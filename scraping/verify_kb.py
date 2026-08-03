@@ -1,4 +1,4 @@
-"""Verify the scraped KB against the KB acceptance checks (tickets 03 + 08).
+"""Verify the scraped KB against the KB acceptance checks (tickets 03/08/09).
 
 Standalone document-level check (this repo has no test framework; the spec's
 verification baseline for the KB is file counts per category, provenance
@@ -11,6 +11,11 @@ fields present, and corpus consistency):
   design_xploration/profile, was 0; other-solver classes still absent)
 - plots subtree populated (visualization.plot.*, was 0)
 - advanced visualization subtree populated (visualization.advanced.*, was 0)
+- modeler surface populated (Modeler3D/cad/GeometryOperators/advanced_cad;
+  was ~1 file before ticket 09; no circuit/schematic pages added)
+- message manager populated (aedt_logger; was 0 before ticket 09)
+- profile convergence-QA classes present (ticket 09)
+- generic utilities populated (generic.* + syslib.nastran_import; was 0)
 - provenance readable: scrape date, docs URL tree, documented pyAEDT version
 - RAG JSONL corpus consistent with the per-page markdown files
 
@@ -32,11 +37,21 @@ OUTPUT_DIR = Path(__file__).parent / "pyaedt_ai_context"
 
 
 def _is_method_page(file_path: Path) -> bool:
-    """A method/style page has a snake_case final component; class pages are PascalCase."""
+    """A method/style page has a snake_case final component; class pages are
+    PascalCase (the same class-vs-leaf rule the scraper's is_class_page uses)."""
     stem = file_path.stem
     if stem.endswith(".rst"):
         stem = stem[:-4]
     return bool(re.search(r"\.[a-z_][a-z0-9_]*$", stem))
+
+
+def _missing_class_roots(roots, files):
+    """Roots (e.g. 'SetupHFSS') with no file whose dotted name has that root
+    as its last-or-prefix component."""
+    return [
+        r for r in roots
+        if not any(re.search(r"\.(?:" + re.escape(r) + r")(?:\.|$)", p.name) for p in files)
+    ]
 
 
 def main() -> int:
@@ -73,6 +88,53 @@ def main() -> int:
     mat_methods = [p for p in md_by_category.get("materials", []) if _is_method_page(p)]
     check("materials method sub-pages captured", len(mat_methods) > 50, f"{len(mat_methods)} method/style pages")
 
+    # Ticket 09: modeler surface, message manager, optimetrics managers,
+    # profile remainder, generic utilities.
+    geom_count = len(md_by_category.get("geometry_modeler", []))
+    geom_files = md_by_category.get("geometry_modeler", [])
+    check("modeler surface crawled (was ~1 file of Modeler3D)", geom_count > 1600, f"{geom_count} files in geometry_modeler")
+    for prefix, label in (
+        ("ansys.aedt.core.modeler.modeler_3d.", "Modeler3D (create_box/cylinder/...)"),
+        ("ansys.aedt.core.modeler.cad.", "cad objects (Object3d/Polyline/...)"),
+        ("ansys.aedt.core.modeler.geometry_operators.", "GeometryOperators"),
+        ("ansys.aedt.core.modeler.advanced_cad.", "advanced_cad (SBR+ scene prep docs)"),
+    ):
+        check(f"{label} surface present", any(p.name.startswith(prefix) for p in geom_files))
+    leaked_modelers = [p.name for p in geom_files
+                       if any(p.name.startswith(f"ansys.aedt.core.modeler.{m}.")
+                              for m in ("circuits", "schematic"))]
+    check("no circuit/schematic modeler pages added",
+          not leaked_modelers,
+          f"unexpected: {leaked_modelers}" if leaked_modelers else "circuit/schematic modelers absent; PCB/2D modelers excluded by the modeler focus patterns (offline pattern test)")
+
+    desktop_files = md_by_category.get("desktop_app", [])
+    check(
+        "message manager crawled (aedt_logger)",
+        any("aedt_logger" in p.name for p in desktop_files),
+        f"{sum('aedt_logger' in p.name for p in desktop_files)} aedt_logger files",
+    )
+    logger_files = [p for p in desktop_files if "aedt_logger" in p.name]
+    check(
+        "message read/write methods present",
+        any(p.name.startswith("ansys.aedt.core.aedt_logger.AedtLogger.add_") for p in logger_files),
+        "AedtLogger.add_* method pages",
+    )
+
+    profile_files = [p for p in md_by_category.get("setup_and_mesh", []) if p.name.startswith("ansys.aedt.core.modules.profile.")]
+    extra_profile_roots = ["AdaptivePass", "FrequencySweepProfile", "TransientProfile", "MemoryGB"]
+    missing_profile = _missing_class_roots(extra_profile_roots, profile_files)
+    check("profile convergence-QA classes present", not missing_profile,
+          f"missing: {missing_profile}" if missing_profile else "AdaptivePass/FrequencySweepProfile/TransientProfile/MemoryGB present")
+
+    generic_count = len(md_by_category.get("generic_utils", []))
+    generic_files = md_by_category.get("generic_utils", [])
+    check("generic utilities subtree populated (was 0)", generic_count > 150, f"{generic_count} files")
+    check(
+        "generic covers generic.* + nastran_import surface",
+        bool(generic_files) and all(".generic." in p.name or "syslib.nastran_import" in p.name for p in generic_files),
+        f"all {len(generic_files)} files",
+    )
+
     # Ticket 08: report generation, solve setup, plots, advanced visualization.
     check("reports subtree populated (was 0)", reports_count > 800, f"{reports_count} files")
     report_files = md_by_category.get("reports", [])
@@ -85,13 +147,7 @@ def main() -> int:
     setup_files = [p for p in md_by_category.get("setup_and_mesh", []) if "modules." in p.name]
     setup_roots = [cls for classes in HFSS_SETUP_CLASSES.values() for cls in classes]
     check("solve-setup surface crawled", setup_count > 400, f"{setup_count} files in setup_and_mesh")
-    missing_roots = [
-        r for r in setup_roots
-        if not any(
-            re.search(r"\.(?:" + re.escape(r) + r")(?:\.|$)", p.name)
-            for p in setup_files
-        )
-    ]
+    missing_roots = _missing_class_roots(setup_roots, setup_files)
     check("solve-setup class surfaces present", not missing_roots,
           f"missing: {missing_roots}" if missing_roots else "all HFSS-relevant class roots present")
     check(

@@ -66,8 +66,17 @@ TARGET_PATTERNS = {
     "desktop_app": [
         r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.desktop",
         r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.application",
+        # message manager: the logger the skill reads for self-correction
+        r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.aedt_logger",
         r"/API/Desktop\.html",
         r"/API/Application\.html",
+    ],
+    # Shared utilities (file/dir helpers, configurations, math/geometry
+    # helpers) — not stage-specific, but staged scripts use them; kept out
+    # of the stage categories so those stay focused.
+    "generic_utils": [
+        r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.generic\.",
+        r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.syslib\.nastran_import",
     ],
 }
 
@@ -81,11 +90,12 @@ ALL_PATTERNS = [pattern for sublist in TARGET_PATTERNS.values() for pattern in s
 # solve_setups derive from it, as do verify_kb's class-presence checks.
 # The profile module carries the convergence-QA classes (Profiles,
 # SimulationProfile, ...) and is crawled whole; design_xploration covers
-# the parametric/optimetric setups.
+# the parametric/optimetric setups incl. the ParametricSetups and
+# OptimizationSetups managers (ticket 09).
 HFSS_SETUP_CLASSES = {
     "solve_setup": ("Setup", "SetupHFSS", "SetupHFSSAuto"),
     "solve_sweeps": ("SweepHFSS",),
-    "design_xploration": ("SetupParam", "SetupOpti"),
+    "design_xploration": ("SetupParam", "SetupOpti", "ParametricSetups", "OptimizationSetups"),
 }
 NON_HFSS_SETUP_CLASSES = {
     "solve_setup": ("SetupCircuit", "SetupMaxwell", "SetupQ3D", "Setup3DLayout", "SetupSBR"),
@@ -95,9 +105,11 @@ NON_HFSS_SETUP_CLASSES = {
 # Incremental top-up targets: a "focus" set of URL patterns and gateway seed
 # pages. A top-up crawl follows only links matching the focus patterns (plus
 # the seeds themselves, used for link discovery) and never re-writes pages
-# that already exist on disk. Focus patterns must be a subset of the full
-# pattern set (every focus-matching page is stored under the category its
-# ALL-pattern match picks).
+# that already exist on disk. Existing class pages are re-fetched as
+# discovery hubs (their files stay untouched) because their method sub-pages
+# are only reachable through them. Focus patterns must be a subset of the
+# full pattern set (every focus-matching page is stored under the category
+# its ALL-pattern match picks).
 TOP_UP_TARGETS = {
     "visualization": {
         "focus_patterns": [
@@ -132,9 +144,11 @@ TOP_UP_TARGETS = {
     "solve_setups": {
         # Tightened to the HFSS-relevant classes: Setup/SweepHFSS inherit
         # surfaces used by every HFSS conversation, design_xploration covers
-        # the parametric/optimetric setups, profile covers the convergence
-        # QA classes. Other-solver setups (NON_HFSS_SETUP_CLASSES) are
-        # skipped per ticket 08 (out of HFSS scope; SBR per ADR 0004).
+        # the parametric/optimetric setups (incl. the ParametricSetups /
+        # OptimizationSetups managers, ticket 09), profile covers the
+        # convergence QA classes. Other-solver setups
+        # (NON_HFSS_SETUP_CLASSES) are skipped per ticket 08 (out of HFSS
+        # scope; SBR per ADR 0004).
         "focus_patterns": [
             rf"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.modules\.{mod}\.(?:{'|'.join(classes)})(?:\.|$)"
             for mod, classes in HFSS_SETUP_CLASSES.items()
@@ -150,6 +164,44 @@ TOP_UP_TARGETS = {
             DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.design_xploration.SetupOpti.html",
             DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.profile.Profiles.html",
             DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.modules.profile.SimulationProfile.html",
+            # ticket 09 gateways: link the design_xploration managers and
+            # the full profile module (class pages only reachable here).
+            DOCS_TREE_URL + "API/Optimetrics.html",
+            DOCS_TREE_URL + "API/Profiles.html",
+        ],
+    },
+    # Ticket 09 top-ups: the modeler surface (the Spine's geometry stage —
+    # Modeler3D carries create_box/cylinder/rectangle/polyline in this docs
+    # line), the message manager (self-correction), and shared utilities.
+    "modeler": {
+        "focus_patterns": [
+            r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.modeler\.(modeler_3d|cad|geometry_operators|advanced_cad)",
+        ],
+        "seeds": [
+            DOCS_TREE_URL + "API/Primitives3D.html",
+            DOCS_TREE_URL + "API/Primitive_Objects.html",
+            # links the remaining advanced_cad.osm classes
+            DOCS_TREE_URL + "API/visualization/advanced.html",
+        ],
+    },
+    "logger": {
+        "focus_patterns": [
+            r"/_autosummary/.*(pyaedt|ansys\.aedt\.core)\.aedt_logger",
+        ],
+        "seeds": [
+            DOCS_TREE_URL + "API/DesktopMessenger.html",
+        ],
+    },
+    "generic": {
+        "focus_patterns": TARGET_PATTERNS["generic_utils"],
+        "seeds": [
+            DOCS_TREE_URL + "API/generic.html",
+            # configurations classes live under their own section, and
+            # Quantity is only linked from the API index — direct seeds.
+            DOCS_TREE_URL + "API/Configuration.html",
+            DOCS_TREE_URL + "API/_autosummary/ansys.aedt.core.generic.numbers_utils.Quantity.html",
+            # nastran_to_stl is only linked from the visualization gateway
+            DOCS_TREE_URL + "API/visualization/_autosummary/ansys.aedt.core.syslib.nastran_import.nastran_to_stl.html",
         ],
     },
     "plots": {
@@ -193,6 +245,16 @@ def page_output_path(url: str) -> Path:
     if url_filename.startswith("pyaedt."):
         url_filename = url_filename.replace("pyaedt.", "")
     return OUTPUT_DIR / categorize_url(url) / f"{url_filename}.md"
+
+
+def is_class_page(url: str) -> bool:
+    """True when the URL's last dotted component is PascalCase — a class
+    page whose method sub-pages are only reachable through it. Method and
+    attribute pages (snake_case last component, incl. .rst.txt sources)
+    are leaves and return False."""
+    filename = Path(urlparse(url).path).stem
+    last_component = filename.rsplit(".", 1)[-1]
+    return bool(last_component) and last_component[0].isupper()
 
 
 def clean_markdown_for_ai(raw_md: str, title: str, url: str, category: str) -> str:
@@ -332,7 +394,8 @@ async def generate_ai_context(
     Full crawl (default): seeds the API index and follows every internal link
     matching the full pattern set, overwriting pages as it goes.
     Top-up crawl (--topup): seeds the target's gateway pages, follows only
-    links matching the focus patterns, and never re-writes existing pages.
+    links matching the focus patterns, and never re-writes existing pages —
+    existing class pages are re-fetched as discovery hubs only.
     """
     seeds = list(seed_urls) if seed_urls else [START_URL]
     OUTPUT_DIR.mkdir(exist_ok=True)
@@ -408,7 +471,12 @@ async def generate_ai_context(
 
                     if full_url not in visited_urls and is_target_url(full_url, focus_patterns):
                         if skip_existing and page_output_path(full_url).exists():
-                            continue
+                            # Existing pages are never re-fetched — except
+                            # class pages, which link their method sub-pages
+                            # and so must be traversed as discovery hubs
+                            # (their files stay untouched). See ticket 09.
+                            if not is_class_page(full_url):
+                                continue
                         to_visit.add(full_url)
 
     written = rebuild_rag_corpus()

@@ -1,7 +1,0 @@
----
-title: ""
-url: "https://aedt.docs.pyansys.com/version/stable/_sources/API/_autosummary/ansys.aedt.core.modeler.modeler_3d.Modeler3D.get_objects_w_string.rst.txt"
-category: "geometry_modeler"
-domain: "PyAEDT / HFSS"
----
-

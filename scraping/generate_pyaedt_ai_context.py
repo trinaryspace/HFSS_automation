@@ -2,6 +2,8 @@ import argparse
 import asyncio
 import json
 import re
+import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -236,6 +238,12 @@ def is_target_url(url: str, patterns: Optional[List[str]] = None) -> bool:
     if any(path.endswith(ext) for ext in [".png", ".jpg", ".zip", ".pdf", ".py", ".css", ".js"]):
         return False
 
+    # Sphinx "_sources/...rst.txt" pages are empty re-exports of the plain
+    # autosummary twin and produced the ~4k dead .rst.md stubs (ticket 05);
+    # never visit or store them, and never follow them during a crawl.
+    if "/_sources/" in path or path.endswith(".rst.txt"):
+        return False
+
     return any(re.search(pattern, path, re.IGNORECASE) for pattern in (patterns or ALL_PATTERNS))
 
 
@@ -304,6 +312,10 @@ def rebuild_rag_corpus() -> int:
 
     for cat_dir in sorted(p for p in OUTPUT_DIR.iterdir() if p.is_dir()):
         for md_file in sorted(cat_dir.glob("*.md")):
+            if md_file.name.endswith(".rst.md"):
+                # Sphinx re-export stubs (ticket 05) are never part of the
+                # corpus; the scraper no longer fetches their _sources/ pages.
+                continue
             text = md_file.read_text(encoding="utf-8")
             meta, body = split_frontmatter(text)
             page_count += 1
@@ -333,6 +345,24 @@ def rebuild_rag_corpus() -> int:
         for chunk in chunks:
             f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
     return page_count
+
+
+def _regenerate_spine_api() -> None:
+    """Run the spine-api distiller after a crawl/top-up (ticket 05, ID 8).
+
+    Runs in a subprocess so the crawl flow never depends on the distiller's
+    imports; the distiller's own byte-stability contract makes a no-change
+    run a no-op rewrite.
+    """
+    script = Path(__file__).parent / "generate_spine_api.py"
+    if not script.exists():
+        print("  [SKIP] spine-api regeneration: generate_spine_api.py not found")
+        return
+    result = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.returncode:
+        raise RuntimeError(f"spine-api regeneration failed after crawl:\n{result.stderr}")
 
 
 def write_provenance(record: str) -> None:
@@ -486,6 +516,11 @@ async def generate_ai_context(
         f"RAG corpus rebuilt with {written} entries"
     )
     write_provenance(record)
+    # Regenerate the distilled spine reference (ticket 05) so a crawl can
+    # never leave knowledge/playbook/spine-api.md stale. Fails loudly if the
+    # spine set no longer resolves against the KB (a top-up removed/renamed
+    # a page), per the analysis's "fail loudly" guard.
+    _regenerate_spine_api()
 
     print("\n" + "=" * 60)
     print(f"SUCCESS! PyAEDT AI Context dataset generated successfully.")

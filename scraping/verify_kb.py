@@ -17,6 +17,7 @@ fields present, and corpus consistency):
 - profile convergence-QA classes present (ticket 09)
 - generic utilities populated (generic.* + syslib.nastran_import; was 0)
 - provenance readable: scrape date, docs URL tree, documented pyAEDT version
+- zero .rst.md stubs (ticket 05 scrub; provenance records it)
 - RAG JSONL corpus consistent with the per-page markdown files
 
 Usage: python verify_kb.py   (exit code 0 = all checks pass)
@@ -92,7 +93,9 @@ def main() -> int:
     # profile remainder, generic utilities.
     geom_count = len(md_by_category.get("geometry_modeler", []))
     geom_files = md_by_category.get("geometry_modeler", [])
-    check("modeler surface crawled (was ~1 file of Modeler3D)", geom_count > 1600, f"{geom_count} files in geometry_modeler")
+    # Thresholds halved vs the pre-scrub numbers: before ticket 05 the counts
+    # were inflated ~2x by .rst.md stubs (every stub had a real .md twin).
+    check("modeler surface crawled (was ~1 file of Modeler3D)", geom_count > 600, f"{geom_count} files in geometry_modeler")
     for prefix, label in (
         ("ansys.aedt.core.modeler.modeler_3d.", "Modeler3D (create_box/cylinder/...)"),
         ("ansys.aedt.core.modeler.cad.", "cad objects (Object3d/Polyline/...)"),
@@ -128,7 +131,7 @@ def main() -> int:
 
     generic_count = len(md_by_category.get("generic_utils", []))
     generic_files = md_by_category.get("generic_utils", [])
-    check("generic utilities subtree populated (was 0)", generic_count > 150, f"{generic_count} files")
+    check("generic utilities subtree populated (was 0)", generic_count > 80, f"{generic_count} files")
     check(
         "generic covers generic.* + nastran_import surface",
         bool(generic_files) and all(".generic." in p.name or "syslib.nastran_import" in p.name for p in generic_files),
@@ -136,7 +139,7 @@ def main() -> int:
     )
 
     # Ticket 08: report generation, solve setup, plots, advanced visualization.
-    check("reports subtree populated (was 0)", reports_count > 800, f"{reports_count} files")
+    check("reports subtree populated (was 0)", reports_count > 350, f"{reports_count} files")
     report_files = md_by_category.get("reports", [])
     check(
         "reports covers visualization.report.* surface",
@@ -146,7 +149,7 @@ def main() -> int:
 
     setup_files = [p for p in md_by_category.get("setup_and_mesh", []) if "modules." in p.name]
     setup_roots = [cls for classes in HFSS_SETUP_CLASSES.values() for cls in classes]
-    check("solve-setup surface crawled", setup_count > 400, f"{setup_count} files in setup_and_mesh")
+    check("solve-setup surface crawled", setup_count > 250, f"{setup_count} files in setup_and_mesh")
     missing_roots = _missing_class_roots(setup_roots, setup_files)
     check("solve-setup class surfaces present", not missing_roots,
           f"missing: {missing_roots}" if missing_roots else "all HFSS-relevant class roots present")
@@ -160,7 +163,7 @@ def main() -> int:
                              for cls in classes)]
     check("other-solver setups skipped", not skipped_setups, f"unexpected: {skipped_setups}" if skipped_setups else "no SetupCircuit/Maxwell/Q3D/3DLayout/SBR pages")
 
-    check("plots subtree populated (was 0)", plots_count > 120, f"{plots_count} files")
+    check("plots subtree populated (was 0)", plots_count > 60, f"{plots_count} files")
     plot_files = md_by_category.get("plots", [])
     check(
         "plots covers visualization.plot.* surface",
@@ -168,7 +171,7 @@ def main() -> int:
         f"all {len(plot_files)} files",
     )
 
-    check("advanced visualization subtree populated (was 0)", adv_count > 160, f"{adv_count} files")
+    check("advanced visualization subtree populated (was 0)", adv_count > 80, f"{adv_count} files")
     adv_files = md_by_category.get("advanced_visualization", [])
     check(
         "advanced covers visualization.advanced.* surface",
@@ -190,6 +193,15 @@ def main() -> int:
         "https://aedt.docs.pyansys.com/version/stable/" in prov_text,
     )
     check("provenance: documented pyAEDT version", "1.3.0" in prov_text and "ADR 0004" in prov_text)
+    check("provenance: .rst.md stub scrub recorded", ".rst.md stub scrub" in prov_text,
+          "ticket 05 scrub record present" if ".rst.md stub scrub" in prov_text else "missing scrub record")
+
+    # Ticket 05: the scraper no longer fetches _sources/ re-export pages, so no
+    # .rst.md stubs may exist anywhere in the KB.
+    stub_files = sorted(p for p in OUTPUT_DIR.rglob("*.rst.md"))
+    check("no .rst.md stubs remain (ticket 05)",
+          not stub_files,
+          f"unexpected: {[str(p.relative_to(OUTPUT_DIR)) for p in stub_files[:5]]}" if stub_files else "stubs pruned; scraper excludes _sources/ pages")
 
     # Corpus consistency: one chunk per KB page file; chunk content must equal
     # the page body (file minus frontmatter); filenames must match on both sides.

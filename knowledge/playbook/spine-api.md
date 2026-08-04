@@ -14,17 +14,17 @@ Distilled reference for the hfss-agent Spine: script authoring reads this file i
 ### Hfss
 `class ansys.aedt.core.hfss.Hfss(project : str | None = None, design : str | None = None, solution_type : str | None = None, setup : str | None = None, version : str | None = None, non_graphical : bool | None = False, new_desktop : bool | None = False, close_on_exit : bool | None = False, student_version : bool | None = False, machine : str | None = '', port : int | None = 0, aedt_process_id : int | None = None, remove_lock : bool | None = False)`
 Provides the HFSS application interface.
-KB: `hfss/ansys.aedt.core.hfss.Hfss.md` · EC gotchas: [EC#1 Launch new graphical desktop — WORKS](environment-compat.md#1-launch-new-graphical-desktop-works) · [EC#2 Attach onto running desktop — WORKS (cross-process)](environment-compat.md#2-attach-onto-running-desktop-works-cross-process) · [EC#9 Project files and locks — manage explicitly](environment-compat.md#9-project-files-and-locks-manage-explicitly) · [EC#11 Solution-type default — Terminal, not Modal](environment-compat.md#11-solution-type-default-terminal-not-modal)
+KB: `hfss/ansys.aedt.core.hfss.Hfss.md` · EC gotchas: [EC#1 Launch new graphical desktop — WORKS](environment-compat.md#1-launch-new-graphical-desktop--works) · [EC#2 Attach onto running desktop — WORKS (cross-process)](environment-compat.md#2-attach-onto-running-desktop--works-cross-process) · [EC#9 Project files and locks — manage explicitly](environment-compat.md#9-project-files-and-locks--manage-explicitly) · [EC#11 Solution-type default — Terminal, not Modal](environment-compat.md#11-solution-type-default--terminal-not-modal)
 
 ### Hfss.analyze
 `Hfss.analyze(setup : str = None, cores : int = None, tasks : int = None, gpus : int = None, acf_file : str = None, use_auto_settings : bool = True, solve_in_batch : bool = False, machine : str = 'localhost', run_in_thread : bool = False, revert_to_initial_mesh : bool = False, blocking : bool = True) → bool`
 Solve the active design.
-KB: `hfss/ansys.aedt.core.hfss.Hfss.analyze.md` · EC gotchas: [EC#4 Blocking solve — WORKS](environment-compat.md#4-blocking-solve-works) · [EC#5 Non-blocking solve — WORKS (submission); background completion INFERRED](environment-compat.md#5-non-blocking-solve-works-submission-background-completion-inferred)
+KB: `hfss/ansys.aedt.core.hfss.Hfss.analyze.md` · EC gotchas: [EC#4 Blocking solve — WORKS](environment-compat.md#4-blocking-solve--works) · [EC#5 Non-blocking solve — WORKS (submission); background completion INFERRED](environment-compat.md#5-non-blocking-solve--works-submission-background-completion-inferred)
 
 ### Hfss.validate_simple
 `Hfss.validate_simple(log_file : str | Path = None) → int`
 Validate a design.
-KB: `hfss/ansys.aedt.core.hfss.Hfss.validate_simple.md` · EC gotchas: [EC#8 Validation gates — MUST use before solve](environment-compat.md#8-validation-gates-must-use-before-solve)
+KB: `hfss/ansys.aedt.core.hfss.Hfss.validate_simple.md` · EC gotchas: [EC#8 Validation gates — MUST use before solve](environment-compat.md#8-validation-gates--must-use-before-solve)
 
 ### Hfss.save_project
 `Hfss.save_project(file_name : str | Path = None, overwrite : bool = True, refresh_ids : bool = False) → bool`
@@ -34,7 +34,7 @@ KB: `hfss/ansys.aedt.core.hfss.Hfss.save_project.md`
 ### Hfss.release_desktop
 `Hfss.release_desktop(close_projects : bool = True, close_desktop : bool = True) → bool`
 Release AEDT.
-KB: `hfss/ansys.aedt.core.hfss.Hfss.release_desktop.md` · EC gotchas: [EC#10 Release / process hygiene — kill-until-gone required](environment-compat.md#10-release-process-hygiene-kill-until-gone-required)
+KB: `hfss/ansys.aedt.core.hfss.Hfss.release_desktop.md` · EC gotchas: [EC#10 Release / process hygiene — kill-until-gone required](environment-compat.md#10-release--process-hygiene--kill-until-gone-required)
 
 ### Hfss.cleanup_solution
 `Hfss.cleanup_solution(variations : str | list = 'All', entire_solution : bool = True, field : bool = True, mesh : bool = True, linked_data : bool = True) → bool`
@@ -125,7 +125,7 @@ KB: `materials/ansys.aedt.core.modules.material_lib.Materials.add_material.md`
 ### Hfss.wave_port
 `Hfss.wave_port(assignment : int | Object3d | FacePrimitive, reference : int | str | list | Object3d = None, create_port_sheet : bool | None = False, create_pec_cap : bool | None = False, integration_line : int | Gravity | None = 0, port_on_plane : bool | None = True, modes : int | None = 1, impedance : float | None = 50, name : str | None = None, renormalize : bool | None = True, deembed : float | None = 0, is_microstrip : bool | None = False, vfactor : int | None = 3, hfactor : int | None = 5, terminals_rename : bool | None = True, characteristic_impedance : str | list | None = 'Zpi') → BoundaryObject`
 Create a waveport from a sheet (`start_object`) or taking the closest edges of two objects.
-KB: `hfss/ansys.aedt.core.hfss.Hfss.wave_port.md` · EC gotchas: [EC#7 Excitation assignments — WORKS with caveats (pattern matters)](environment-compat.md#7-excitation-assignments-works-with-caveats-pattern-matters) · [EC#8 Validation gates — MUST use before solve](environment-compat.md#8-validation-gates-must-use-before-solve)
+KB: `hfss/ansys.aedt.core.hfss.Hfss.wave_port.md` · EC gotchas: [EC#7 Excitation assignments — WORKS with caveats (pattern matters)](environment-compat.md#7-excitation-assignments--works-with-caveats-pattern-matters) · [EC#8 Validation gates — MUST use before solve](environment-compat.md#8-validation-gates--must-use-before-solve)
 
 ### Hfss.assign_radiation_boundary_to_objects
 `Hfss.assign_radiation_boundary_to_objects(assignment : str | list | Object3d, name : str | None = None) → BoundaryObject`
@@ -189,12 +189,12 @@ KB: `postprocessing/ansys.aedt.core.visualization.post.post_common_3d.PostProces
 ### PostProcessor3D.get_solution_data
 `PostProcessor3D.get_solution_data(expressions : str | list = None, setup_sweep_name : str | None = None, domain : str | None = None, variations : dict | None = None, primary_sweep_variable : str | None = None, report_category : str | None = None, context : str | dict | None = None, subdesign_id : int | None = None, polyline_points : int = 1001, math_formula : str | None = None) → SolutionData | bool`
 Get a simulation result from a solved setup and cast it in a `SolutionData` object.
-KB: `postprocessing/ansys.aedt.core.visualization.post.post_common_3d.PostProcessor3D.get_solution_data.md` · EC gotchas: [EC#6 Reading results (`post.get_solution_data`) — WORKS, FLAKY (single observation)](environment-compat.md#6-reading-results-post-get-solution-data-works-flaky-single-observation)
+KB: `postprocessing/ansys.aedt.core.visualization.post.post_common_3d.PostProcessor3D.get_solution_data.md` · EC gotchas: [EC#6 Reading results (`post.get_solution_data`) — WORKS, FLAKY (single observation)](environment-compat.md#6-reading-results-postgetsolutiondata--works-flaky-single-observation)
 
 ### SolutionData
 `class ansys.aedt.core.visualization.post.solution_data.SolutionData(aedtdata)`
 Contains information from the `GetSolutionDataPerVariation()` method.
-KB: `postprocessing/ansys.aedt.core.visualization.post.solution_data.SolutionData.md` · EC gotchas: [EC#6 Reading results (`post.get_solution_data`) — WORKS, FLAKY (single observation)](environment-compat.md#6-reading-results-post-get-solution-data-works-flaky-single-observation)
+KB: `postprocessing/ansys.aedt.core.visualization.post.solution_data.SolutionData.md` · EC gotchas: [EC#6 Reading results (`post.get_solution_data`) — WORKS, FLAKY (single observation)](environment-compat.md#6-reading-results-postgetsolutiondata--works-flaky-single-observation)
 
 ### AedtLogger.get_messages
 `AedtLogger.get_messages(project_name : str | None = None, design_name : str | None = None, level : int | None = 0, aedt_messages : bool | None = False) → MessageList`

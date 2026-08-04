@@ -8,8 +8,11 @@ the corpus (plain `.md` pages are untouched).
 
 Kept in scraping/ for provenance; re-running when nothing remains to prune is
 a no-op (no duplicate provenance record).
+
+Usage: python scraping/prune_rst_stubs.py   (exit code 0 = pruned or no-op)
 """
 
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -46,4 +49,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

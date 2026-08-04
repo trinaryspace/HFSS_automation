@@ -1,17 +1,19 @@
 """Generate knowledge/playbook/spine-api.md — the distilled pyAEDT reference
 behind an HFSS build (ticket 05, Implementation Decision 8).
 
-For every call in the spine set (~35 across the Hfss lifecycle, geometry
-modeler primitives, materials, boundaries_and_ports, setup_and_mesh sweeps,
-and postprocessing/visualization reports) the generator extracts from the
-matching KB page: the signature line, a one-sentence semantics, and the
+For every call in the spine set (~35, currently 36 — across the Hfss
+lifecycle, geometry modeler primitives, materials, boundaries_and_ports,
+setup_and_mesh sweeps, and postprocessing/visualization reports) the
+generator extracts from the matching KB page: the signature line, a
+one-sentence semantics, and the
 environment-compat gotcha entry (knowledge/playbook/environment-compat.md,
 ADR 0004) when the call has one. Emits a provenance header (generation date,
 KB file count, content hash).
 
 Determinism contract: the spine set is fixed-ordered and the hash input
-sorted, so a second run over an unchanged KB must produce a byte-identical
-file (this is enforced by the tooling ceremony, not at runtime).
+sorted, so a same-day second run over an unchanged KB produces a
+byte-identical file (the provenance header stamps the generation date by
+design, so a cross-day rerun changes only that date line).
 
 Usage: python scraping/generate_spine_api.py   (exit code 0 = written)
 """
@@ -159,7 +161,7 @@ def first_sentence(text: str) -> str:
     return sentence
 
 
-def extract_page(path: Path, label: str) -> Tuple[str, str]:
+def extract_page(path: Path) -> Tuple[str, str]:
     """Return (clean signature, one-line description) from a KB page file."""
     lines = path.read_text(encoding="utf-8").splitlines()
     head_idx = next((i for i, line in enumerate(lines) if line.startswith("# ")), None)
@@ -215,8 +217,15 @@ def load_ec_items() -> Dict[int, str]:
 
 
 def anchor_from_heading(title: str) -> str:
-    """Deterministic markdown anchor for a '### N. Title' heading."""
-    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", title.lower())).strip("-")
+    """GitHub-slugger anchor for a '### N. Title' heading.
+
+    Lowercase, drop punctuation (em dashes included, leaving their
+    surrounding spaces), then spaces to hyphens WITHOUT collapsing runs —
+    GitHub anchors '— WORKS' as '--works', and collapsing would 404 the link.
+    """
+    slug = re.sub(r"[^a-z0-9 -]", "", title.lower())
+    slug = re.sub(r" ", "-", slug)
+    return slug.strip("-")
 
 
 def build_doc(pages: List[Path]) -> str:
@@ -252,7 +261,7 @@ def build_doc(pages: List[Path]) -> str:
         page = KB_DIR / f"{rel}.md"
         if not page.exists():
             raise FileNotFoundError(f"spine KB page missing (re-scrape?): {page}")
-        sig, desc = extract_page(page, label)
+        sig, desc = extract_page(page)
         out.append(f"### {label}")
         out.append(f"`{sig}`")
         out.append(desc)

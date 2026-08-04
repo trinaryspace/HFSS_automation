@@ -1,0 +1,73 @@
+﻿{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "fireworks-ai/accounts/fireworks/models/deepseek-v4-flash-0731",
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    // reserved: token buffer left in the window so compaction auto-trigger
+    // never overflows mid-compaction on the 1M-context flash model.
+    "reserved": 10000
+  },
+  // HFSS agent tiering (perf-refactor tickets 02/08). The subagent model is a
+  // single swap point: both kb-lookup and runcard reference
+  // `fireworks-ai/hfss-subagent`. Documented default: deepseek-v4-flash-0731
+  // @ variant low (reasoningEffort=low, verified via `opencode models`).
+  // Downgrade path: point the alias `id` at a cheaper model (e.g.
+  // accounts/fireworks/models/gpt-oss-20b) and adjust the `variants` map —
+  // both agents follow with no edits to the agent definitions.
+  "provider": {
+    "fireworks-ai": {
+      "models": {
+        "hfss-subagent": {
+          "id": "accounts/fireworks/models/deepseek-v4-flash-0731",
+          "name": "HFSS subagent model — single swap point (ticket 08)",
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            }
+          }
+        }
+      }
+    }
+  },
+  "agent": {
+    "build": {
+      "variant": "low"
+    },
+    "kb-lookup": {
+      "description": "Read-only pyAEDT API lookup against the local KB; returns exact signatures quoted from KB files or NOT FOUND.",
+      "mode": "subagent",
+      "model": "fireworks-ai/hfss-subagent",
+      "variant": "low",
+      "permission": {
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "edit": "deny",
+        "bash": "ask",
+        "task": "deny"
+      },
+      "prompt": "You answer how to call pyAEDT APIs. Read the local KB under `scraping/pyaedt_ai_context/`, return the exact signature and argument names by quoting the KB file (include the file path). If a call is not in the KB, reply exactly `NOT FOUND — <what you searched>`. Never paraphrase from memory. Keep answers to the signature + the one example."
+    },
+    "runcard": {
+      "description": "Drafts summary.md sections and the run card from the workspace state.md and results for the main loop to revise.",
+      "mode": "subagent",
+      "model": "fireworks-ai/hfss-subagent",
+      "variant": "low",
+      "permission": {
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "edit": {
+          "*": "deny",
+          "workspaces/**": "allow"
+        },
+        "bash": "deny",
+        "task": "deny"
+      },
+      "prompt": "Draft `summary.md` sections (What the Model is, Acute design decisions, QA signals results) and the `## Run card` from the workspace's `state.md`, `results/state/*.txt` and `results/` — concise, ≤250 words total. Flag anything unreadable instead of guessing."
+    }
+  }
+}

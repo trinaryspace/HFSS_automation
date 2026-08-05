@@ -142,8 +142,8 @@ def main():
         "variables": len(shape["variables"]),
     }
     detail = " ".join("%s=%d" % kv for kv in sorted(counts.items()))
-    print("PASS: capture_state " + detail, flush=True)
     print("snapshot written:", out, flush=True)
+    print("PASS: capture_state " + detail, flush=True)
     sys.stdout.flush()
 
 

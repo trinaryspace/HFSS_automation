@@ -22,13 +22,12 @@ Completion/stall rules (see `watchdog_tick`):
 
 This module imports nothing from pyAEDT and no other workspace module, so
 it runs in any Python and can never attach to or kill a desktop. On
-startup it refreshes `aedt_port.txt` / `aedt_process_id.txt` (copies of
-what the launching session recorded, so the solve session always finds
-them) and records its own pid in `solve_watchdog_pid.txt` (the pid
-`08_solve`'s detach step records).
+startup it guarantees the `aedt_port.txt` / `aedt_process_id.txt` files
+exist (filling "0" only if the launching session left none — it never
+overwrites live values) and records its own pid in
+`solve_watchdog_pid.txt` (the pid `08_solve`'s detach step records).
 """
 
-import json
 import os
 import sys
 import time
@@ -89,7 +88,8 @@ def watchdog_tick(prev, cur, state, cfg):
     stall = cfg.get("stall_ticks", STALL_TICKS)
     start = cfg.get("start_ticks", START_TICKS)
     expected_sd = cfg.get("expected_sd")
-    changed = prev is None or cur[3] != prev[3] or cur[0] != prev[0] or cur[1] != prev[1]
+    changed = (prev is None or cur[0] != prev[0] or cur[1] != prev[1]
+               or cur[2] != prev[2] or cur[3] != prev[3])
     if changed:
         state["unchanged"] = 0
         if prev is not None or cur[0] + cur[1] + cur[3] > 0:
@@ -155,11 +155,12 @@ def main(argv=None):
     state_dir = os.path.join(workspace, "results", "state")
     os.makedirs(state_dir, exist_ok=True)
     progress = os.path.join(state_dir, "solve_progress.txt")
-    json_path = os.path.join(state_dir, "solve_progress.json")
 
     # State-file writebacks (ADR 0006): the watchdog's startup guarantees
-    # the pinned-port/pid records exist for the solve session's attach and
-    # teardown, and records its own pid for whoever launched it.
+    # the pinned-port/pid records EXIST for the solve session's attach and
+    # teardown (08_solve wrote their live values before launching it; the
+    # watchdog only fills in "0" if they are missing) and records its own
+    # pid in solve_watchdog_pid.txt for whoever launched it.
     with open(os.path.join(state_dir, "solve_watchdog_pid.txt"), "w") as f:
         f.write(str(os.getpid()))
     for key in ("aedt_port", "aedt_process_id"):
@@ -186,18 +187,6 @@ def main(argv=None):
         line = format_progress(tick_no, status, cur, state, cfg, time.time() - started, started)
         with open(progress, "a") as f:
             f.write(line + "\n")
-        with open(json_path, "w") as f:
-            json.dump({
-                "status": status,
-                "tick": tick_no,
-                "elapsed_s": int(time.time() - started),
-                "asol": cur[0],
-                "sd": cur[1],
-                "files": cur[2],
-                "bytes": cur[3],
-                "expected_sd": expected_sd,
-                "watchdog_pid": os.getpid(),
-            }, f)
         print(line, flush=True)
         if status in (STATUS_COMPLETE, STATUS_STALLED):
             print("watchdog exit:", status, flush=True)

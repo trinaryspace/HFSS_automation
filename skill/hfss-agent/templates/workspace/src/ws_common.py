@@ -26,7 +26,7 @@ RESULTS = os.path.join(WORKSPACE, "results")
 STATE = os.path.join(RESULTS, "state")  # gitignored via workspaces/*/results/
 
 DESIGN = "<DesignName>"
-SOLUTION_TYPE = "<Modal|Terminal|Transient|...> "  # explicit, never the default (env-compat #11)
+SOLUTION_TYPE = "<Modal|Terminal|Transient|...>"  # explicit, never the default (env-compat #11)
 AEDT_VERSION = "2024.1"
 
 os.makedirs(RESULTS, exist_ok=True)
@@ -86,12 +86,18 @@ def attach(launch=False):
             new_desktop=False,
             remove_lock=True,
         )
-    live_port = getattr(hfss.desktop_class, "port", 0) or _session_port()
-    live_pid = (
-        getattr(hfss.desktop_class, "aedt_process_id", "0")
-        or read_state("aedt_process_id")
-        or "0"
-    )
+
+    if launch:
+        # A fresh desktop: its own port/pid is the truth, never a stale pin.
+        live_port = getattr(hfss.desktop_class, "port", 0) or 0
+        live_pid = str(getattr(hfss.desktop_class, "aedt_process_id", "0") or "0")
+    else:
+        live_port = getattr(hfss.desktop_class, "port", 0) or _session_port()
+        live_pid = (
+            getattr(hfss.desktop_class, "aedt_process_id", "0")
+            or read_state("aedt_process_id")
+            or "0"
+        )
     write_state("aedt_port", str(live_port))
     write_state("aedt_process_id", str(live_pid))
     return hfss

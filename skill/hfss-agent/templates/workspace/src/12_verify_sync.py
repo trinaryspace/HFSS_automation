@@ -37,7 +37,10 @@ import time
 INFRA = {"ws_common", "poll_solve", "capture_state", "12_verify_sync",
          "00_static_gate", "stage_skeleton"}
 SOLVE_LIKE = ("solve", "qa", "plot")
-SCRIPT_TIMEOUT_S = int(os.environ.get("VERIFY_SCRIPT_TIMEOUT_S", "900"))
+try:
+    SCRIPT_TIMEOUT_S = int(os.environ.get("VERIFY_SCRIPT_TIMEOUT_S", "900"))
+except ValueError:
+    SCRIPT_TIMEOUT_S = 900
 
 
 def workspace_root():
@@ -83,8 +86,8 @@ def make_copy(workspace):
     return dest
 
 
-def _run_py(python, args, cwd, ok_exit_codes=(0,)):
-    """Run python<args>; return (exit_code, stdout, stderr)."""
+def _run_py(python, args, cwd):
+    """Run python<args>; return (exit_code, stdout, stderr), timeout-guarded."""
     try:
         proc = subprocess.run(
             [python] + args,
@@ -143,16 +146,23 @@ def main(argv=None):
 
     copy = make_copy(workspace)
     print("copy:", copy, flush=True)
+    # The replay runs the COPIED scripts (paths inside the fresh copy), never
+    # the live ones: their ws_common derives paths from the copy, so the
+    # second desktop, its port pin, and the delete-then-create runs all act
+    # on the copy — the live workspace is untouched.
+    replays = [os.path.join(copy, os.path.basename(s)) for s in scripts]
 
     failed = []
-    for script in scripts:
+    for script in replays:
         rc, stdout, stderr = _run_py(python, [script], cwd=os.path.dirname(script))
         tail = (stdout or "").strip().splitlines()[-6:]
         if stderr:
             tail.extend(("stderr: " + line) for line in stderr.strip().splitlines()[-3:])
         for line in tail:
             print("  |", line, flush=True)
-        if rc != 0:
+        # os._exit(0) hides a failed replay's exit code (the staged-script
+        # pattern), so failure means: nonzero rc OR any STAGE_FAILED line.
+        if rc != 0 or "STAGE_FAILED" in (stdout or ""):
             failed.append(os.path.basename(script))
     if failed:
         print("FAIL: sync mismatch — replay scripts failed: " + ", ".join(failed), flush=True)

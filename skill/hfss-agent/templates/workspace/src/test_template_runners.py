@@ -274,6 +274,21 @@ class TestVerifySync(unittest.TestCase):
         picked = self.verify.select_replay_scripts("src", ["02_geometry.py"])
         self.assertEqual(picked, [os.path.join("src", "02_geometry.py")])
 
+    def test_replay_paths_map_into_copy(self):
+        ws = os.path.join(self.tmp, "ws")
+        os.makedirs(os.path.join(ws, "src"))
+        for name in ("01_build.py", "04_excitations.py", "08_solve.py", "ws_common.py"):
+            with open(os.path.join(ws, "src", name), "w") as f:
+                f.write("# x\n")
+        copied = self.verify.make_copy(ws)
+        scripts = self.verify.select_replay_scripts(os.path.join(ws, "src"))
+        replays = [os.path.join(copied, os.path.basename(s)) for s in scripts]
+        self.assertEqual([os.path.basename(p) for p in replays],
+                         ["01_build.py", "04_excitations.py"])
+        for path in replays:
+            self.assertTrue(os.path.isfile(path))
+            self.assertTrue(os.path.commonpath([copied, path]) == os.path.normpath(copied))
+
     def test_make_copy_is_hygienic(self):
         ws = os.path.join(self.tmp, "ws")
         os.makedirs(os.path.join(ws, "src"))

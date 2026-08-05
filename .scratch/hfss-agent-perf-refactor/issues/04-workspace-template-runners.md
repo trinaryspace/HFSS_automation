@@ -1,0 +1,34 @@
+# 04 — Workspace template + runner scripts
+
+**What to build:** the code-shaped half of the refactor, all inside `skill/hfss-agent/templates/workspace/`:
+
+- `src/ws_common.py` (template): port-pinned attach/launch; `write_state`/`read_state` helpers; **port-pinned teardown** that cannot close the user's desktop; state-file writebacks (`aedt_process_id`, `aedt_port`).
+- **Watchdog:** `src/poll_solve.py` — detached progress watcher writing `results/state/solve_progress.txt` every ~20 s from recursive `.asol`/`.sd` growth; exit on completion or stall indicator; also writes `results/state/aedt_process_id.txt` for the 08_solve launch.
+- **Sync verify:** `src/capture_state.py` — introspects the live model into `results/state/model_snapshot.json` (objects + bboxes + materials + boundaries + excitations + setups/sweeps + variables); `src/12_verify_sync.py` — replays amended scripts on a fresh copy on a port-pinned second desktop, captures the same shape, diffs, prints one `PASS:`/`FAIL:` line (with differing keys on FAIL), tears down port-pinned.
+- **Verification contract:** stage-script skeleton showing the terminal `PASS: <stage> <assertions>` line; static gate script (py_compile + import-check all `src/*.py`).
+- **Ledger & run card:** `state.md` skeleton in the template root; summary.md gains the `## Run card` section (filled by ticket 01's harness) and a `model_snapshot.json` pointer; README updated for ledger/state-files/verify-runner/watched-solve.
+- `verify_skill.py` marker updates so the structural test passes (26/26) against the rewritten skill + template (markers for PASS line, watchdog, ledger, verify runner, .rst rule may be added).
+
+**Status:** ready-for-human
+**Blocked by:** 03 (the contracts this implements are settled there)
+
+- [x] Template ships ws_common with port-pinned attach/teardown
+- [x] poll_solve.py, capture_state.py, 12_verify_sync.py, static-gate script in template
+- [x] summary.md has Run card section + snapshot pointer; state.md skeleton present; README reflects the new ceremonies
+- [x] verify_skill.py passes ALL checks (markers updated; 58 checks)
+
+## Comments
+
+- 2026-08-04: Silent-engine's `ws_common.py` + `results/state/*.txt` are the proven seeds of this template (see analysis §3).
+- 2026-08-05: Ticket 04 implemented — the code-shaped half of the refactor, all inside `skill/hfss-agent/templates/workspace/`:
+  - `src/ws_common.py` — port-pinned attach/launch helpers (attach reconnects by the recorded `aedt_port`), `write_state`/`read_state` for `results/state/*.txt`, and a **port-pinned teardown** that refuses to act (release + kill) without a recorded pinned port/pid, so the user's own desktop can never be closed or killed (modeled on the bowtie-3500 seed).
+  - `src/poll_solve.py` — the detached watchdog (ADR 0006): recursive `.asol`/`.sd` growth scan under `<project>.aedtresults/` (single os.walk), appends one line to `results/state/solve_progress.txt` every ~20 s, pure `watchdog_tick` state machine (running → settling → complete/stalled; `EXPECTED_SD` env supported), exit 0 on complete / 2 on stall; startup writebacks refresh `aedt_port.txt`/`aedt_process_id.txt` and record its own pid in `solve_watchdog_pid.txt` (matches execution.md's detach step). Imports nothing from pyAEDT — runs in any Python, can never attach or kill a desktop.
+  - `src/capture_state.py` — `shape_from_model()` → `results/state/model_snapshot.json` (objects + per-object bbox/material + boundaries + excitations + setups/sweeps + variables, sorted, floats rounded to 9 dp, JSON-native); prints `PASS: capture_state <counts>`; keeps the desktop alive.
+  - `src/12_verify_sync.py` — replays the amended staged scripts on a fresh copy under `results/state/verify/<stamp>/copy` (results/.aedt/.aedtresults/locks never copied) on a port-pinned second desktop, captures the same shape, deep-diffs, prints exactly one verdict line per execution.md: `PASS: sync replay matches snapshot` / `FAIL: sync mismatch — <differing keys>`; teardown runs as a subprocess importing the COPY's ws_common (port-pinned to the copy's own state, so the live desktop is untouchable and os._exit can't eat the verdict; FAIL still exits 1).
+  - `src/00_static_gate.py` — py_compile + import-check of every `src/*.py` (gate skips itself); prints `PASS: static_gate compiled=N imported=N`; source-loaded via importlib so digit-prefixed names work.
+  - `src/stage_skeleton.py` — one staged script's full shape: attach, delete-then-create (ADR 0008), state writeback, `PASS: <stage> <assertions>` Verification line, `exit_keep_alive`.
+  - `src/test_template_runners.py` — TDD at the no-AEDT seams (23 tests: watchdog scan/state machine/progress line, snapshot normalization + fake-model shape, verify diff + replay selection + copy hygiene, static gate on throwaway trees). All pass; no AEDT/license.
+  - `state.md` skeleton (ledger per ADR 0007: Clarification locks, Build table with Verification lines, pitfalls, pointers); `summary.md` gains `## Run card` (ticket 01's harness fills it) + `model_snapshot.json` pointer; README rewritten for the new ceremonies (port pinning, watchdog solve, sync-verify runner, static gate, delete-then-create).
+  - `verify_skill.py` markers extended: Verification line/PASS, state ledger, run card, solve watchdog, sync verify, static gate, idempotent stages, KB rules, ADR 0006–0008 needles; template expectations now include `state.md` + the six template src files. Run: **ALL PASS (58 checks)** — 03 landed mid-run (SKILL.md/execution.md rewritten 2026-08-05 00:41), so the red-only-because-03-absent case evaporated; the remaining drifts were aligned instead: watchdog pid file named `solve_watchdog_pid.txt` per execution.md, verdict lines match execution.md's documented wording, marker `poll_solve`/`never foreground-poll` matches the landed spelling.
+  - Verification evidence: `python -m py_compile` on every new script (clean); static gate on the template runs clean (`PASS: static_gate compiled=7 imported=6`); `python src/test_template_runners.py` 23/23; `python verify_skill.py` ALL PASS; repo house suite (`scripts/test_run_card.py` 10/10) still green.
+  - Assumption noted: since 03 landed before my final pass, all contracts were aligned to the landed text; the one mid-flight assumption retired.

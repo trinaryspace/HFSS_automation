@@ -21,6 +21,10 @@ sync deltas and learning-loop notes as they occur.
 ## Read-back sync deltas
 
 <Each user UI tweak: what changed, which stage's script was amended.>
+Model shape record: `results/state/model_snapshot.json` — the machine-precise
+snapshot of objects/bboxes/materials/boundaries/excitations/setups/variables,
+written by `src/capture_state.py` and verified by replaying the amended
+scripts (`src/12_verify_sync.py`, one PASS/FAIL line).
 
 ## Results
 
@@ -31,3 +35,10 @@ with what was (not) observed; user verdict if given.>
 
 <Any generalizing tweak, QA anomaly, or backend-compat discovery —
 proposed amendments only after user approval (ADR 0002).>
+
+## Run card
+
+Filled by the measurement harness (`scripts/run_card.py --summary summary.md`):
+slug, created/updated, duration, `tokens_input`/`tokens_output`/
+`tokens_reasoning`/`tokens_cache_read`/`tokens_cache_write`, billed, parts,
+store_bytes — one `- key: value` line per metric.

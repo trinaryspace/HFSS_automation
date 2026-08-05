@@ -38,6 +38,15 @@ CONTRACT_MARKERS = {
     "glossary vocabulary": ["Spine", "Stage", "Run", "Workspace", "Recipe", "Assumption", "Model"],
     "reference papers kb": ["knowledge/reference-papers", "analyze-papers", "before Clarification",
                             "playbook amendments"],
+    "verification line": ["Verification line", "PASS: <stage>", "assertions"],
+    "state ledger": ["State ledger", "state.md", "results/state"],
+    "run card": ["Run card", "summary.md"],
+    "solve watchdog": ["poll_solve", "solve_progress.txt", "never foreground-poll"],
+    "sync verify": ["capture_state.py", "model_snapshot.json", "12_verify_sync.py",
+                    "port-pinned", "second desktop"],
+    "static gate": ["py_compile", "import", "before any AEDT launch"],
+    "idempotent stages": ["delete-then-create", "idempotent"],
+    "kb rules": ["spine-api.md", ".rst.md", "rg -l"],
 }
 
 REFERENCE_PAPERS_README = REPO / "knowledge" / "reference-papers" / "README.md"
@@ -51,9 +60,15 @@ REFERENCE_PAPERS_MARKERS = {
 REFERENCE_MARKERS = {
     "preamble semantics": ["remove_lock", "Release", "os._exit", "environment-compat"],
     "port guidance": ["face object", "solid's face", "Never pass int ids"],
-    "solve semantics": ["blocking=False", "Never estimate solve time"],
+    "solve semantics": ["blocking=False", "Never estimate"],
     "self-correction detail": ["3 consecutive failed Runs", "GetMessages", "substitution"],
-    "read-back sync steps": ["Introspect", "Amend that script", "does not close until sync"],
+    "read-back sync steps": ["capture_state.py", "model_snapshot.json", "12_verify_sync.py",
+                             "port-pinned", "does not close until sync"],
+    "watchdog flow": ["poll_solve.py", "solve_progress.txt", "detached", "stall"],
+    "static gate": ["py_compile", "import", "before any AEDT launch"],
+    "bash discipline": ["timeout", "90 s"],
+    "idempotency detail": ["delete-then-create", "in place"],
+    "kb rules detail": ["spine-api.md", ".rst.md", "rg -l"],
     "reference papers before clarification": ["reference-papers", "analyze-papers", "before drafting the block"],
 }
 
@@ -63,9 +78,14 @@ ADRS = {
     "0003": ("Math model", "visual"),
     "0004": "environment-compat",
     "0005": "read-back sync",
+    "0006": ("watchdog", "solve_progress.txt"),
+    "0007": ("state.md", "ledger"),
+    "0008": ("delete-then-create", "idempotent"),
 }
 
-TEMPLATE_FILES = ["README.md", "summary.md", "src"]
+TEMPLATE_FILES = ["README.md", "summary.md", "state.md", "src"]
+TEMPLATE_SRC_FILES = ["ws_common.py", "poll_solve.py", "capture_state.py",
+                      "12_verify_sync.py", "00_static_gate.py", "stage_skeleton.py"]
 
 
 def check(label, ok, detail=""):
@@ -108,6 +128,9 @@ def main() -> int:
     for f in TEMPLATE_FILES:
         target = TEMPLATE / f
         if not check(f"template has {f}", target.is_dir() if f == "src" else target.is_file()):
+            failures += 1
+    for f in TEMPLATE_SRC_FILES:
+        if not check(f"template src has {f}", (TEMPLATE / "src" / f).is_file()):
             failures += 1
 
     gi = GITIGNORE.read_text(encoding="utf-8") if GITIGNORE.is_file() else ""

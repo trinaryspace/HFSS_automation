@@ -1,19 +1,20 @@
 ---
 name: hfss-agent
-description: Use when the user wants a complete ANSYS HFSS 3D simulation in one conversation — a greenfield EM structure (antenna, filter, RF part, …), a Re-entry into or modification of an existing AEDT project (an RCS pivot included), or a solve / plots / results for one. Walks the Spine with a single up-front Clarification, stage-by-stage construction on the live AEDT desktop, a visual Review gate before any solve, background solves, Result QA, and deliverables (.aedt, plots, summary.md).
+description: Use when the user wants a complete ANSYS HFSS 3D simulation — a greenfield EM structure (antenna, filter, RF part, …), a Re-entry into or modification of an existing AEDT project (an RCS pivot included), or a solve / plots / results for one. Runs as three named phase sessions bound by the State ledger, builds stage-by-stage with idempotent staged scripts on the live AEDT desktop, a visual Review gate before any solve, solves under a detached watchdog, and delivers Result QA plus the requested plots and a summary.md with the run card.
 ---
 
 # HFSS Agent
 
-Turn one conversation into a complete, correct HFSS simulation on the live AEDT desktop: geometry, materials, excitations, setups, a solved result, and the requested plots — driven by staged scripts through the Spine, with the user reviewing the Math model in the UI before anything solves.
+Turn one conversation into three named phase sessions that together deliver a complete, correct HFSS simulation on the live AEDT desktop: geometry, materials, excitations, setups, a solved result, and the requested plots — driven by idempotent staged scripts through the Spine, with the user reviewing the Math model in the UI before any solve.
 
 ## Read first (in order)
 
-1. This repo's `CONTEXT.md` — the vocabulary. The Spine, Stage, Staged script, Run, Recipe, Project, Design, Model, Workspace, Re-entry, Clarification, Assumption, Review gate, Result QA, Learning loop, Summary are used exactly as defined there.
-2. `docs/adr/0001..0005` — settled decisions; the hard rules below quote them.
+1. This repo's `CONTEXT.md` — the vocabulary. The Spine, Stage, Staged script, Run, Recipe, Project, Design, Model, Workspace, Re-entry, Clarification, Assumption, Review gate, Result QA, Learning loop, State ledger, Run card, Verification line, Summary are used exactly as defined there.
+2. `docs/adr/0001..0008` — settled decisions; the hard rules below quote them (ADR 0006 solves under the watchdog, ADR 0007 phase sessions, ADR 0008 idempotent stages).
 3. `knowledge/playbook/environment-compat.md` — the compat truth for this machine; **consult it before promising any pyAEDT API** (ADR 0004). The playbook's other entries hold Recipe technique.
-4. `scraping/pyaedt_ai_context/` — the KB: how to call each pyAEDT API. It teaches the API, not the design.
-5. **User-provided reference papers** — when the user drops PDFs (papers, book chapters) into `knowledge/reference-papers/`, run the `analyze-papers` skill (installed globally) on them and read the resulting agent notes before Clarification; they are context, and only a user-approved Learning-loop proposal may turn them into playbook amendments.
+4. `knowledge/playbook/spine-api.md` — the **first-class reference for the spine call set** (signature + one-line semantics + EC gotcha links, provenance header). The `.rst.md` files under the KB are stubs — **never read or grep them**; for filename discovery use `rg -l`, never full recursive listings.
+5. `scraping/pyaedt_ai_context/` — the full KB for any call not distilled in `spine-api.md`; the read-only `kb-lookup` subagent answers exact-signature questions from it.
+6. **User-provided reference papers** — when the user drops PDFs (papers, book chapters) into `knowledge/reference-papers/`, run the `analyze-papers` skill (installed globally) on them and read the resulting agent notes before Clarification; they are context, and only a user-approved Learning-loop proposal may turn them into playbook amendments.
 
 ## Preconditions — block and escalate if unmet
 
@@ -23,46 +24,59 @@ Turn one conversation into a complete, correct HFSS simulation on the live AEDT 
 
 ## Hard rules (ADR-backed)
 
-1. **High-level API only.** Every call goes through `ansys.aedt.core`; never the raw COM surface (SetActiveDesign, GetDesignNames, GetActiveProjectName, GetMessages… are broken over gRPC — env-compat #3). Before promising any API, check the environment-compat entry; route around what it marks unsupported (e.g. RCS/SBR+ — env-compat #12).
+1. **High-level API only.** Every call goes through `ansys.aedt.core`; never the raw COM surface (SetActiveDesign, GetDesignNames, GetActiveProjectName, GetMessages… are broken over gRPC — env-compat #3). Before promising any API, check the environment-compat entry; route around what it marks unsupported (e.g. RCS/SBR+ — env-compat #12). Unknown calls are looked up via `kb-lookup` or `spine-api.md`, never guessed.
 2. **Visual Review gate.** The user reviews the built Math model in the AEDT UI — never to the scripts (ADR 0003). Nothing solves until the user passes the gate.
 3. **Read-back sync.** After every user UI tweak, introspect the live model — the sync amends the owning stage's script so re-running top-to-bottom reproduces the delivered model; record the delta in the summary; no gate closes until sync has run (ADR 0005).
 4. **Playbook discipline.** The playbook grows only through the Learning loop's amendment ceremony with explicit user approval (ADR 0002). Nothing appends silently.
 5. **Re-entry copies.** Re-entry never opens the original Project: copy it (results included) into the Workspace first, work on the copy only (ADR 0001).
 6. **Full parameterization.** All geometry is built with design variables; user tweaks are variable edits — readable, syncable, re-solvable.
+7. **Idempotent stages.** Every staged script deletes the objects, boundaries, excitations, mesh operations, and sweeps it (re)creates before creating them, so re-running any stage in place converges (ADR 0008). Wipe-and-rebuild is demoted to an explicit escalation tool — never the default route-around.
+8. **Solve under the watchdog.** The solve is submitted by `08_solve` and watched by a detached `poll_solve` writing machine state; you read machine state only — the solve's own state is `solve_progress.txt` — never foreground-poll, never estimate solve time (ADR 0006).
 
-## The run — the Spine (Greenfield build)
+## The run — three phase sessions bound by the State ledger
 
-One Stage = one staged script = one Run. A stage is done when its completion criterion below is met **and** the user has seen the stage's state in the open desktop. Walk in order; a failed completion criterion makes the stage a failed Run (see self-correction).
+One run is **three named phase sessions** (ADR 0007), each starting fresh from `workspaces/<name>/state.md` — the **State ledger** — not from the prior conversation. Each session amends the ledger as it goes and leaves machine state in `results/state/*.txt`. Resume points are only the ledger: a killed session resumes from it instead of redoing Clarification or script-writing. The sessions are named `<name>-clarify`, `<name>-build`, `<name>-solve`.
 
-1. **Interpret + Clarification** — one block, nothing builds before it. Gather the minimum information, spot critical setup features the user left out, map the request onto a playbook Recipe (or derive a new one), state every Assumption explicitly, and propose the Result QA signals for approval. *Done when: the user confirmed the Recipe, the assumptions, and the QA signals.*
-2. **Solution type** — set from the Recipe, explicitly (never the default — env-compat #11). *Done when: the design reports the Recipe's type.*
-3. **Design** — create the design in the Workspace Project and save (`remove_lock=True` if a stray lock exists — env-compat #9). *Done when: the project file exists on disk with the named design.*
-4. **Geometry** — every dimension a design variable; units per recipe. *Done when: the Model's solids match the Recipe in the UI and each dimension is a variable, not a literal.*
-5. **Materials** — per Recipe; tunables as variables. *Done when: each solid reports its Recipe material.*
-6. **Excitations / boundaries** — port strategy per Recipe; port assignment by **face object** on a solid's face — never ids/edges, and beware sheet-port auto-integration (env-compat #7/#8). *Done when: the ports/boundaries list matches the Recipe.*
-7. **Mesh** — Recipe mesh operations, or adaptive-only for proof stages. *Done when: the mesh operations list matches the Recipe (or is deliberately empty).*
-8. **Setup + sweep** — per Recipe (adaptive passes, delta-S, frequency, sweep range/interp). *Done when: `existing_analysis_sweeps` shows the named setup with its sweep.*
-9. **Validation** — `validate_simple()` must pass; an invalid design is a failed stage (env-compat #8). Build deterministic: fresh project state or exact rebuild — re-created same-name objects duplicate silently and invalidate. *Done when: validation returns True.*
-10. **Review gate** — present the fully built Math model in the AEDT UI; the user inspects and may tweak; run read-back sync on any tweak; *nothing solves until the user passes the gate.* *Done when: the user passed the gate and sync is complete.*
-11. **Solve** — background: `analyze(setup=…, blocking=False)`; its `True` return means *submission*, not completion (env-compat #5). Poll with short status checks: results-on-disk growth is the trustworthy signal; `post.get_solution_data` is flaky — never treat an unfilled SolutionData as final; re-attach (fresh session) for reads and retry (env-compat #6). Never estimate solve time — poll only. *Done when: independent completion signals appear on disk.*
-12. **Post-process + reports/plots** — Recipe plots, delivered to `results/`. *Done when: each requested plot exists in `results/`.*
-13. **Result QA** — check the agreed signals: convergence, ports excited, energy pass, in-band resonance, plausibility against the Recipe. Flag anomalies and report them; only the user decides whether results are junk. *Done when: every agreed signal is reported (or explicitly "unreadable — flaky readout") and anomalies are surfaced.*
-14. **Summary** — the acute design decisions + what the Model is; deliverables are the project file, the requested plots, and `summary.md`. *Done when: `summary.md` is written per the template.*
+- **Session 1 — Clarification** (`<name>-clarify`) — one block, nothing builds before it. Gather the minimum information, spot critical setup features the user left out, map the request onto a playbook Recipe (or derive a new one), state every Assumption explicitly, propose the Result QA signals, and lock the parameters/variables. *Done when: the user confirmed the Recipe, the assumptions, and the QA signals* — and the State ledger is written (`state.md`: locked parameters/variables, Recipe, QA signals, pending decisions).
+- **Session 2 — Build** (`<name>-build`) — walk the Spine stages below on the live AEDT desktop, one staged script per stage, each delete-then-create; each stage ends with its Verification line and a one-line ledger delta. Close with the Review gate and read-back sync, verified by the sync-verify runner. *Done when: validation passes, the user passed the gate, sync verify printed its PASS line, and the ledger records the snapshot pointer.*
+- **Session 3 — Solve + QA** (`<name>-solve`) — read the ledger; submit the solve under the detached watchdog; read only machine state while it runs; make the Recipe plots; run Result QA; deliver `summary.md` with the run card appended by the measurement harness. *Done when: the requested plots exist in `results/`, every agreed QA signal is reported, and `summary.md` holds the run card.*
+
+### The Spine, in the Build session
+
+One Stage = one staged script (`NN_<stage>.py` in Workspace `src/`) = one Run. A stage is done when its completion criterion below is met **and** the user has seen the stage's state in the open desktop. Walk in order; a failed completion criterion makes the stage a failed Run (self-correction, below).
+
+1. **Solution type** — set from the Recipe, explicitly (never the default — env-compat #11). *Done when: the design reports the Recipe's type.*
+2. **Design** — create the design in the Workspace Project and save (`remove_lock=True` if a stray lock exists — env-compat #9). *Done when: the project file exists on disk with the named design.*
+3. **Geometry** — every dimension a design variable; units per recipe; delete-then-create each solid so re-runs never duplicate (ADR 0008). *Done when: the Model's solids match the Recipe in the UI and each dimension is a variable, not a literal.*
+4. **Materials** — per Recipe; tunables as variables. *Done when: each solid reports its Recipe material.*
+5. **Excitations / boundaries** — port strategy per Recipe; port assignment by **face object** on a solid's face — never ids/edges, and beware sheet-port auto-integration (env-compat #7/#8). *Done when: the ports/boundaries list matches the Recipe.*
+6. **Mesh** — Recipe mesh operations, or adaptive-only for proof stages. *Done when: the mesh operations list matches the Recipe (or is deliberately empty).*
+7. **Setup + sweep** — per Recipe (adaptive passes, delta-S, frequency, sweep range/interp). *Done when: `existing_analysis_sweeps` shows the named setup with its sweep.*
+8. **Validation** — `validate_simple()` must pass; an invalid design is a failed stage (env-compat #8). Because every script is delete-then-create, a re-run in place always converges (ADR 0008). *Done when: validation returns True.*
+9. **Review gate** — present the fully built Math model in the AEDT UI; the user inspects and may tweak; run read-back sync and verify it deterministically: `capture_state.py` writes `model_snapshot.json`, then `12_verify_sync.py` replays the amended staged scripts on a fresh copy on a port-pinned second desktop, diffs, and prints one PASS/FAIL line. *Nothing solves until the user passes the gate.* *Done when: the user passed the gate, sync verify printed PASS, and the ledger holds the snapshot pointer.*
+
+### Solve + QA, in the Solve+QA session
+
+- **Solve under the detached watchdog** (ADR 0006) — `08_solve` cleans stale results, probes for a solve already in-flight (results-dir age + live solver processes) and **asks the user before submitting if one looks live**, submits `analyze(setup=…, blocking=False)` — its `True` return means *submission*, not completion (env-compat #5) — and launches the detached `poll_solve` watchdog, which appends to `results/state/solve_progress.txt` from recursive `.asol`/`.sd` growth every ~20 s and exits on completion. While it runs: **read `solve_progress.txt` only — never foreground-poll, never estimate**; re-attach (fresh session) for model reads if needed (env-compat #6). *Done when: independent completion signals appear on disk.*
+- **Post-process + reports/plots** — Recipe plots, delivered to `results/`. *Done when: each requested plot exists in `results/`.*
+- **Result QA** — check the agreed signals: convergence, ports excited, energy pass, in-band resonance, plausibility against the Recipe. Flag anomalies and report them; only the user decides whether results are junk. *Done when: every agreed signal is reported (or explicitly "unreadable — flaky readout") and anomalies are surfaced.*
+- **Summary + run card** — the acute design decisions + what the Model is; have the `runcard` subagent draft the summary sections and the `## Run card` from `state.md`, `results/state/*.txt` and `results/`, revise the draft, then append the Run card via the measurement harness (`scripts/run_card.py --summary …`). Deliverables: the project file, the requested plots, and `summary.md`. *Done when: `summary.md` is written per the template and the run card is appended.*
 
 **Re-entry** runs the same ceremony on the copy: introspect the copy and report a model card (designs, solution types, setups, boundaries, materials, variables, existing results) first. A pivot (e.g. antenna → RCS) is a recipe switch — handled as a fresh Clarification.
 
 ## Execution mechanics
 
-- **Staged scripts**: one file per stage `NN_<stage>.py` in the Workspace `src/`, carrying the attach-or-launch preamble and following the per-stage checklist — both in `reference/execution.md`. Session state lives in the AEDT project, never in a Python process.
-- **Runs and self-correction**: after every Run, read the available error surfaces (high-level exceptions, `validate_simple()`, on-disk logs — the raw message manager is read via those surfaces; `GetMessages` itself is broken, env-compat #3). Cap self-correction at 3 consecutive failed Runs per Stage; escalate on the cap, on the identical error twice in a row, or on an error unmapped to any KB/playbook cause — with the script, the error, and the attempted fixes attached. Full detail: `reference/execution.md`.
-- **Release hygiene**: keep the desktop alive across stages (the next staged script's preamble attaches to it); at session end close the session and reap the launched server process (kill-until-gone — env-compat #10). `os._exit` after teardown because gRPC teardown hangs otherwise. Full preamble: `reference/execution.md`.
+- **Staged scripts**: one file per stage `NN_<stage>.py` in the Workspace `src/`, carrying the attach-or-launch preamble and following the per-stage checklist — both in `reference/execution.md`. **Verification contract**: every staged script ends with one machine-parseable Verification line, `PASS: <stage> <assertions>`; a static gate — `py_compile` + import check over all `src/*.py` — runs before any AEDT launch. Session state lives in the AEDT project, never in a Python process.
+- **Runs and self-correction**: after every Run, read the Verification line — not filtered logs — plus the other working error surfaces (`validate_simple()`, on-disk logs; `GetMessages` is broken over gRPC, env-compat #3). Cap self-correction at 3 consecutive failed Runs per Stage; escalate on the cap, on the identical error twice in a row, or on an error unmapped to any KB/playbook cause — with the script, the error, and the attempted fixes attached. Because stages are idempotent, a re-run is one in-place script Run — no teardown → wipe → replay chains. Full detail: `reference/execution.md`.
+- **Bash discipline**: pass an explicit `timeout` to any bash call that can exceed ~90 s; never take full recursive directory listings — use count/size summaries, `tail`, and `results/state/*.txt`; keep final agent messages ≤ ~250 words.
+- **Release hygiene**: keep the desktop alive across stages (the next staged script's preamble attaches to it); at session end close the session and reap the launched server process (kill-until-gone — env-compat #10). Verify-runner teardown is **port-pinned**: only the runner's own desktop is killed — the user's desktop is never touched. `os._exit` after teardown because gRPC teardown hangs otherwise. Full preamble: `reference/execution.md`.
 - **Learning loop**: when a user tweak generalizes to the Recipe class, or a backend-compat discovery surfaces, or a QA anomaly's resolution generalizes — fix the current Model first, THEN propose the playbook amendment, and append only after approval. Project-specific values stay in `summary.md`. Triggers and ceremony: `reference/execution.md`.
 
 ## Workspace shape and deliverables
 
-Every conversation gets a Workspace: `src/` (staged scripts), the project file, `results/`, `summary.md`. The template lives in `templates/workspace/` (README + summary skeleton). Tool and knowledge directories stay clean; workspace outputs are gitignored.
+Every conversation gets a Workspace: `state.md` (the State ledger), `src/` (staged scripts), the project file, `results/` (deliverables + `state/*.txt` machine state), `summary.md` (incl. the `## Run card` and the snapshot pointer). The template lives in `templates/workspace/` (README + summary skeleton). Tool and knowledge directories stay clean; workspace outputs are gitignored.
 
 ## Reference
 
-- `reference/execution.md` — attach-or-launch preamble, per-stage checklist and typical checks, read-back sync, self-correction, learning-loop triggers.
-- Pointers live in “Read first” above; the environment-compat entry is the compat authority.
+- `reference/execution.md` — phase sessions + ledger, attach-or-launch preamble, verification contract, bash discipline, per-stage checklist, watchdog solve flow, sync-verify runner flow, idempotency, self-correction, KB rules, learning-loop triggers.
+- Pointers live in "Read first" above; the environment-compat entry is the compat authority.

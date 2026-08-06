@@ -132,8 +132,7 @@ are delete-then-create (ADR 0008): each script deletes the objects,
 boundaries, excitations, mesh operations, and sweeps it (re)creates before
 creating them, so re-running any stage in place converges — no fresh
 project needed; wipe-and-rebuild is demoted to an explicit escalation
-tool (ADR 0008), while probe workspaces still wipe their project dir
-first.
+tool, while probe workspaces still wipe their project dir first.
 
 ### 9. Project files and locks — manage explicitly
 AEDT writes `<name>.aedt` + `<name>.aedtresults/` beside the project

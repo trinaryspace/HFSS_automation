@@ -24,7 +24,7 @@ Session state lives in the AEDT project — never in a Python process. Each scri
 ## Verification contract (every staged script)
 
 - Every staged script ends with exactly one machine-parseable **Verification line** on success: `PASS: <stage> <assertions>` — e.g. `PASS: geometry object count == 3, bbox sane, all dims variables`. The assertions listed are the checks the script performed (a missing assertion is a script bug).
-- **Static gate before any AEDT launch**: `py_compile` + import check over all `src/*.py` (the template's static-gate script). Nothing launches AEDT while the gate is red.
+- **Static gate before any AEDT launch**: `py_compile` + import check over all `src/*.py` — the template's `00_static_gate.py`. Nothing launches AEDT while the gate is red.
 - **Self-correction reads the Verification line** of the failed Run — not filtered logs — and the stage's own error surfaces; see Self-correction below.
 
 ## Bash discipline

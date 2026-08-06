@@ -126,10 +126,14 @@ Artifact: `workspaces/smoke-matrix/src/micro_probe_excitation.py`.
 `validate_simple()` returns int (1 = valid). The sheet-based wave port
 with auto integration line produced an INVALID design; the solid-face port
 pattern validates True. Reusing a project file with same-name objects
-silently duplicates geometry/ports and invalidates — always build from a
-clean project (fresh path or wipe; see 9).
-**Route-around**: `validate_simple()` before every solve; rebuild fresh
-projects deterministically (probes wipe their project dir first).
+silently duplicates geometry/ports and invalidates.
+**Route-around**: `validate_simple()` before every solve. Staged scripts
+are delete-then-create (ADR 0008): each script deletes the objects,
+boundaries, excitations, mesh operations, and sweeps it (re)creates before
+creating them, so re-running any stage in place converges — no fresh
+project needed; wipe-and-rebuild is demoted to an explicit escalation
+tool (ADR 0008), while probe workspaces still wipe their project dir
+first.
 
 ### 9. Project files and locks — manage explicitly
 AEDT writes `<name>.aedt` + `<name>.aedtresults/` beside the project

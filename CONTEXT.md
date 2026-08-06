@@ -76,6 +76,18 @@ _Avoid_: validation, check, quality control
 The mechanism that turns experience into future capability: the agent fixes the current model now, THEN proposes a playbook amendment, and appends only after user approval. Three triggers earn a proposal: a user tweak that generalizes to the recipe class; a backend-compat discovery (lands in the environment-compat entry); a Result-QA anomaly whose resolution generalizes. Project-specific values stay in the summary.
 _Avoid_: feedback, lessons, improvement
 
+**State ledger**:
+The per-Workspace file (`state.md`) recording stage progress, locked design variables, decisions, and pitfalls, written by each phase session and read by the next. Conversation state that survives between sessions; machine state lives in `results/state/*.txt`.
+_Avoid_: handoff doc, status file, notes
+
+**Run card**:
+The per-run record of token spend, step count, and wall time, appended to `summary.md` by the measurement harness; the proof that an optimization refactor worked, judged against a baseline run.
+_Avoid_: stats, metrics, analytics
+
+**Verification line**:
+The single machine-parseable `PASS:` line each staged script emits on success, carrying its stage's assertions; the self-correction loop reads that line rather than filtered logs.
+_Avoid_: log line, PASS marker, exit status
+
 **Summary**:
 The end-of-conversation artifact recording the acute design decisions made and what the model is. Delivered alongside the project file and the requested plots.
 _Avoid_: report, handoff, final output

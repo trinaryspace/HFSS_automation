@@ -8,6 +8,7 @@ workspaces/**/projects/
 # Conversation workspace outputs (plan: tool/knowledge stay clean;
 # src/ staged scripts and summary.md stay tracked)
 workspaces/*/*.aedt
+workspaces/*/*.aedt.auto
 workspaces/*/*.aedtresults/
 workspaces/*/results/
 workspaces/*/*.lock

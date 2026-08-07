@@ -255,6 +255,19 @@ class TestVerifySync(unittest.TestCase):
         self.assertEqual(len(diffs), 1)
         self.assertIn("sweeps: only in replay", diffs[0])
 
+    def test_diff_canon_matches_same_random_suffixes(self):
+        live = {"boundaries": {"1": "Wave Port", "Rad__AAAA00": "Radiation"}}
+        replay = {"boundaries": {"1": "Wave Port", "Rad__BBBB11": "Radiation"}}
+        self.assertEqual(self.verify.diff_shapes(live, replay), [])
+
+    def test_diff_canon_preserves_random_suffix_counts(self):
+        # a second same-class entry in replay must NOT vanish via key collapse
+        live = {"boundaries": {"Rad__AAAA00": "Radiation"}}
+        replay = {"boundaries": {"Rad__AAAA00": "Radiation", "Rad__BBBB11": "Radiation"}}
+        diffs = self.verify.diff_shapes(live, replay)
+        self.assertEqual(len(diffs), 1)
+        self.assertIn("only in replay", diffs[0])
+
     def test_replay_selection_defaults(self):
         src = os.path.join(self.tmp, "src")
         os.makedirs(src)
@@ -282,7 +295,7 @@ class TestVerifySync(unittest.TestCase):
                 f.write("# x\n")
         copied = self.verify.make_copy(ws)
         scripts = self.verify.select_replay_scripts(os.path.join(ws, "src"))
-        replays = [os.path.join(copied, os.path.basename(s)) for s in scripts]
+        replays = [os.path.join(copied, "src", os.path.basename(s)) for s in scripts]
         self.assertEqual([os.path.basename(p) for p in replays],
                          ["01_build.py", "04_excitations.py"])
         for path in replays:
@@ -306,12 +319,14 @@ class TestVerifySync(unittest.TestCase):
 
         copy = self.verify.make_copy(ws)
         copied = os.listdir(copy)
-        self.assertIn("01_a.py", copied)
-        self.assertIn("ws_common.py", copied)
+        copied_src = os.listdir(os.path.join(copy, "src"))
+        self.assertIn("01_a.py", copied_src)
+        self.assertIn("ws_common.py", copied_src)
         self.assertIn("summary.md", copied)
         self.assertIn("state.md", copied)
         for banned in ("m.aedt", "m.aedt.lock", "m.aedtresults", "results"):
             self.assertNotIn(banned, copied)
+        self.assertTrue(os.path.isdir(os.path.join(copy, "src")))
 
 
 class TestStaticGate(unittest.TestCase):

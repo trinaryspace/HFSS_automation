@@ -1,0 +1,689 @@
+<title>Spec-Driven HFSS Agent</title>
+<style>
+  :root {
+    --ground: #F7F8FA;
+    --surface: #FFFFFF;
+    --surface-2: #EFF2F6;
+    --ink: #12161C;
+    --ink-2: #3B4453;
+    --muted: #5A6472;
+    --line: #DFE4EB;
+    --line-strong: #C6CEDA;
+    --accent: #0E7C86;
+    --accent-soft: #E0F0F1;
+    --copper: #B4643A;
+    --crit: #C23B3B;
+    --crit-soft: #FBEBEB;
+    --warn: #9A6510;
+    --warn-soft: #FBF2E0;
+    --good: #2F7D4F;
+    --good-soft: #E6F2EA;
+    --shadow: 0 1px 2px rgba(18,22,28,.05), 0 8px 24px -16px rgba(18,22,28,.28);
+
+    --f-display: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --f-body: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --f-mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0E1116;
+      --surface: #161B22;
+      --surface-2: #1C222B;
+      --ink: #E6EAF0;
+      --ink-2: #BAC3D0;
+      --muted: #8A94A3;
+      --line: #262D38;
+      --line-strong: #38424F;
+      --accent: #3FBFC9;
+      --accent-soft: #10333A;
+      --copper: #D98A5B;
+      --crit: #E4726F;
+      --crit-soft: #3A1E1F;
+      --warn: #D6A54A;
+      --warn-soft: #342914;
+      --good: #63B98A;
+      --good-soft: #14301F;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.9);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0E1116;
+    --surface: #161B22;
+    --surface-2: #1C222B;
+    --ink: #E6EAF0;
+    --ink-2: #BAC3D0;
+    --muted: #8A94A3;
+    --line: #262D38;
+    --line-strong: #38424F;
+    --accent: #3FBFC9;
+    --accent-soft: #10333A;
+    --copper: #D98A5B;
+    --crit: #E4726F;
+    --crit-soft: #3A1E1F;
+    --warn: #D6A54A;
+    --warn-soft: #342914;
+    --good: #63B98A;
+    --good-soft: #14301F;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.9);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px 96px; }
+  .prose { max-width: 68ch; }
+
+  /* ---------- masthead ---------- */
+  header.top {
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    padding: 56px 0 40px;
+  }
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .eyebrow .tick { color: var(--accent); }
+  h1 {
+    font-family: var(--f-display);
+    font-size: clamp(2.1rem, 5.2vw, 3.1rem);
+    line-height: 1.04;
+    letter-spacing: -.028em;
+    font-weight: 660;
+    margin: 16px 0 0;
+    text-wrap: balance;
+  }
+  .thesis {
+    margin: 18px 0 0;
+    font-size: 1.14rem;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 60ch;
+    text-wrap: pretty;
+  }
+  .thesis b { color: var(--ink); font-weight: 620; }
+
+  /* ---------- metric tiles ---------- */
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
+    gap: 14px;
+    margin-top: 38px;
+  }
+  .tile {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px 18px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .tile::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--bar, var(--line-strong));
+  }
+  .tile .lbl {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .tile .num {
+    font-family: var(--f-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 1.72rem;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    margin-top: 8px;
+    color: var(--val, var(--ink));
+    line-height: 1.1;
+  }
+  .tile .sub {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- sections ---------- */
+  section { margin-top: 60px; }
+  h2 {
+    font-family: var(--f-display);
+    font-size: 1.42rem;
+    letter-spacing: -.018em;
+    font-weight: 650;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  h2 .n {
+    font-family: var(--f-mono);
+    font-size: .74em;
+    font-weight: 500;
+    color: var(--accent);
+    margin-right: 10px;
+    letter-spacing: 0;
+  }
+  .lede { color: var(--muted); margin: 0 0 22px; max-width: 66ch; }
+  p { text-wrap: pretty; }
+  code {
+    font-family: var(--f-mono);
+    font-size: .875em;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .08em .34em;
+  }
+
+  /* ---------- callout ---------- */
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--crit);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+  }
+  .callout h3 {
+    margin: 0 0 4px;
+    font-size: 1.02rem;
+    font-weight: 640;
+    letter-spacing: -.01em;
+  }
+  .callout .bugs { display: grid; gap: 16px; margin-top: 16px; }
+  .bug { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
+  .bug .id {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: var(--crit);
+    background: var(--crit-soft);
+    border: 1px solid var(--crit);
+    border-radius: 5px;
+    padding: 3px 7px;
+    white-space: nowrap;
+    line-height: 1.2;
+  }
+  .bug p { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
+  .bug p strong { color: var(--ink); font-weight: 620; }
+
+  /* ---------- diagram ---------- */
+  .figure {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 26px 20px 18px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .figure svg { display: block; min-width: 660px; width: 100%; height: auto; }
+  .figcap {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 14px 2px 0;
+    max-width: 76ch;
+  }
+  .figcap b { color: var(--ink-2); font-weight: 600; }
+
+  /* ---------- phases ---------- */
+  .phase { margin-top: 30px; }
+  .phase-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding-bottom: 9px;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .phase-num {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 3px 8px;
+  }
+  .phase-name {
+    font-family: var(--f-display);
+    font-size: 1.08rem;
+    font-weight: 640;
+    letter-spacing: -.012em;
+  }
+  .phase-why { font-size: 13px; color: var(--muted); margin-left: auto; }
+
+  .rows { display: grid; }
+  .row {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: baseline;
+    padding: 13px 2px;
+    border-bottom: 1px solid var(--line);
+  }
+  .row .tid {
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .row .body .t {
+    font-weight: 600;
+    font-size: 14.8px;
+    letter-spacing: -.008em;
+  }
+  .row .body .d {
+    font-size: 13.6px;
+    color: var(--muted);
+    margin-top: 3px;
+    line-height: 1.5;
+  }
+  .row .body .d em { color: var(--ink-2); font-style: normal; font-weight: 560; }
+
+  .chip {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    font-weight: 600;
+    border-radius: 4px;
+    padding: 3px 7px;
+    white-space: nowrap;
+    border: 1px solid;
+  }
+  .chip.go    { color: var(--good); background: var(--good-soft); border-color: var(--good); }
+  .chip.done  { color: var(--surface); background: var(--good); border-color: var(--good); }
+  .chip.tri   { color: var(--warn); background: var(--warn-soft); border-color: var(--warn); }
+  .chip.p0    { color: var(--crit); background: var(--crit-soft); border-color: var(--crit); }
+
+  /* ---------- keep / delete ---------- */
+  .split {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(288px, 1fr));
+    gap: 16px;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 22px 22px;
+    box-shadow: var(--shadow);
+  }
+  .panel h3 {
+    margin: 0 0 3px;
+    font-size: 1rem;
+    font-weight: 640;
+    letter-spacing: -.01em;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .panel h3 .mark { font-family: var(--f-mono); font-size: 15px; }
+  .panel .note { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+  .panel ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 9px; }
+  .panel li {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-2);
+    padding-left: 17px;
+    position: relative;
+  }
+  .panel li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: .58em;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--dot, var(--line-strong));
+  }
+  .panel li b { color: var(--ink); font-weight: 620; }
+
+  /* ---------- risks ---------- */
+  .risk {
+    border-top: 1px solid var(--line);
+    padding: 16px 0 0;
+    display: grid;
+    grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+    gap: 20px;
+  }
+  .risk .h {
+    font-size: 14px;
+    font-weight: 640;
+    letter-spacing: -.008em;
+    color: var(--ink);
+  }
+  .risk .b { font-size: 14px; color: var(--ink-2); line-height: 1.58; }
+  .risk .b b { color: var(--ink); font-weight: 620; }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line-strong);
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+  footer .path { font-family: var(--f-mono); font-size: 12px; }
+
+  @media (max-width: 620px) {
+    .row { grid-template-columns: 30px minmax(0,1fr); }
+    .row .chip { grid-column: 2; justify-self: start; margin-top: 2px; }
+    .risk { grid-template-columns: 1fr; gap: 6px; }
+    .phase-why { margin-left: 0; width: 100%; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    a { transition: color .15s ease; }
+  }
+  a { color: var(--accent); }
+  a:focus-visible, .row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="eyebrow">
+      <span>HFSS_automation</span><span class="tick">/</span><span>architecture plan</span>
+      <span class="tick">/</span><span>17 tickets &middot; 5 phases</span>
+    </div>
+    <h1>Spec-Driven HFSS Agent</h1>
+    <p class="thesis">
+      The tool's containment machinery is sound. What it contains is the problem:
+      the agent's primary output is <b>free-form Python</b>. Replace that artifact with a
+      validated design spec and a hand-written compiler, and robustness and token
+      efficiency stop being a trade — they become the same fix.
+    </p>
+
+    <div class="tiles">
+      <div class="tile" style="--bar: var(--line-strong)">
+        <div class="lbl">Baseline &middot; silent-engine</div>
+        <div class="num">398,130</div>
+        <div class="sub">424 parts &middot; ~1.6 h &middot; completed</div>
+      </div>
+      <div class="tile" style="--bar: var(--crit); --val: var(--crit)">
+        <div class="lbl">Pilot &middot; shiny-canyon</div>
+        <div class="num">1,579,333</div>
+        <div class="sub">1,392 parts &middot; 25 h &middot; NO-GO, no readout</div>
+      </div>
+      <div class="tile" style="--bar: var(--accent); --val: var(--accent)">
+        <div class="lbl">Target &middot; spec-driven</div>
+        <div class="num">&le; 80,000</div>
+        <div class="sub">&le;60 parts &middot; 0 escape-hatch scripts</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section>
+    <h2><span class="n">01</span>Two live bugs first</h2>
+    <p class="lede">
+      Found during the review, with reproduction on this box. Both defeat safety machinery
+      the last phase was built to add, and both passed a 72-test green suite.
+    </p>
+    <div class="callout">
+      <h3>The safety layer is currently decorative</h3>
+      <div class="bugs">
+        <div class="bug">
+          <span class="id">P0 &middot; 01</span>
+          <p><strong>Banking never fires.</strong> <code>confirm_solve</code>'s regex omits the escaped
+          quotes AEDT actually writes, so <code>terminal_status()</code> returns <code>None</code> on
+          <strong>9 of 9</strong> real profiles. Every solved workspace scores <code>proceed</code>,
+          teardown runs <code>close_projects=True</code>, and the results-purge incident ticket 13
+          exists to prevent is still fully live.</p>
+        </div>
+        <div class="bug">
+          <span class="id">P0 &middot; 02</span>
+          <p><strong>The watchdog is blind to stage.</strong> Family regexes are applied only to
+          filenames, but <code>.imesh</code>, <code>.cmesh</code> and <code>_ADP*</code> are
+          <strong>directories</strong> — so <code>mesh=(0,0) adp=(0,0)</code> on every real tree. Since the
+          profile is written only at the <em>end</em> of a solve, artifact growth is the sole live
+          signal, and stage detection stays dark until the sweep starts.</p>
+        </div>
+        <div class="bug">
+          <span class="id">CLASS &middot; 03</span>
+          <p><strong>Fixtures concealed both.</strong> Real artifact names written as files where AEDT
+          writes directories; a profile fixture with unescaped quotes. Ticket 14's comments record the
+          escaping correctly — ticket 13 landed minutes later without it. The knowledge had nowhere to
+          live but one comment thread.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">02</span>The one change</h2>
+    <p class="lede">
+      Every expensive mechanism in the current design exists to contain generated code. Change the
+      artifact and the mechanisms stop being necessary rather than getting cheaper.
+    </p>
+    <div class="figure">
+      <svg viewBox="0 0 940 232" role="img" aria-label="Flow: user request to clarification to design.yaml, through offline validation and the compiler, to the live AEDT desktop. Only clarify, diagnose and narrate use the model.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--line-strong)"/>
+          </marker>
+        </defs>
+
+        <!-- lane label -->
+        <text x="0" y="14" font-family="var(--f-mono)" font-size="10.5" letter-spacing="1.4" fill="var(--muted)">MODEL SEAM</text>
+        <text x="0" y="128" font-family="var(--f-mono)" font-size="10.5" letter-spacing="1.4" fill="var(--muted)">DETERMINISTIC</text>
+
+        <!-- request -->
+        <text x="0" y="66" font-family="var(--f-body)" font-size="13" fill="var(--muted)">request</text>
+        <line x1="62" y1="61" x2="104" y2="61" stroke="var(--line-strong)" stroke-width="1.5" marker-end="url(#ar)"/>
+
+        <!-- clarify (LLM) -->
+        <rect x="112" y="36" width="150" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+        <circle cx="128" cy="52" r="3.5" fill="var(--accent)"/>
+        <text x="140" y="57" font-family="var(--f-body)" font-size="13.5" font-weight="600" fill="var(--ink)">Clarify</text>
+        <text x="128" y="74" font-family="var(--f-mono)" font-size="10.5" fill="var(--muted)">+ physics check</text>
+
+        <line x1="262" y1="61" x2="306" y2="61" stroke="var(--line-strong)" stroke-width="1.5" marker-end="url(#ar)"/>
+
+        <!-- spec -->
+        <rect x="314" y="28" width="168" height="66" rx="8" fill="var(--surface-2)" stroke="var(--copper)" stroke-width="2"/>
+        <text x="330" y="55" font-family="var(--f-mono)" font-size="14" font-weight="600" fill="var(--copper)">design.yaml</text>
+        <text x="330" y="76" font-family="var(--f-body)" font-size="11.5" fill="var(--muted)">reviewed &middot; diffed &middot; tracked</text>
+
+        <!-- down into deterministic lane -->
+        <line x1="398" y1="94" x2="398" y2="140" stroke="var(--line-strong)" stroke-width="1.5" marker-end="url(#ar)"/>
+
+        <!-- validation -->
+        <rect x="248" y="148" width="176" height="58" rx="8" fill="var(--surface)" stroke="var(--line-strong)" stroke-width="1.5"/>
+        <text x="264" y="172" font-family="var(--f-body)" font-size="13" font-weight="600" fill="var(--ink)">Offline validation</text>
+        <text x="264" y="190" font-family="var(--f-mono)" font-size="10.5" fill="var(--muted)">no AEDT &middot; no license</text>
+
+        <line x1="424" y1="177" x2="468" y2="177" stroke="var(--line-strong)" stroke-width="1.5" marker-end="url(#ar)"/>
+
+        <!-- compiler -->
+        <rect x="476" y="148" width="164" height="58" rx="8" fill="var(--surface)" stroke="var(--line-strong)" stroke-width="1.5"/>
+        <text x="492" y="172" font-family="var(--f-body)" font-size="13" font-weight="600" fill="var(--ink)">Compiler</text>
+        <text x="492" y="190" font-family="var(--f-mono)" font-size="10.5" fill="var(--muted)">tested &middot; idempotent</text>
+
+        <line x1="640" y1="177" x2="684" y2="177" stroke="var(--line-strong)" stroke-width="1.5" marker-end="url(#ar)"/>
+
+        <!-- aedt -->
+        <rect x="692" y="140" width="176" height="74" rx="8" fill="var(--surface-2)" stroke="var(--line-strong)" stroke-width="1.5"/>
+        <text x="708" y="168" font-family="var(--f-body)" font-size="13" font-weight="600" fill="var(--ink)">Live AEDT desktop</text>
+        <text x="708" y="187" font-family="var(--f-mono)" font-size="10.5" fill="var(--muted)">review gate &middot; solve</text>
+        <text x="708" y="203" font-family="var(--f-mono)" font-size="10.5" fill="var(--muted)">watchdog &middot; bank</text>
+
+        <!-- diagnose seam -->
+        <rect x="676" y="36" width="150" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+        <circle cx="692" cy="52" r="3.5" fill="var(--accent)"/>
+        <text x="704" y="57" font-family="var(--f-body)" font-size="13.5" font-weight="600" fill="var(--ink)">Diagnose</text>
+        <text x="692" y="74" font-family="var(--f-mono)" font-size="10.5" fill="var(--muted)">on failure only</text>
+
+        <path d="M540 148 L540 112 Q540 104 550 104 L740 104 Q750 104 750 96 L750 88"
+              fill="none" stroke="var(--line-strong)" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#ar)"/>
+        <path d="M676 61 Q560 61 482 61" fill="none" stroke="var(--line-strong)" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#ar)"/>
+      </svg>
+      <p class="figcap">
+        <b>Three model seams, not a conversation:</b> clarify, diagnose-on-failure, narrate-QA.
+        Everything between <code>design.yaml</code> and the desktop is tested code. Schema and
+        reference errors cost zero AEDT time; the compiler is idempotent by construction, so ADR 0008
+        stops depending on the model remembering it per script.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">03</span>The phases</h2>
+    <p class="lede">
+      Ordered so the cheapest, highest-expected-value experiment runs before the expensive rewrite —
+      and could partly moot it. Phases 0 and 1 are worth doing whatever is decided about the bet.
+    </p>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">PHASE 0</span>
+        <span class="phase-name">Trust the instruments</span>
+        <span class="phase-why">Landed 2026-08-14 &mdash; both P0 bugs fixed and verified</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="tid">01</span><div class="body"><div class="t">Unify profile parsing; repair banking</div><div class="d">One parser imported by <em>poll_solve</em>, <em>confirm_solve</em> and <em>ws_common</em>. Kills the results-purge path.</div></div><span class="chip done">P0 &middot; fixed</span></div>
+        <div class="row"><span class="tid">02</span><div class="body"><div class="t">Watchdog counts directory artifacts</div><div class="d">Per-stage stall windows, so a slow mesh isn't scored against a sweep's budget.</div></div><span class="chip done">P0 &middot; fixed</span></div>
+        <div class="row"><span class="tid">03</span><div class="body"><div class="t">Real-artifact fixture corpus</div><div class="d">Captured from disk with entity type preserved, plus the rule that keeps fixtures honest.</div></div><span class="chip done">done</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">PHASE 1</span>
+        <span class="phase-name">Measure what matters</span>
+        <span class="phase-why">Landed 2026-08-14 &mdash; except the model run, which needs a desktop</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="tid">04</span><div class="body"><div class="t">Cost per completed simulation &middot; three-tier harness</div><div class="d">Tier 0 offline in seconds, Tier 1 build-only, Tier 2 full. A run that burns 1.58 M and delivers nothing must score worse than one that delivers.</div></div><span class="chip done">done</span></div>
+        <div class="row"><span class="tid">05</span><div class="body"><div class="t">Canonical case set</div><div class="d">Patch, bowtie, microstrip line, coupled-line filter, horn. The horn is deliberately out of schema v1 — it's the scope pressure.</div></div><span class="chip done">done</span></div>
+        <div class="row"><span class="tid">06</span><div class="body"><div class="t">Main-loop model experiment</div><div class="d">Cheapest test of the most expensive assumption. Config change plus one run; a strong result changes how much of phases 2–4 is worth building.</div></div><span class="chip go">needs a desktop</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">PHASE 2</span>
+        <span class="phase-name">The spec and the compiler</span>
+        <span class="phase-why">This is the bet</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="tid">07</span><div class="body"><div class="t">Design Spec schema v1</div><div class="d">Symbolic selectors instead of face ids; mandatory units; variables first. Validation and generation share one definition.</div></div><span class="chip tri">triage</span></div>
+        <div class="row"><span class="tid">08</span><div class="body"><div class="t">Offline validator</div><div class="d">References, units, topology, recipe completeness — with the offending spec path, not a stack trace.</div></div><span class="chip tri">triage</span></div>
+        <div class="row"><span class="tid">09</span><div class="body"><div class="t">Closed-form physics pre-check</div><div class="d">The EM value-add. Would have flagged the Astuti geometry in Clarification instead of twenty hours in at the results read.</div></div><span class="chip tri">triage</span></div>
+        <div class="row"><span class="tid">10</span><div class="body"><div class="t">The spec compiler</div><div class="d">Deterministic, idempotent, quiet. Absorbs the pilot's hard-won stage fixes as library code no run re-derives.</div></div><span class="chip tri">triage</span></div>
+        <div class="row"><span class="tid">11</span><div class="body"><div class="t">Acceptance vs the pilot snapshot</div><div class="d">The proof is already on disk — reproduce the pilot's model from a spec, no new solve required.</div></div><span class="chip tri">triage</span></div>
+        <div class="row"><span class="tid">12</span><div class="body"><div class="t">Sync becomes a spec diff</div><div class="d">Retires the two-desktop replay: 36 baseline steps, six replays at ~8 min in the pilot.</div></div><span class="chip tri">triage</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">PHASE 3–4</span>
+        <span class="phase-name">Surface and orchestration</span>
+        <span class="phase-why">Where the remaining tokens go</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="tid">13</span><div class="body"><div class="t">Typed spine surface; KB demoted</div><div class="d">36 typed calls replace signature discovery. Wires in the stranded readout findings and amends env-compat #6.</div></div><span class="chip tri">triage</span></div>
+        <div class="row"><span class="tid">14</span><div class="body"><div class="t">Deterministic orchestrator</div><div class="d">Three LLM call sites, asserted by test. Ledger stays the resume point; both human gates stay exactly where they are.</div></div><span class="chip tri">triage</span></div>
+        <div class="row"><span class="tid">15</span><div class="body"><div class="t">Token discipline</div><div class="d">Quiet runners, tails not whole files, a cached stable prefix, per-seam effort. Independent of the bet.</div></div><span class="chip go">ready</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">PHASE 5</span>
+        <span class="phase-name">Payoff and acceptance</span>
+        <span class="phase-why">Does something you wouldn't do by hand</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="tid">16</span><div class="body"><div class="t">Parametric sweep from one spec</div><div class="d">N designs, serial solves, per-design banking, one overlay. Reporting — explicitly not optimization.</div></div><span class="chip tri">triage</span></div>
+        <div class="row"><span class="tid">17</span><div class="body"><div class="t">Re-pilot acceptance</div><div class="d">Vetted self-consistent source; readout route locked in Clarification. Miss the thresholds and the retrospective must name the layer, not the model.</div></div><span class="chip tri">triage</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">04</span>What survives, what goes</h2>
+    <p class="lede">
+      This is a change of artifact, not a rewrite of doctrine. The perf refactor's instincts were
+      right; they were applied one layer too high.
+    </p>
+    <div class="split">
+      <div class="panel" style="--dot: var(--good)">
+        <h3><span class="mark" style="color: var(--good)">&#10003;</span>Kept unchanged</h3>
+        <p class="note">Sound, and in some cases ahead of the published state of the art.</p>
+        <ul>
+          <li><b>Phase sessions and the State ledger</b> — ADR 0007. Matches the handoff-validity framing the agentic-EDA survey argues for.</li>
+          <li><b>The Verification line</b> — the compiler still emits every <code>PASS:</code> line.</li>
+          <li><b>The visual Review gate</b> — ADR 0003. The pilot proved it catches what nothing else does.</li>
+          <li><b>The detached watchdog</b> — ADR 0006, once ticket 02 restores its stage vision.</li>
+          <li><b>Delete-then-create</b> — ADR 0008, promoted from discipline to compiler property.</li>
+          <li><b>Copy-first Re-entry and the Learning loop</b> — ADRs 0001, 0002.</li>
+        </ul>
+      </div>
+      <div class="panel" style="--dot: var(--crit)">
+        <h3><span class="mark" style="color: var(--crit)">&minus;</span>Deleted, not optimized</h3>
+        <p class="note">Each exists only to contain free-form generated code.</p>
+        <ul>
+          <li><b>The replay ceremony</b> — <code>12_verify_sync</code> and the port-pinned second desktop, replaced by a document diff.</li>
+          <li><b>KB signature discovery</b> — ~20 steps at baseline, now zero because it never happens.</li>
+          <li><b>Per-run script authoring</b> — ten staged scripts re-derived every run, including fixes the pilot already paid for.</li>
+          <li><b>Most self-correction loops</b> — schema and reference errors are caught before AEDT launches.</li>
+          <li><b>Log flooding</b> — ~35 process launches dumping pyAEDT INFO into context.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">05</span>Risks, honestly</h2>
+    <p class="lede">Where this plan could be wrong, and what would show it.</p>
+
+    <div class="risk">
+      <div class="h">The schema is too narrow</div>
+      <div class="b">A spec constrains what the tool can express, and Foam-Agent hit exactly this — native meshing was <b>insufficient for novel geometries</b>, forcing an external escape hatch. Mitigation: the raw-pyAEDT path stays supported and flagged, and <b>escape-hatch rate is a tracked metric</b>. If it fires often, the schema is wrong — that's a signal, not a failure. Budget for getting it wrong twice.</div>
+    </div>
+    <div class="risk">
+      <div class="h">Phase 2 is a real rewrite</div>
+      <div class="b">It is the largest single investment here. That is why ticket 06 runs first: if a capable main-loop model alone recovers most of the gap, the bet shrinks to tickets 09, 13 and 15 — and those are worth doing regardless.</div>
+    </div>
+    <div class="risk">
+      <div class="h">Chat is a weak interface for parametric design</div>
+      <div class="b">Clarification and QA narrative are excellent model work. Geometry dimensions are not — they want a spec file. The pilot's fatal domain error is exactly the class that a document plus a numeric check catches in seconds.</div>
+    </div>
+    <div class="risk">
+      <div class="h">The value story today</div>
+      <div class="b">Being straight about it: the tool has produced solved antennas, but so far at a cost above doing it by hand. What it is genuinely accumulating is <b>repeatability and provenance</b>. Whether it becomes useful depends on bending the per-run cost curve, which is what this plan is for.</div>
+    </div>
+  </section>
+
+  <footer>
+    <span class="path">.scratch/hfss-agent-spec-driven/ &mdash; spec.md + phase-2-detail.md + 17 tickets</span>
+    <span>Phases 0&ndash;1 landed 2026-08-14. Next: the ticket 06 model run, then phase 2 &mdash; open questions in phase-2-detail.md</span>
+  </footer>
+
+</div>

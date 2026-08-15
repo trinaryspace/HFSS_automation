@@ -25,7 +25,7 @@ backlog.
 - [x] Snapshot diff against the pilot's stored `model_snapshot.json` is empty after `canon()` normalization — the diff is built and regression-tested offline against the real pilot snapshot (identity, suffix normalisation, missing object, left-over intermediate, changed variable, bbox deltas); running it against a compiled model needs the desktop
 - [x] Any residual difference is classified in Comments as compiler bug or schema gap, with the schema gaps filed — classifier implemented (compiler bug / schema gap / capture gap); the Comments entry lands with the live run
 - [x] Runs as a Tier 1 target (build only, no solve) and completes in minutes — `scripts/spec_acceptance.py`, which never solves
-- [ ] The same acceptance is repeated for the microstrip-line case as a second, cheaper data point — needs a `design.yaml` for microstrip-50r
+- [~] The same acceptance is repeated for the microstrip-line case as a second, cheaper data point — microstrip-50r now has a spec and **built live and clean**, but this cannot be an acceptance *diff*: there is no stored old-path snapshot for it. See the note below
 
 - 2026-08-15: **Diff implemented and regression-tested offline; the live run
   needs a license.** `hfss_spec/acceptance.py`, CLI
@@ -99,4 +99,21 @@ backlog.
 
 - Still open: the same acceptance for microstrip-50r as a second, cheaper data
   point, which needs a `design.yaml` for it.
+
+- 2026-08-15: **The second data point is a build, not a diff — and the
+  distinction matters.** microstrip-50r built clean on a live desktop
+  (`validate_simple=True`, 6 objects, 2 wave ports) and its captured geometry
+  is right to the micron: trace 3.0829 mm wide, line 34.2141 mm long, substrate
+  half-width 11.14145 mm which is `(trace_W + 12*h)/2` exactly.
+
+  But **the bow-tie was the only free acceptance target this repo had.** It is
+  the one structure with a model the old path built and captured, so it is the
+  only one where "the compiler reproduces prior work" can be tested at all. For
+  every other case the strongest available claim is "builds clean and the
+  closed form agrees", which is weaker and should not be written up as if it
+  were the same thing.
+
+  If a second reproduction target is wanted, it has to be manufactured: build a
+  case the old way once, capture it, and keep the snapshot. That is a
+  deliberate cost, and worth deciding on rather than drifting into.
 

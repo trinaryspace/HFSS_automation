@@ -1,0 +1,70 @@
+{
+ "boundaries": [
+  "radiation"
+ ],
+ "case": "horn-10ghz",
+ "excitation": {
+  "count": 1,
+  "type": "wave_port"
+ },
+ "key_dimensions": {
+  "aperture_a1_mm": {
+   "relation": "Balanis 13: a1 = sqrt(3*lambda*rho2)",
+   "source": "closed-form",
+   "value": 77.3482
+  },
+  "aperture_b1_mm": {
+   "relation": "Balanis 13: b1 = sqrt(2*lambda*rho1)",
+   "source": "closed-form",
+   "value": 57.1475
+  },
+  "axial_length_mm": {
+   "relation": "pe = ph, the realisability condition for a pyramidal horn",
+   "source": "closed-form",
+   "value": 38.1275
+  },
+  "free_space_wavelength_mm": {
+   "relation": "c/f at 10 GHz",
+   "source": "closed-form",
+   "value": 29.9792
+  },
+  "gain_check_dbi": {
+   "relation": "G0 = 0.51 * (4*pi/lambda^2) * a1 * b1",
+   "source": "closed-form",
+   "value": 14.9859
+  },
+  "rho_e_mm": {
+   "relation": "E-plane flare slant, from the pyramidal condition",
+   "source": "closed-form",
+   "value": 54.4683
+  },
+  "rho_h_mm": {
+   "relation": "H-plane flare slant, from the pyramidal condition",
+   "source": "closed-form",
+   "value": 66.5209
+  }
+ },
+ "qa_signals": [
+  "convergence",
+  "ports_excited",
+  "gain_in_band",
+  "pattern_symmetry"
+ ],
+ "recipe": "pyramidal horn antenna",
+ "schema_v1": true,
+ "schema_v1_note": "In scope from the Q1 decision: the flare is sweep_along_vector with a draft_angle, or connect (loft) between throat and aperture profiles \u2014 both native Modeler3D operations.",
+ "solution_type": "Modal",
+ "target": {
+  "quantity": "gain",
+  "tolerance_pct": 10.0,
+  "unit": "dBi",
+  "value": 15.0
+ },
+ "tier1_cost": "expensive",
+ "waveguide": {
+  "a_mm": 22.86,
+  "b_mm": 10.16,
+  "standard": "WR-90",
+  "te10_cutoff_ghz": 6.5571
+ }
+}

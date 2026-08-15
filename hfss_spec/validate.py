@@ -56,8 +56,12 @@ LIBRARY_MATERIALS = {
 # What each target quantity must be dimensionally.
 TARGET_DIMENSIONS = {
     "resonant_frequency": FREQUENCY,
+    "center_frequency": FREQUENCY,
     "bandwidth": FREQUENCY,
     "impedance": RESISTANCE,
+    "characteristic_impedance": RESISTANCE,
+    # Gain is stated in dBi, which is a bare number here rather than a
+    # dimensioned quantity — the unit is in the target's name, not its value.
     "gain": DIMENSIONLESS,
 }
 

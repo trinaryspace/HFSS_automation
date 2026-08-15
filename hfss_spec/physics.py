@@ -137,6 +137,95 @@ def guide_wavelength(frequency: float, ereff: float) -> float:
     return C0 / (frequency * math.sqrt(ereff))
 
 
+def pyramidal_horn_gain(a1: float, b1: float, wavelength: float,
+                        aperture_efficiency: float = 0.51) -> float:
+    """Gain of a pyramidal horn in dBi, from its aperture.
+
+        G0 = eap * (4*pi / lambda^2) * a1 * b1
+
+    `eap = 0.51` is the standard optimum-horn aperture efficiency (Balanis
+    ch.13): the quadratic phase error across an optimum flare costs a little
+    over half the physical aperture.
+    """
+    gain = aperture_efficiency * (4.0 * math.pi / wavelength ** 2) * a1 * b1
+    return 10.0 * math.log10(gain)
+
+
+def optimum_pyramidal_horn(gain_dbi: float, a: float, b: float,
+                           wavelength: float) -> dict:
+    """Synthesise an optimum-gain pyramidal horn. Balanis ch.13 procedure.
+
+    Optimum here means the flare that maximises gain for a given axial
+    length, which fixes the aperture phase error at the classic values:
+
+        b1 = sqrt(2 * lambda * rho1)      (E-plane)
+        a1 = sqrt(3 * lambda * rho2)      (H-plane)
+
+    A *physically realisable* pyramidal horn additionally needs its two flares
+    to meet the feed waveguide at the same axial station:
+
+        pe = (b1 - b) * sqrt((rho1/b1)^2 - 1/4)
+        ph = (a1 - a) * sqrt((rho2/a1)^2 - 1/4)
+        pe == ph
+
+    Balanis reduces the pair to one transcendental equation in chi = rho1 /
+    lambda, solved here by bisection rather than by his hand iteration.
+
+    Returns every dimension in metres plus the achieved gain, so the caller
+    can check the synthesis closed rather than trusting it.
+    """
+    g0 = 10.0 ** (gain_dbi / 10.0)
+    a_l, b_l = a / wavelength, b / wavelength
+
+    def residual(chi: float) -> float:
+        # Balanis 13-56: left and right sides of the pyramidal condition.
+        left = (math.sqrt(2.0 * chi) - b_l) ** 2 * (2.0 * chi - 1.0)
+        right = ((g0 / (2.0 * math.pi)) * math.sqrt(3.0 / (2.0 * math.pi * chi))
+                 - a_l) ** 2 * ((g0 ** 2 / (6.0 * math.pi ** 3 * chi)) - 1.0)
+        return left - right
+
+    # Balanis's trial value chi1 = G0/(2*pi*sqrt(2*pi)) is a starting point for
+    # his hand iteration, NOT a bound: at 15 dBi on WR-90 it lands above the
+    # root, so bracketing upward from it never finds a sign change. Scan the
+    # whole physical range instead. chi > 1/2 is required — (2*chi - 1) is a
+    # factor of the left-hand side, so the equation is meaningless below it.
+    low = high = None
+    chi_scan = 0.51
+    previous = residual(chi_scan)
+    for _ in range(4000):
+        nxt = chi_scan * 1.01
+        current = residual(nxt)
+        if previous * current <= 0:
+            low, high = chi_scan, nxt
+            break
+        chi_scan, previous = nxt, current
+    if low is None:
+        raise ValueError(
+            f"no pyramidal-horn solution for {gain_dbi} dBi on this waveguide — "
+            f"the requested gain may be below what the feed itself already gives"
+        )
+    for _ in range(200):
+        mid = 0.5 * (low + high)
+        if residual(low) * residual(mid) <= 0:
+            high = mid
+        else:
+            low = mid
+    chi = 0.5 * (low + high)
+
+    rho1 = chi * wavelength
+    rho2 = (g0 ** 2 / (8.0 * math.pi ** 3)) * (1.0 / chi) * wavelength
+    b1 = math.sqrt(2.0 * wavelength * rho1)
+    a1 = math.sqrt(3.0 * wavelength * rho2)
+    pe = (b1 - b) * math.sqrt((rho1 / b1) ** 2 - 0.25)
+    ph = (a1 - a) * math.sqrt((rho2 / a1) ** 2 - 0.25)
+    return {
+        "a1": a1, "b1": b1, "rho1": rho1, "rho2": rho2,
+        "pe": pe, "ph": ph, "axial_length": pe,
+        "gain_dbi": pyramidal_horn_gain(a1, b1, wavelength),
+        "chi": chi,
+    }
+
+
 def rectangular_waveguide_cutoff(a: float) -> float:
     """TE10 cutoff of a rectangular waveguide, in Hz: f_c = c / (2a).
 
@@ -377,23 +466,36 @@ def _microstrip(spec, scope, target, tolerance, note) -> Prediction:
 
 
 def _horn(spec, scope, target, tolerance, note) -> Prediction:
+    """Aperture gain, with the feed's TE10 band as a hard sanity gate.
+
+    The gain is the design's stated target, so it is what gets compared. The
+    cutoff check rides along because a horn whose feed does not propagate — or
+    that is running multi-mode — has a gain number that means nothing.
+    """
     a = _var(scope, "wg_a", "WG_a", "guide_a", "a")
     cutoff = rectangular_waveguide_cutoff(a)
     operating = _var(scope, "f0", "design_freq", "freq")
+    wavelength = C0 / operating
     ratio = operating / cutoff
-    # A band-membership test, not a percentage: TE10 must propagate (f > f_c)
-    # and the guide should stay single-mode (f < 2*f_c, where TE20 starts).
-    # The stated target is a gain in dBi, which no closed form here predicts,
-    # so `target` is deliberately None rather than a number to compare against.
-    return Prediction(
-        "te10_band", None, cutoff, "GHz", tolerance,
-        [("guide broad wall a", _mm(a)),
-         ("TE10 cutoff", f"{cutoff / 1e9:.4f} GHz"),
-         ("operating frequency", f"{operating / 1e9:.4f} GHz"),
-         ("f / f_c", f"{ratio:.4f}  (want 1 < f/f_c < 2)")],
-        note or "v1 checks TE10 propagation, not aperture gain",
-        ok=1.0 < ratio < 2.0,
+    a1 = _var(scope, "horn_a", "Horn_a", "aperture_a", "a1")
+    b1 = _var(scope, "horn_b", "Horn_b", "aperture_b", "b1")
+    gain = pyramidal_horn_gain(a1, b1, wavelength)
+    single_mode = 1.0 < ratio < 2.0
+    detail = [("aperture a1", _mm(a1)),
+              ("aperture b1", _mm(b1)),
+              ("free-space lambda", _mm(wavelength)),
+              ("TE10 cutoff", f"{cutoff / 1e9:.4f} GHz"),
+              ("f / f_c", f"{ratio:.4f}  (want 1 < f/f_c < 2)")]
+    prediction = Prediction(
+        "gain", target, gain, "dBi", tolerance, detail,
+        note or "aperture-efficiency estimate (eap 0.51); pattern is not predicted",
     )
+    if not single_mode:
+        prediction.ok = False
+        prediction.note = (f"feed is outside the single-mode TE10 band "
+                           f"(f/f_c = {ratio:.3f}) — the gain estimate is not "
+                           f"meaningful")
+    return prediction
 
 
 _ESTIMATORS = {

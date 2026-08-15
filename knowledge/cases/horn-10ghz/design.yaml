@@ -1,0 +1,130 @@
+# horn-10ghz as a Design Spec — the case that exercises the Q1c decision.
+#
+# This is the only canonical case whose geometry needs an op beyond primitives
+# and booleans: the flare is a LOFT between the throat and aperture profiles
+# (`connect`, HFSS's native blend). Q1 chose (c) — full geometry on the native
+# modeler rather than an external CAD kernel — specifically so a horn could be
+# a first-class spec instead of an escape hatch. If this compiles with zero
+# escape-hatch ops, that decision paid for itself.
+#
+# Modelled as the interior air volume, which is the usual HFSS idiom for a
+# horn: the walls are the boundary of the solid, not objects in their own right.
+#
+# Dimensions are synthesised, not sourced — see `notes.md`. The optimum-gain
+# procedure (Balanis ch.13) was closed twice: the aperture returns 14.9859 dBi
+# against the 15.0 requested, and the same routine reproduces Balanis's own
+# 22.6 dB / 11 GHz worked example.
+spec_version: 1
+name: horn-10ghz
+recipe: pyramidal-horn
+solution_type: Modal
+
+provenance:
+  source: "Balanis, Antenna Theory ch.13 optimum-gain pyramidal horn synthesis on WR-90"
+  canonical_reading: closed-form
+  case: knowledge/cases/horn-10ghz
+  notes: >-
+    Aperture and flare are computed by hfss_spec.physics.optimum_pyramidal_horn
+    rather than taken from a source. The synthesis is self-consistent (pe - ph
+    below a micron, gain closes to -0.09%) and reproduces a textbook example,
+    but these are still calculated numbers and the case records that.
+
+target:
+  quantity: gain
+  value: 15.0                   # dBi — the unit is in the quantity's name
+  tolerance_pct: 10
+
+variables:
+  f0: 10GHz
+  lambda0: 29.9792mm            # c/f0
+  wg_a: 22.86mm                 # WR-90 broad wall
+  wg_b: 10.16mm                 # WR-90 narrow wall
+  wg_len: 30mm                  # ~1 lambda of feed guide before the flare
+  horn_a: 77.3482mm             # aperture, a1 = sqrt(3*lambda*rho_h)
+  horn_b: 57.1475mm             # aperture, b1 = sqrt(2*lambda*rho_e)
+  horn_len: 38.1275mm           # axial length, from pe == ph
+  air_pad: 29.9792mm            # one free-space wavelength of radiation box
+
+materials:
+  vac:
+    library: vacuum
+  air:
+    library: air
+
+geometry:
+  # Feed waveguide: the air inside a WR-90 section, from the port plane up to
+  # the throat at z = 0.
+  - op: box
+    name: FeedGuide
+    material: vac
+    origin: ["-wg_a/2", "-wg_b/2", "-wg_len"]
+    size: [wg_a, wg_b, wg_len]
+
+  # The two profiles the flare is lofted between.
+  - op: sheet
+    name: Flare
+    plane: xy
+    origin: ["-wg_a/2", "-wg_b/2", "0mm"]
+    size: [wg_a, wg_b]
+  - op: sheet
+    name: Aperture
+    plane: xy
+    origin: ["-horn_a/2", "-horn_b/2", horn_len]
+    size: [horn_a, horn_b]
+
+  # HFSS's Connect blends the profiles into one solid, keeping the first
+  # operand's name. This is the op Q1c bought: an exact flare rather than a
+  # stepped approximation, and — unlike imported CAD — still parametric, so
+  # `horn_a` remains editable in the AEDT variable table.
+  - op: connect
+    name: Flare
+    profiles: [Aperture]
+
+  - op: unite
+    name: FeedGuide
+    with: [Flare]
+
+  # The port sheet sits flush with the back of the feed guide.
+  - op: sheet
+    name: PortSheet
+    plane: xy
+    origin: ["-wg_a/2", "-wg_b/2", "-wg_len"]
+    size: [wg_a, wg_b]
+
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-horn_a/2 - air_pad", "-horn_b/2 - air_pad", "-wg_len"]
+    size: ["horn_a + 2*air_pad", "horn_b + 2*air_pad",
+           "wg_len + horn_len + air_pad"]
+
+excitations:
+  - name: P1
+    type: wave_port
+    on:
+      object: PortSheet
+    impedance: 50ohm
+    renormalize: false          # a waveguide port renormalises to nothing useful
+
+boundaries:
+  - name: Rad1
+    type: radiation
+    on:
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 12
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: interpolating
+    start: 8.0GHz
+    stop: 12.0GHz
+    count: 101
+
+qa_signals: [convergence, ports_excited, gain_plausible]

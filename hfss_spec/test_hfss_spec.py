@@ -780,6 +780,53 @@ class TestPhysicsEstimators(unittest.TestCase):
                         f"({error_pct:+.2f}%)")
 
 
+class TestHornSynthesis(unittest.TestCase):
+    """The horn's dimensions are computed, not sourced, so they get checked."""
+
+    def test_synthesis_closes_on_the_requested_gain(self):
+        from hfss_spec import physics
+        lam = physics.C0 / 10e9
+        h = physics.optimum_pyramidal_horn(15.0, 22.86e-3, 10.16e-3, lam)
+        self.assertAlmostEqual(h["gain_dbi"], 15.0, delta=0.05)
+
+    def test_pyramidal_condition_is_satisfied(self):
+        """pe == ph, or the two flares do not meet the feed at one station."""
+        from hfss_spec import physics
+        lam = physics.C0 / 10e9
+        h = physics.optimum_pyramidal_horn(15.0, 22.86e-3, 10.16e-3, lam)
+        self.assertLess(abs(h["pe"] - h["ph"]), 1e-6)
+
+    def test_reproduces_the_textbook_worked_example(self):
+        """Balanis's 22.6 dB / 11 GHz WR-90 horn: a1 16.36 cm, b1 12.85 cm."""
+        from hfss_spec import physics
+        h = physics.optimum_pyramidal_horn(22.6, 22.86e-3, 10.16e-3,
+                                           physics.C0 / 11e9)
+        self.assertAlmostEqual(h["a1"] * 1e2, 16.36, places=1)
+        self.assertAlmostEqual(h["b1"] * 1e2, 12.85, places=1)
+
+    def test_the_root_is_below_balanis_trial_value(self):
+        """Why the solver scans instead of iterating upward.
+
+        At 15 dBi on WR-90 the classic starting value G0/(2*pi*sqrt(2*pi))
+        is 2.008 and the root is 1.817 — an upward search never brackets it,
+        and higher-gain horns hide the problem.
+        """
+        import math
+        from hfss_spec import physics
+        lam = physics.C0 / 10e9
+        h = physics.optimum_pyramidal_horn(15.0, 22.86e-3, 10.16e-3, lam)
+        g0 = 10 ** 1.5
+        trial = g0 / (2 * math.pi * math.sqrt(2 * math.pi))
+        self.assertLess(h["chi"], trial)
+
+    def test_the_horn_spec_needs_no_escape_hatch(self):
+        """The Q1c decision, tested: a horn is a first-class spec."""
+        spec = load_spec(CASES / "horn-10ghz" / "design.yaml")
+        self.assertEqual(spec.escape_hatch_count, 0)
+        self.assertTrue(any(op.op == "connect" for op in spec.geometry))
+        self.assertTrue(validate(spec).ok)
+
+
 class TestPrecheck(unittest.TestCase):
     def test_patch_spec_is_consistent(self):
         from hfss_spec import physics

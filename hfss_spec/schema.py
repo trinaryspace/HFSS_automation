@@ -170,7 +170,9 @@ class Provenance(SpecModel):
 class Target(SpecModel):
     """The design's headline goal, and how close counts."""
 
-    quantity: Literal["resonant_frequency", "impedance", "gain", "bandwidth"]
+    quantity: Literal["resonant_frequency", "center_frequency",
+                      "characteristic_impedance", "impedance",
+                      "gain", "bandwidth"]
     value: Expr
     tolerance_pct: float = Field(gt=0, le=100)
 

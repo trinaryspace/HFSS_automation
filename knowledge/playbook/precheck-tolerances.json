@@ -30,12 +30,12 @@
     "parallel-coupled-line-filter": {
       "tolerance_pct": 5.0,
       "estimator": "microstrip_impedance",
-      "note": "v1 checks the feed-line synthesis only. The coupled-section design is not estimated, so a PASS here says less than it does for the other recipes."
+      "note": "v1 checks the feed-line synthesis only. The coupled sections need even/odd-mode synthesis that is not implemented, so this recipe has no design.yaml yet and a PASS here would say almost nothing."
     },
     "pyramidal-horn": {
       "tolerance_pct": 10.0,
       "estimator": "horn_cutoff",
-      "note": "v1 checks the feed waveguide's TE10 cutoff against the operating band, not the aperture gain. Wide, because it is a sanity check rather than a prediction."
+      "note": "Predicts aperture gain from a1*b1 at eap 0.51, gated on the feed staying in the single-mode TE10 band. Wide at 10%: on a small horn (this aperture is only ~2.6 x 1.9 wavelengths) the efficiency constant does more work than it would at 20 dB. Pattern symmetry is not predicted by any closed form here."
     }
   }
 }

@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "https://opencode.ai/config.json",
   "model": "fireworks-ai/accounts/fireworks/models/deepseek-v4-flash-0731",
   "compaction": {
@@ -30,8 +30,10 @@
       }
     }
   },
-  // Ticket 06 (spec-driven) main-loop experiment RAN 2026-08-15 at
-  // `variant: max` and is now reverted to `low`. Result: patch-2400
+  // Re-pilot 2 (2026-08-16): pinned at `max` to MATCH the kind-rocket run
+  // (346,993 billed / 477 parts, patch-2400, free-form route) so the Design
+  // Spec route is the only variable that moved. Revert to `low` after the run.
+  // Prior context — ticket 06 ran at `max` and was reverted to `low`. Result: patch-2400
   // completed at 346,993 billed / 477 parts all-in (269,378 / 412 main
   // loop) against the 398,130 baseline — the first completed run since the
   // refactor, but well short of the >=50% bar. `max` was confirmed live via
@@ -40,7 +42,7 @@
   // See .scratch/hfss-agent-spec-driven/issues/06-main-loop-model-experiment.md.
   "agent": {
     "build": {
-      "variant": "low"
+      "variant": "max"
     },
     "kb-lookup": {
       "description": "Read-only pyAEDT API lookup against the local KB; returns exact signatures quoted from KB files or NOT FOUND.",

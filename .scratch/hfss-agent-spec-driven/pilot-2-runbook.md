@@ -45,12 +45,12 @@ saved nothing measurable and the cost is somewhere neither of us has looked.
      actually is. If you run this variant, label the number as such.
    **Recommend the realistic one**, and delete/ignore the existing spec for the
    duration so it cannot be copied.
-3. **Model tier.** `agent.build.variant` is back at `low`. Ticket 06 ran at
-   `max` and the effort change was inconclusive against a moved case and prompt
-   shape. Holding it at `low` keeps this run comparable to `kind-rocket`, which
-   was `max` — so if you want a clean comparison, set it to `max` again. My
-   recommendation: **`max`, to match `kind-rocket` exactly**, so the route is
-   the only variable that moved.
+3. **Model tier — already set for you.** `agent.build.variant` is pinned at
+   **`max`** to match `kind-rocket` exactly, so the Design Spec route is the
+   only variable that moved between the two runs. Subagents stay at `low`.
+   Change it to `low` before starting if you would rather measure the cheap
+   tier; it is one line in `opencode.json` and the comment there says so.
+   **Revert to `low` after the run** so the pin does not leak into later work.
 
 ## Pre-flight
 

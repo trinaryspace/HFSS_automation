@@ -58,7 +58,29 @@ CONTRACT_MARKERS = {
                              "never pass a predicted output count"],
     "resolve-once": ["escalate", "never re-submit"],
     "readout one shot": ["one shot", "never iterate readout shapes"],
+    # Phase 2: the Build session has two routes and the skill has to say so,
+    # or the compiler exists and no run ever uses it.
+    "build routes": ["Route A", "Route B", "design.yaml", "escape hatch",
+                     "reference/design-spec.md"],
+    "physics pre-check": ["precheck.py", "INCONSISTENT", "never blocks"],
 }
+
+DESIGN_SPEC_REFERENCE = REFERENCE.parent / "design-spec.md"
+
+DESIGN_SPEC_MARKERS = {
+    "offline gates first": ["validate_spec.py", "precheck.py", "no desktop, no license"],
+    "compile route": ["compile_spec.py", "--dry-run", "--launch", "never solves"],
+    "what does not change": ["ADR 0007", "ADR 0006", "Review gate",
+                             "Verification-line contract"],
+    "selectors are symbolic": ["face_of", "never ids", "pick: largest_area"],
+    "units mandatory": ["carries a unit", "dimensionless"],
+    "escape hatch is measured": ["escape_hatch", "tracked metric"],
+    "sync as a snapshot diff": ["spec_acceptance.py", "as_built.json", "loud ledger entry"],
+}
+
+# Tooling the Design Spec route cannot run without.
+SPEC_TOOLING = ("validate_spec.py", "precheck.py", "compile_spec.py",
+                "spec_from_snapshot.py", "spec_acceptance.py", "validate_cases.py")
 
 REFERENCE_PAPERS_README = REPO / "knowledge" / "reference-papers" / "README.md"
 
@@ -133,6 +155,24 @@ def main() -> int:
         missing = [m for m in markers if m.lower() not in rp_text.lower()]
         if not check(f"reference-papers: {label}", not missing, f"missing: {missing}"):
             failures += 1
+
+    if not check("design-spec reference exists", DESIGN_SPEC_REFERENCE.is_file()):
+        failures += 1
+    else:
+        spec_text = DESIGN_SPEC_REFERENCE.read_text(encoding="utf-8")
+        for label, markers in DESIGN_SPEC_MARKERS.items():
+            missing = [m for m in markers if m.lower() not in spec_text.lower()]
+            if not check(f"design-spec: {label}", not missing, f"missing: {missing}"):
+                failures += 1
+
+    for name in SPEC_TOOLING:
+        if not check(f"spec tooling has {name}", (REPO / "scripts" / name).is_file()):
+            failures += 1
+
+    if not check("design spec package importable offline",
+                 (REPO / "hfss_spec" / "schema.py").is_file()
+                 and (REPO / "hfss_spec" / "compiler.py").is_file()):
+        failures += 1
 
     if not check("reference file exists", REFERENCE.is_file()):
         failures += 1

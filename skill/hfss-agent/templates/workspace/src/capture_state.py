@@ -19,6 +19,7 @@ Keeps the desktop alive.
 
 import json
 import os
+import re
 import sys
 
 
@@ -74,6 +75,29 @@ def _material(model, name):
         return ""
 
 
+def _object_kinds(model):
+    """`name -> solid | sheet | line`, the one thing a bbox cannot tell you.
+
+    Added for the spec reducer (ticket 12a): a bounding box alone cannot name
+    a construction op, so every object reduced to `op: unknown`. Knowing that
+    an object is a SHEET with one degenerate axis at least pins the plane, and
+    a SOLID with no degenerate axis is a plausible box. It does not pin the
+    outline — a bow-tie and a rectangle share a bounding box — but it turns a
+    blind guess into a checkable one.
+    """
+    kinds = {}
+    for attribute, kind in (("solid_names", "solid"),
+                            ("sheet_names", "sheet"),
+                            ("line_names", "line"),
+                            ("point_names", "point")):
+        try:
+            for name in getattr(model.modeler, attribute, None) or []:
+                kinds[str(name)] = kind
+        except Exception:  # noqa: BLE001 - attribute missing on this pyAEDT
+            continue
+    return dict(sorted(kinds.items()))
+
+
 def _entity_map(entities):
     """`{name: type}` from a pyAEDT boundary/excitation collection."""
     out = {}
@@ -90,14 +114,83 @@ def _entity_map(entities):
 
 
 def _setup_map(model):
+    """`{setup name: properties}` — passes, delta-S, frequency, and so on.
+
+    pyAEDT 1.3.0's `Setup` has NO `get_properties()`; it exposes `props`
+    and `properties`. The original `hasattr(setup, "get_properties")` probe
+    was therefore always False and every snapshot recorded `{}` for every
+    setup — silently, on both sides of any comparison, so a changed
+    max-pass or delta-S looked identical to an unchanged one. Verified
+    empty in all three captured models, the pilot included.
+    """
     out = {}
     for setup in getattr(model, "setups", []) or []:
+        name = str(getattr(setup, "name", "") or "<unnamed>")
+        props = None
+        for probe in (
+            lambda: getattr(setup, "props", None),
+            lambda: getattr(setup, "properties", None),
+            lambda: setup.get_properties(),
+        ):
+            try:
+                candidate = probe()
+            except Exception:  # noqa: BLE001 - API absent on this version
+                continue
+            if candidate:
+                props = candidate
+                break
+        if props is None:
+            out[name] = "<unreadable>"
+            continue
         try:
-            props = setup.get_properties() if hasattr(setup, "get_properties") else {}
-            out[str(setup.name)] = _rounded(dict(props))
-        except Exception:  # noqa: BLE001 - unreadable setup
-            out[str(setup.name)] = "<unreadable>"
+            out[name] = _rounded(dict(props))
+        except Exception:  # noqa: BLE001 - not mapping-like
+            out[name] = _rounded(props)
     return dict(sorted(out.items()))
+
+
+_TERMINAL_SUFFIX = re.compile(r"_T\d+$")
+
+
+def split_ports(boundaries):
+    """`(ports, terminals)` from a boundary map.
+
+    Ports and their terminals are BOTH typed `Wave Port` in the boundary
+    list, so counting everything port-typed over-reports: a 2-port coplanar
+    waveguide lists `1, 1_T1, 1_T2, 2, 2_T1, 2_T2` — six entries, two
+    ports. Terminal-solution designs create one terminal per conductor per
+    port, named `<port or object>_T<n>`.
+
+    Verified against every model captured here: coplanar 6 -> 2 ports +
+    4 terminals, bandpass 4 -> 2 + 2, probe-fed patch 2 -> 1 port + 1
+    terminal, horn and parabolic 1 -> 1 + 0.
+    """
+    port_typed = {name: kind for name, kind in boundaries.items()
+                  if "port" in str(kind).lower()}
+    terminals = {n: k for n, k in port_typed.items() if _TERMINAL_SUFFIX.search(n)}
+    ports = {n: k for n, k in port_typed.items() if n not in terminals}
+    return dict(sorted(ports.items())), dict(sorted(terminals.items()))
+
+
+def _model_units(model):
+    """The modeler's display units — bbox numbers are in THESE, not mm.
+
+    Snapshots recorded bare bbox numbers with no unit, while variables
+    carry explicit units, so the two could only be compared by guessing the
+    scale. Observed in the wild: inches for one model, centimetres for
+    another, millimetres for the pilot.
+    """
+    for probe in (
+        lambda: model.modeler.model_units,
+        lambda: model.modeler.oeditor.GetModelUnits(),
+    ):
+        try:
+            value = probe()
+            if value:
+                return str(value)
+        except Exception:  # noqa: BLE001 - modeler/API unavailable
+            continue
+    return ""
 
 
 def shape_from_model(model):
@@ -120,12 +213,23 @@ def shape_from_model(model):
         except Exception:  # noqa: BLE001 - variable manager unavailable
             variables = {}
     sweeps = sorted(getattr(model, "existing_analysis_sweeps", []) or [])
+    boundaries = _entity_map(getattr(model, "boundaries", []) or [])
+    # Ports land in `boundaries`, not `excitations` — observed on every model
+    # captured here (Modal and Terminal): `excitations` came back empty each
+    # time. Terminals are port-typed too, so they are split out rather than
+    # counted as ports. Both raw sections stay untouched.
+    ports, terminals = split_ports(boundaries)
     return {
+        "snapshot_version": 3,
+        "model_units": _model_units(model),
         "objects": objects,
+        "object_kinds": _object_kinds(model),
         "bboxes": bboxes,
         "materials": materials,
-        "boundaries": _entity_map(getattr(model, "boundaries", []) or []),
+        "boundaries": boundaries,
         "excitations": _entity_map(getattr(model, "excitations", []) or []),
+        "ports": ports,
+        "terminals": terminals,
         "setups": _setup_map(model),
         "sweeps": sweeps,
         "variables": dict(sorted(variables.items())),

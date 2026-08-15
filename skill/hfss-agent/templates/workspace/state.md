@@ -8,6 +8,7 @@ never hand-edited; the staged scripts write it.
 
 ## Session 1 — Clarification (locked in the UI, never changed after)
 
+- Started: <UTC ISO-8601 session start, e.g. 2026-08-05T14:00:00Z — written once, never changed>
 - Recipe: <name>
 - Assumptions: <each assumption from the Clarification block>
 - Approved Result QA signals: <convergence, ports, in-band resonance, …>

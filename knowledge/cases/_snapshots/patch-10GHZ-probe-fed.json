@@ -1,0 +1,225 @@
+{
+ "_capture": {
+  "aedt_version": "2024.1",
+  "design": "RectProbe_ATK",
+  "project": "RectProbe_ATK1",
+  "route_around": "patched=15",
+  "solution_type": "Terminal",
+  "source": "capture_live.py (read-only, UI session)"
+ },
+ "bboxes": {
+  "Ground": [
+   -1.35,
+   -1.15,
+   0.0,
+   1.35,
+   1.15,
+   0.0
+  ],
+  "RadiatingSurface": [
+   -2.35,
+   -2.15,
+   -1.51575,
+   2.35,
+   2.15,
+   1.1575
+  ],
+  "antenna": [
+   -0.595,
+   -0.455,
+   0.1575,
+   0.595,
+   0.455,
+   0.1575
+  ],
+  "coax": [
+   -0.085,
+   0.095,
+   -0.5,
+   0.085,
+   0.265,
+   0.0
+  ],
+  "coax_pin": [
+   -0.025,
+   0.155,
+   -0.5,
+   0.025,
+   0.205,
+   0.0
+  ],
+  "feed_pin": [
+   -0.025,
+   0.155,
+   0.0,
+   0.025,
+   0.205,
+   0.1575
+  ],
+  "port1": [
+   -0.085,
+   0.095,
+   -0.5,
+   0.085,
+   0.265,
+   -0.5
+  ],
+  "port_cap": [
+   -0.085,
+   0.095,
+   -0.51575,
+   0.085,
+   0.265,
+   -0.5
+  ],
+  "sub": [
+   -1.35,
+   -1.15,
+   0.0,
+   1.35,
+   1.15,
+   0.1575
+  ]
+ },
+ "boundaries": {
+  "1": "Wave Port",
+  "AutoOpen1": "Radiation",
+  "antennaMetal": "Perfect E",
+  "coax_outer": "Perfect E",
+  "coax_pin_T1": "Wave Port",
+  "groundMetal": "Perfect E"
+ },
+ "excitations": {},
+ "materials": {
+  "Ground": "",
+  "RadiatingSurface": "",
+  "antenna": "",
+  "coax": "teflon (tm)",
+  "coax_pin": "pec",
+  "feed_pin": "pec",
+  "port1": "",
+  "port_cap": "pec",
+  "sub": "duroid (tm)"
+ },
+ "model_units": "cm",
+ "objects": [
+  "Ground",
+  "RadiatingSurface",
+  "antenna",
+  "coax",
+  "coax_pin",
+  "feed_pin",
+  "port1",
+  "port_cap",
+  "sub"
+ ],
+ "ports": {
+  "1": "Wave Port",
+  "coax_pin_T1": "Wave Port"
+ },
+ "setups": {
+  "ATK_Solution": {
+   "BasisOrder": 1,
+   "DoLambdaRefine": true,
+   "DoMaterialLambda": true,
+   "DrivenSolverType": "Direct Solver",
+   "EnhancedLowFreqAccuracy": false,
+   "Frequency": "10GHz",
+   "ID": 0,
+   "IE Solver Accuracy": "Balanced",
+   "IESolverType": "ACA",
+   "InfiniteSphereSetup": -1,
+   "IsEnabled": true,
+   "LambdaTargetForIESolver": 0.15,
+   "MaxDeltaS": 0.02,
+   "MaxPass": 10,
+   "MaximumPasses": 15,
+   "MeshLink": {
+    "ImportMesh": false
+   },
+   "MinConvPass": 1,
+   "MinPass": 1,
+   "MinimumConvergedPasses": 1,
+   "MinimumPasses": 1,
+   "PerError": 1,
+   "PerRefine": 30,
+   "PercentRefinement": 30,
+   "PortAccuracy": 2,
+   "PortMaxTri": 500,
+   "PortMinTri": 100,
+   "SaveAnyFields": true,
+   "SaveRadFieldsOnly": false,
+   "SetLambdaTarget": false,
+   "SetPortMinMaxTri": false,
+   "SetupType": "HfssDriven",
+   "SolveType": "Single",
+   "Sweeps": {
+    "FF_Sweep": {
+     "ID": 0,
+     "IsEnabled": true,
+     "RangeCount": 3,
+     "RangeEnd": "15GHz",
+     "RangeStart": "5GHz",
+     "RangeType": "LinearCount",
+     "SaveFields": true,
+     "SaveRadFields": false,
+     "Type": "Discrete"
+    },
+    "MoveBackwards": false,
+    "NextUniqueID": 2,
+    "SParam_Sweep": {
+     "EnforceCausality": false,
+     "EnforcePassivity": true,
+     "ID": 1,
+     "InterpDerivTolerance": 0.2,
+     "InterpMaxSolns": 250,
+     "InterpMinSolns": 0,
+     "InterpMinSubranges": 1,
+     "InterpTolerance": 0.5,
+     "InterpUsePortImped": true,
+     "InterpUsePropConst": true,
+     "InterpUseS": true,
+     "IsEnabled": true,
+     "PassivityErrorTolerance": 0.0001,
+     "RangeCount": 100,
+     "RangeEnd": "15GHz",
+     "RangeStart": "5GHz",
+     "RangeType": "LinearCount",
+     "SMatrixOnlySolveMode": "Auto",
+     "SaveFields": false,
+     "SaveRadFields": false,
+     "Type": "Interpolating",
+     "UseDerivativeConvergence": false,
+     "UseFullBasis": true
+    }
+   },
+   "Target": 0.3333,
+   "UseABCOnPort": false,
+   "UseDefaultLambdaTgtForIESolver": true,
+   "UseMatrixConv": false,
+   "UseMaxTetIncrease": false
+  }
+ },
+ "snapshot_version": 2,
+ "sweeps": [
+  "ATK_Solution - coax_inner_rad='0.025000000000000001cm' coax_outer_rad='0.085000000000000006cm' design_freq='10GHz' feedLength='0.5cm' feedX='0cm' feedY='0.17999999999999999cm' gnd_x='2.7000000000000002cm' gnd_y='2.2999999999999998cm' patchX='1.1899999999999999cm' patchY='0.91000000000000003cm' subH='0.1575cm' subX='2.7000000000000002cm' subY='2.2999999999999998cm' : Table",
+  "ATK_Solution : FF_Sweep",
+  "ATK_Solution : LastAdaptive",
+  "ATK_Solution : SParam_Sweep"
+ ],
+ "variables": {
+  "coax_inner_rad": "0.025cm",
+  "coax_outer_rad": "0.085cm",
+  "design_freq": "10GHz",
+  "feedLength": "0.5cm",
+  "feedX": "0cm",
+  "feedY": "0.18cm",
+  "gnd_x": "subX",
+  "gnd_y": "subY",
+  "patchX": "1.19cm",
+  "patchY": "0.91cm",
+  "subH": "0.1575cm",
+  "subX": "2.7cm",
+  "subY": "2.3cm"
+ }
+}

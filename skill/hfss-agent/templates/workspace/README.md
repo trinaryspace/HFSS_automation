@@ -23,6 +23,16 @@ workspaces/<name>/
 
 Rules that make the workspace work:
 
+- **Tier 0 first, before any AEDT launch.** `python scripts/tier0.py` runs
+  every check that needs no desktop and no license — the runner suites
+  against real captured artifacts, the measurement harness, the skill
+  markers, the KB checks, and the static gate — in about fifteen seconds.
+  It is the cheapest place to find a break, and the fixture corpus it
+  checks for is what keeps those tests from silently becoming no-ops (see
+  `docs/agents/fixture-fidelity.md`). `scripts/tier1.py --workspace <dir>`
+  is the next rung: it builds the model on the live desktop and **refuses
+  to run any stage numbered 08 or above**, so it can never consume solver
+  time by accident.
 - **src/ scripts are the re-runnable record.** One Stage = one script =
   one Run, ending in its `PASS: <stage> <assertions>` Verification line
   (see `src/stage_skeleton.py`). Every script attaches (or launches, first
@@ -44,12 +54,17 @@ Rules that make the workspace work:
 - **The solve runs under a detached watchdog (ADR 0006).** `08_solve.py`
   cleans stale results, probes for an in-flight solve, submits
   `analyze(blocking=False)`, launches `python src/poll_solve.py
-  <name>.aedt` detached, and exits. The watchdog appends one line to
-  `results/state/solve_progress.txt` every ~20 s (status `running` /
-  `settling` / `complete` / `stalled`; pass the sweep point count via
-  `EXPECTED_SD` with the launch) and exits on completion or stall. The
-  agent only reads the state file — never foreground-polls, never
-  estimates.
+  <name>.aedt` detached, and exits. The stage-aware watchdog appends one
+  line to `results/state/solve_progress.txt` every ~20 s: stage
+  (initial meshing / adaptive meshing / frequency sweep / finalizing /
+  done) + evidence from the stage-family artifacts (`*.imesh`/`*.cmesh`,
+  `*_ADP*`, `*_F####_SU.txt`) and the newest `.profile`'s stage ledger
+  and terminal `Status` footnote. It exits with 0 on complete (profile
+  `Status: Normal Completion` + settle), 2 on stalled (stage named), 3 on
+  aborted (any non-Normal profile status appended verbatim, or in-flight
+  markers gone + no completion + solver process dead). No output-count
+  prediction anywhere. The agent only reads the state file — never
+  foreground-polls, never estimates.
 - **Read-back sync is verified mechanically (ADR 0005).**
   `python src/capture_state.py` snapshots the live model into
   `results/state/model_snapshot.json`; after user UI tweaks and the

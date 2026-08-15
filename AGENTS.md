@@ -15,3 +15,11 @@ Five canonical labels, each string equal to its name (`needs-triage`, `needs-inf
 ### Domain docs
 
 Single-context: `CONTEXT.md` at the repo root is the domain glossary; decisions live in `docs/adr/`. See `docs/agents/domain.md`.
+
+### Fixture fidelity
+
+Test fixtures are captured from real artifacts, never written from memory; a synthetic fixture is valid only alongside a real one it provably matches. Two P0 bugs passed a green suite because this was not enforced. See `docs/agents/fixture-fidelity.md`.
+
+### Verification tiers
+
+`scripts/tier0.py` (seconds, no license) before any AEDT launch; `scripts/tier1.py` builds on the live desktop but never solves; Tier 2 is the full end-to-end run.

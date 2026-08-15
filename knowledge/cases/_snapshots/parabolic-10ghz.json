@@ -1,0 +1,187 @@
+{
+ "_capture": {
+  "aedt_version": "2024.1",
+  "design": "Parabolic_ATK",
+  "project": "Parabolic_ATK1",
+  "route_around": "patched=15",
+  "solution_type": "Modal",
+  "source": "capture_live.py (read-only, UI session)"
+ },
+ "bboxes": {
+  "Port_Cap": [
+   -1.30556,
+   9.184283447,
+   -4.45630187,
+   1.30556,
+   9.833296082,
+   -3.150729942
+  ],
+  "Reflector": [
+   -40.0,
+   -50.0,
+   0.0,
+   40.0,
+   -39.332899697,
+   40.0
+  ],
+  "Region": [
+   -2.74828,
+   -1.110302138,
+   -6.025063515,
+   2.74828,
+   10.694558488,
+   2.191360975
+  ],
+  "WG_inner": [
+   -2.286,
+   -0.660332623,
+   -4.244995431,
+   2.286,
+   9.621989643,
+   1.650831556
+  ],
+  "WG_outer": [
+   -2.44856,
+   -0.720705891,
+   -4.395928602,
+   2.44856,
+   9.682362911,
+   1.801764727
+  ],
+  "port1": [
+   -1.143,
+   9.244656716,
+   -4.244995431,
+   1.143,
+   9.621989643,
+   -3.301663113
+  ]
+ },
+ "boundaries": {
+  "HybridReflector": "FE-BI",
+  "Pyramidal1_Rad1": "FE-BI",
+  "Pyramidal1_p1": "Wave Port",
+  "reflectorsMetal": "Perfect E"
+ },
+ "excitations": {},
+ "materials": {
+  "Port_Cap": "pec",
+  "Reflector": "",
+  "Region": "vacuum",
+  "WG_inner": "vacuum",
+  "WG_outer": "pec",
+  "port1": ""
+ },
+ "model_units": "cm",
+ "objects": [
+  "Port_Cap",
+  "Reflector",
+  "Region",
+  "WG_inner",
+  "WG_outer",
+  "port1"
+ ],
+ "ports": {
+  "Pyramidal1_p1": "Wave Port"
+ },
+ "setups": {
+  "ATK_Solution": {
+   "AdaptFEBIWithRadiation": false,
+   "BasisOrder": 1,
+   "DDMSolverResidual": 0.0001,
+   "DoLambdaRefine": true,
+   "DoMaterialLambda": true,
+   "DrivenSolverType": "Domain Decomposition",
+   "EnhancedLowFreqAccuracy": false,
+   "Frequency": "10GHz",
+   "ID": 0,
+   "IE Solver Accuracy": "Balanced",
+   "IESolverType": "ACA",
+   "InfiniteSphereSetup": -1,
+   "IsEnabled": true,
+   "IterativeResidual": 1e-06,
+   "LambdaTargetForIESolver": 0.15,
+   "MaxDeltaS": 0.02,
+   "MaxPass": 10,
+   "MaximumPasses": 15,
+   "MeshLink": {
+    "ImportMesh": false
+   },
+   "MinConvPass": 1,
+   "MinPass": 1,
+   "MinimumConvergedPasses": 1,
+   "MinimumPasses": 1,
+   "PerError": 1,
+   "PerRefine": 30,
+   "PercentRefinement": 30,
+   "PortAccuracy": 2,
+   "PortMaxTri": 500,
+   "PortMinTri": 100,
+   "SaveAnyFields": true,
+   "SaveRadFieldsOnly": false,
+   "SetLambdaTarget": false,
+   "SetPortMinMaxTri": false,
+   "SetupType": "HfssDriven",
+   "SkipIERegionSolveDuringAdaptivePasses": false,
+   "SolveType": "Single",
+   "Sweeps": {
+    "FF_Sweep": {
+     "ID": 0,
+     "IsEnabled": true,
+     "RangeCount": 3,
+     "RangeEnd": "10.8GHz",
+     "RangeStart": "9.2GHz",
+     "RangeType": "LinearCount",
+     "SaveFields": true,
+     "SaveRadFields": false,
+     "Type": "Discrete"
+    },
+    "MoveBackwards": false,
+    "NextUniqueID": 2,
+    "SParam_Sweep": {
+     "EnforcePassivity": true,
+     "ID": 1,
+     "InterpDerivTolerance": 0.2,
+     "InterpMaxSolns": 250,
+     "InterpMinSolns": 0,
+     "InterpMinSubranges": 1,
+     "InterpTolerance": 0.5,
+     "InterpUsePortImped": false,
+     "InterpUsePropConst": true,
+     "InterpUseS": true,
+     "IsEnabled": true,
+     "PassivityErrorTolerance": 0.0001,
+     "RangeCount": 100,
+     "RangeEnd": "10.8GHz",
+     "RangeStart": "9.2GHz",
+     "RangeType": "LinearCount",
+     "SMatrixOnlySolveMode": "Auto",
+     "SaveFields": false,
+     "SaveRadFields": false,
+     "Type": "Interpolating",
+     "UseDerivativeConvergence": false,
+     "UseFullBasis": true
+    }
+   },
+   "Target": 0.3333,
+   "UseABCOnPort": false,
+   "UseDefaultLambdaTgtForIESolver": true,
+   "UseMatrixConv": false,
+   "UseMaxTetIncrease": false
+  }
+ },
+ "snapshot_version": 2,
+ "sweeps": [
+  "ATK_Solution - Feed_Location='0cm' Focal_Length='50cm' Major_Radius='20cm' Minor_Radius='10cm' Offset='20cm' : Table",
+  "ATK_Solution : FF_Sweep",
+  "ATK_Solution : LastAdaptive",
+  "ATK_Solution : SParam_Sweep"
+ ],
+ "variables": {
+  "Feed_Location": "0cm",
+  "Focal_Length": "50cm",
+  "Major_Radius": "20cm",
+  "Minor_Radius": "10cm",
+  "Offset": "20cm"
+ }
+}

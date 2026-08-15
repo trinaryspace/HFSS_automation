@@ -1,0 +1,44 @@
+PROJECT=C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt
+--- phase 4a: open WITHOUT solution_type (None path) ---
+PyAEDT INFO: Parsing C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt.
+PyAEDT INFO: Python version 3.10.0 (tags/v3.10.0:b494f59, Oct  4 2021, 19:00:18) [MSC v.1929 64 bit (AMD64)].
+PyAEDT INFO: PyAEDT version 1.3.0.
+PyAEDT INFO: Initializing new Desktop session.
+PyAEDT INFO: File C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: AEDT version 2024.1.
+PyAEDT INFO: New AEDT session is starting on gRPC port 62948.
+PyAEDT INFO: Starting new AEDT gRPC session on port 62948.
+PyAEDT INFO: Launching AEDT server with gRPC transport mode: wnua
+PyAEDT INFO: Electronics Desktop started on gRPC port 62948 after 11.3 seconds.
+PyAEDT INFO: AEDT installation Path C:\Program Files\AnsysEM\v241\Win64
+PyAEDT INFO: 2024.1 version started with process ID 48992.
+PyAEDT WARNING: Project is locked. Removing it and opening.
+PyAEDT INFO: Project readout_probe has been opened.
+PyAEDT INFO: Active Design set to solve_design
+PyAEDT INFO: AEDT objects correctly read
+4a: open ok
+4a: solution_type = 'Modal'
+4a: report read:
+PyAEDT INFO: PostProcessor class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: PostProcessor class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Post class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Modeler class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+4a: readout got SolutionData real rows: (101, 2)
+PyAEDT INFO: Desktop has been released.
+--- phase 4b: open, then detach odesign (forced fallback path) ---
+PyAEDT INFO: Parsing C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt.
+PyAEDT INFO: Python version 3.10.0 (tags/v3.10.0:b494f59, Oct  4 2021, 19:00:18) [MSC v.1929 64 bit (AMD64)].
+PyAEDT INFO: PyAEDT version 1.3.0.
+PyAEDT INFO: Initializing new Desktop session.
+PyAEDT INFO: AEDT version 2024.1.
+PyAEDT INFO: File C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: New AEDT session is starting on gRPC port 62973.
+PyAEDT INFO: Starting new AEDT gRPC session on port 62973.
+PyAEDT INFO: Launching AEDT server with gRPC transport mode: wnua
+PyAEDT INFO: Electronics Desktop started on gRPC port 62973 after 11.3 seconds.
+PyAEDT INFO: AEDT installation Path C:\Program Files\AnsysEM\v241\Win64
+PyAEDT INFO: 2024.1 version started with process ID 34996.
+PyAEDT WARNING: Project is locked. Removing it and opening.
+4b: EXC GrpcApiError: Failed to execute gRPC AEDT command: OpenProject

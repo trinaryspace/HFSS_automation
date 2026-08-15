@@ -1,0 +1,43 @@
+PROJECT=C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt SWEEP=Setup1 : Sweep_MM13NY
+PyAEDT INFO: Parsing C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt.
+PyAEDT INFO: Python version 3.10.0 (tags/v3.10.0:b494f59, Oct  4 2021, 19:00:18) [MSC v.1929 64 bit (AMD64)].
+PyAEDT INFO: PyAEDT version 1.3.0.
+PyAEDT INFO: Initializing new Desktop session.
+PyAEDT INFO: File C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: AEDT version 2024.1.
+PyAEDT INFO: New AEDT session is starting on gRPC port 50310.
+PyAEDT INFO: Starting new AEDT gRPC session on port 50310.
+PyAEDT INFO: Launching AEDT server with gRPC transport mode: wnua
+PyAEDT INFO: Electronics Desktop started on gRPC port 50310 after 11.4 seconds.
+PyAEDT INFO: AEDT installation Path C:\Program Files\AnsysEM\v241\Win64
+PyAEDT INFO: 2024.1 version started with process ID 53460.
+PyAEDT WARNING: Project is locked. Removing it and opening.
+PyAEDT INFO: Project readout_probe has been opened.
+PyAEDT INFO: Active Design set to solve_design
+PyAEDT INFO: AEDT objects correctly read
+[open] ok (patched)
+--- shape K: raw internals of get_solution_data(auto sweep) ---
+PyAEDT INFO: PostProcessor class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: PostProcessor class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Post class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Modeler class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+K: expressions = ['dB(S(1,1))']
+K: primary_sweep_values n = 101
+K: _solutions_real keys = ['dB(S(1,1))']
+K:   _solutions_real[dB(S(1,1))].shape = (101, 2)
+K:   _solutions_real[dB(S(1,1))] dtype = float64
+K: raw server table size check via variations: 1
+K: nominal_variation data len: 101
+--- shape L: create_report on the actual sweep ---
+L: report ok Standard
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+L: report data primary_sweep n = 101
+--- shape M: export_report_to_file of the full-sweep report ---
+M[csv]: C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\evidence\rubar_full.csv exists=True rows=102
+M[tab]: C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\evidence\rubar_full.tab exists=True rows=102
+--- shape N: export_report_to_jpg ---
+N: export_report_to_jpg -> True file exists: True
+PyAEDT INFO: Desktop has been released.

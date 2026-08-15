@@ -1,0 +1,45 @@
+{
+  "boundaries": [
+    "radiation"
+  ],
+  "case": "coupled-filter-2400",
+  "excitation": {
+    "count": 2,
+    "type": "wave_port"
+  },
+  "key_dimensions": {
+    "feed_width_mm": {
+      "source": "shares microstrip-50r synthesis",
+      "value": 3.0829
+    },
+    "fractional_bandwidth": 0.1,
+    "section_length_mm": {
+      "relation": "quarter guide wavelength at 2.4 GHz on this stack",
+      "source": "closed-form",
+      "value": 17.1071
+    },
+    "sections": 3
+  },
+  "qa_signals": [
+    "convergence",
+    "ports_excited",
+    "passband_center",
+    "return_loss_in_band"
+  ],
+  "recipe": "parallel-coupled-line bandpass filter",
+  "schema_v1": true,
+  "solution_type": "Modal",
+  "substrate": {
+    "height_mm": 1.6,
+    "loss_tangent": 0.02,
+    "material": "FR4_epoxy",
+    "permittivity": 4.4
+  },
+  "target": {
+    "quantity": "center_frequency",
+    "tolerance_pct": 5.0,
+    "unit": "GHz",
+    "value": 2.4
+  },
+  "tier1_cost": "medium"
+}

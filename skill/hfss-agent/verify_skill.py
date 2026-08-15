@@ -10,6 +10,8 @@ No AEDT or license required.
 Usage: python verify_skill.py
 """
 
+import json
+import re
 import os
 import sys
 from pathlib import Path
@@ -47,7 +49,38 @@ CONTRACT_MARKERS = {
     "static gate": ["py_compile", "import", "before any AEDT launch"],
     "idempotent stages": ["delete-then-create", "idempotent"],
     "kb rules": ["spine-api.md", ".rst.md", "rg -l"],
+    # Post-pilot solve ceremony (ADR 0006 amendment). SKILL.md carried none
+    # of this while execution.md did, so the skill told the agent to solve
+    # but never to bank — the drift that made these markers necessary.
+    "bank before teardown": ["confirm_solve", "solved.txt", "banked",
+                             "close_projects=False", "refuses"],
+    "stage-aware watchdog": ["stage-aware", "Normal Completion",
+                             "never pass a predicted output count"],
+    "resolve-once": ["escalate", "never re-submit"],
+    "readout one shot": ["one shot", "never iterate readout shapes"],
+    # Phase 2: the Build session has two routes and the skill has to say so,
+    # or the compiler exists and no run ever uses it.
+    "build routes": ["Route A", "Route B", "design.yaml", "escape hatch",
+                     "reference/design-spec.md"],
+    "physics pre-check": ["precheck.py", "INCONSISTENT", "never blocks"],
 }
+
+DESIGN_SPEC_REFERENCE = REFERENCE.parent / "design-spec.md"
+
+DESIGN_SPEC_MARKERS = {
+    "offline gates first": ["validate_spec.py", "precheck.py", "no desktop, no license"],
+    "compile route": ["compile_spec.py", "--dry-run", "--launch", "never solves"],
+    "what does not change": ["ADR 0007", "ADR 0006", "Review gate",
+                             "Verification-line contract"],
+    "selectors are symbolic": ["face_of", "never ids", "pick: largest_area"],
+    "units mandatory": ["carries a unit", "dimensionless"],
+    "escape hatch is measured": ["escape_hatch", "tracked metric"],
+    "sync as a snapshot diff": ["spec_acceptance.py", "as_built.json", "loud ledger entry"],
+}
+
+# Tooling the Design Spec route cannot run without.
+SPEC_TOOLING = ("validate_spec.py", "precheck.py", "compile_spec.py",
+                "spec_from_snapshot.py", "spec_acceptance.py", "validate_cases.py")
 
 REFERENCE_PAPERS_README = REPO / "knowledge" / "reference-papers" / "README.md"
 
@@ -85,7 +118,8 @@ ADRS = {
 
 TEMPLATE_FILES = ["README.md", "summary.md", "state.md", "src"]
 TEMPLATE_SRC_FILES = ["ws_common.py", "poll_solve.py", "capture_state.py",
-                      "12_verify_sync.py", "00_static_gate.py", "stage_skeleton.py"]
+                      "12_verify_sync.py", "00_static_gate.py", "stage_skeleton.py",
+                      "confirm_solve.py", "profile_evidence.py", "real_fixtures.py"]
 
 
 def check(label, ok, detail=""):
@@ -122,6 +156,24 @@ def main() -> int:
         if not check(f"reference-papers: {label}", not missing, f"missing: {missing}"):
             failures += 1
 
+    if not check("design-spec reference exists", DESIGN_SPEC_REFERENCE.is_file()):
+        failures += 1
+    else:
+        spec_text = DESIGN_SPEC_REFERENCE.read_text(encoding="utf-8")
+        for label, markers in DESIGN_SPEC_MARKERS.items():
+            missing = [m for m in markers if m.lower() not in spec_text.lower()]
+            if not check(f"design-spec: {label}", not missing, f"missing: {missing}"):
+                failures += 1
+
+    for name in SPEC_TOOLING:
+        if not check(f"spec tooling has {name}", (REPO / "scripts" / name).is_file()):
+            failures += 1
+
+    if not check("design spec package importable offline",
+                 (REPO / "hfss_spec" / "schema.py").is_file()
+                 and (REPO / "hfss_spec" / "compiler.py").is_file()):
+        failures += 1
+
     if not check("reference file exists", REFERENCE.is_file()):
         failures += 1
         ref_text = ""
@@ -136,6 +188,54 @@ def main() -> int:
     gi = GITIGNORE.read_text(encoding="utf-8") if GITIGNORE.is_file() else ""
     for pat in ["workspaces", "aedt", "results", "__pycache__"]:
         if not check(f"gitignore covers {pat}", pat in gi):
+            failures += 1
+
+    # Ticket 01: profile evidence has exactly one parser. A second regex for
+    # the terminal Status is how the banking guard silently went inert.
+    src = TEMPLATE / "src"
+    if not check("template src has profile_evidence.py",
+                 (src / "profile_evidence.py").is_file()):
+        failures += 1
+    # A second *compiled* Status pattern is the defect; prose and test
+    # fixtures legitimately contain the word.
+    status_re = re.compile(r"re\.compile\((?:[^()]|\([^()]*\))*Status")
+    own_parser = [p.name for p in sorted(src.glob("*.py"))
+                  if p.name != "profile_evidence.py"
+                  and not p.name.startswith("test_")
+                  and status_re.search(p.read_text(encoding="utf-8", errors="replace"))]
+    if not check("single profile parser (ticket 01)", not own_parser,
+                 f"modules carrying their own Status regex: {own_parser}"):
+        failures += 1
+
+    # Ticket 03: the real-artifact corpus, without which the parser tests
+    # silently become no-ops.
+    corpus = src / "fixtures" / "real"
+    if not check("real-artifact fixture corpus present", (corpus / "index.json").is_file()):
+        failures += 1
+    if not check("template src has real_fixtures.py", (src / "real_fixtures.py").is_file()):
+        failures += 1
+
+    # Ticket 04: the tiered harness and the cost-per-completion metric.
+    for name in ["tier0.py", "tier1.py", "capture_fixtures.py", "run_card.py"]:
+        if not check(f"scripts has {name}", (REPO / "scripts" / name).is_file()):
+            failures += 1
+    card_text = (REPO / "scripts" / "run_card.py").read_text(encoding="utf-8")
+    if not check("run card reports cost per completed simulation",
+                 "billed_per_completed_sim" in card_text):
+        failures += 1
+
+    # Ticket 05: the canonical case set that ends N=1 acceptance.
+    cases = REPO / "knowledge" / "cases"
+    if not check("canonical case index exists", (cases / "index.json").is_file()):
+        failures += 1
+    else:
+        listed = json.loads((cases / "index.json").read_text(encoding="utf-8"))["cases"]
+        missing = [c for c in listed if not (cases / c / "case.json").is_file()]
+        if not check("every listed case has a case.json", not missing,
+                     f"missing: {missing}"):
+            failures += 1
+        if not check("case set has at least five cases", len(listed) >= 5,
+                     f"found {len(listed)}"):
             failures += 1
 
     print("ALL PASS" if failures == 0 else f"{failures} FAILURE(S)")

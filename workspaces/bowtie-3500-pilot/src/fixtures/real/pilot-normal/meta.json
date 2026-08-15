@@ -1,0 +1,45 @@
+{
+  "artifact_entries": 672,
+  "case": "pilot-normal",
+  "profiles": {
+    "DV2487_S1911_V0.profile": {
+      "stages": [
+        [
+          "Adaptive Meshing",
+          "00:00:02",
+          1
+        ],
+        [
+          "Frequency Sweep",
+          "00:04:05",
+          0
+        ]
+      ],
+      "status": "Normal Completion",
+      "stop": "08/07/2026 00:16:17"
+    },
+    "DV3019_S1911_V2586.profile": {
+      "stages": [
+        [
+          "Initial Meshing",
+          "00:00:01",
+          0
+        ],
+        [
+          "Adaptive Meshing",
+          "00:00:15",
+          6
+        ],
+        [
+          "Frequency Sweep",
+          "00:03:58",
+          0
+        ]
+      ],
+      "status": "Normal Completion",
+      "stop": "08/07/2026 00:48:26"
+    }
+  },
+  "source_results_root": "workspaces/bowtie-3500-pilot/bowtie_3500_pilot.aedtresults",
+  "total_files": 5164
+}

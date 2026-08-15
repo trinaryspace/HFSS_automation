@@ -1,0 +1,55 @@
+{
+  "boundaries": [
+    "radiation"
+  ],
+  "case": "patch-2400",
+  "excitation": {
+    "note": "inset feed; inset depth tuned for 50 ohm",
+    "type": "lumped_port"
+  },
+  "key_dimensions": {
+    "eff_permittivity": {
+      "relation": "Balanis 14-1",
+      "source": "closed-form",
+      "value": 4.0857
+    },
+    "length_extension_mm": {
+      "relation": "Balanis 14-2",
+      "source": "closed-form",
+      "value": 0.7388
+    },
+    "patch_length_mm": {
+      "relation": "Balanis 14-7 with 14-2 fringing",
+      "source": "closed-form",
+      "value": 29.4216
+    },
+    "patch_width_mm": {
+      "relation": "Balanis 14-6",
+      "source": "closed-form",
+      "value": 38.01
+    }
+  },
+  "qa_signals": [
+    "convergence",
+    "ports_excited",
+    "in_band_resonance",
+    "energy_pass"
+  ],
+  "recipe": "inset-fed rectangular microstrip patch",
+  "schema_v1": true,
+  "solution_type": "Modal",
+  "substrate": {
+    "copper_thickness_mm": 0.035,
+    "height_mm": 1.6,
+    "loss_tangent": 0.02,
+    "material": "FR4_epoxy",
+    "permittivity": 4.4
+  },
+  "target": {
+    "quantity": "resonant_frequency",
+    "tolerance_pct": 5.0,
+    "unit": "GHz",
+    "value": 2.4
+  },
+  "tier1_cost": "medium"
+}

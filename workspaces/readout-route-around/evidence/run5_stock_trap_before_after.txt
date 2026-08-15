@@ -1,0 +1,26 @@
+--- 5a OFFLINE before-state ---
+5a: hasattr default_solution (stock) = False
+5a: STOCK EXC AttributeError: type object 'HfssConstants' has no attribute 'default_solution'
+5a: patching alias...
+5a: PATCHED solution_type = 'HFSS Terminal Network'
+5a: PATCHED setter(None) ok, value = 'HFSS Terminal Network'
+--- 5b LIVE detach test ---
+PyAEDT INFO: Parsing C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt.
+PyAEDT INFO: Python version 3.10.0 (tags/v3.10.0:b494f59, Oct  4 2021, 19:00:18) [MSC v.1929 64 bit (AMD64)].
+PyAEDT INFO: PyAEDT version 1.3.0.
+PyAEDT INFO: Initializing new Desktop session.
+PyAEDT INFO: File C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: AEDT version 2024.1.
+PyAEDT INFO: New AEDT session is starting on gRPC port 57654.
+PyAEDT INFO: Starting new AEDT gRPC session on port 57654.
+PyAEDT INFO: Launching AEDT server with gRPC transport mode: wnua
+PyAEDT INFO: Electronics Desktop started on gRPC port 57654 after 11.1 seconds.
+PyAEDT INFO: AEDT installation Path C:\Program Files\AnsysEM\v241\Win64
+PyAEDT INFO: 2024.1 version started with process ID 41548.
+PyAEDT INFO: Project readout_probe has been opened.
+PyAEDT INFO: Active Design set to solve_design
+PyAEDT INFO: AEDT objects correctly read
+5b: open ok
+5b: stock getter (odesign attached) = 'Modal'
+5b: setter(None) ok, value = 'Modal'
+PyAEDT INFO: Desktop has been released.

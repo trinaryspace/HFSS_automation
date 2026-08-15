@@ -1,0 +1,144 @@
+# patch-2400 as a Design Spec.
+#
+# Not invented: this describes the model the 2026-08-15 run actually built and
+# solved (session kind-rocket, S11 minimum 2.317 GHz at -20 dB). The geometry
+# numbers come from `case.json` (Balanis closed-form) and the construction
+# details from `workspaces/patch-2400/summary.md`, so the compiler's target is
+# a model that is known to build, validate and solve.
+spec_version: 1
+name: patch-2400
+recipe: inset-fed-rectangular-patch
+solution_type: Modal            # explicit, never the default (env-compat #11)
+
+provenance:
+  source: "Balanis, Antenna Theory ch.14 design procedure (14-1, 14-2, 14-6, 14-7)"
+  canonical_reading: closed-form
+  case: knowledge/cases/patch-2400
+  notes: >-
+    Closed-form, not paper-sourced, so there is no Table/Figure disagreement to
+    arbitrate. Construction shape verified against the delivered patch-2400 run.
+
+target:
+  quantity: resonant_frequency
+  value: 2.4GHz
+  tolerance_pct: 5
+
+variables:
+  f0: 2.4GHz
+  er: 4.4
+  h: 1.6mm
+  cu_t: 0.035mm
+  patch_W: 38.0100mm            # Balanis 14-6
+  patch_L: 29.4216mm            # Balanis 14-7 with 14-2 fringing
+  feed_W: 3.06mm                # Hammerstad 50 ohm on this stack
+  inset_d: 7.4mm                # the match tuner (~L/4); resonance is set by patch_L
+  inset_g: 3.0mm
+  sub_W: 80mm
+  sub_L: 80mm
+  air_pad: 31mm                 # ~lambda0/4 at f0
+  feed_run: "sub_L/2 - patch_L/2"
+
+materials:
+  fr4:
+    library: FR4_epoxy
+  metal:
+    library: pec
+  air:
+    library: air
+
+geometry:
+  - op: box
+    name: Substrate
+    material: fr4
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L, h]
+
+  - op: sheet
+    name: GroundPlane
+    material: metal
+    plane: xy
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L]
+
+  - op: sheet
+    name: Patch
+    material: metal
+    plane: xy
+    origin: ["-patch_W/2", "-patch_L/2", h]
+    size: [patch_W, patch_L]
+
+  # The two inset notches that set the feed match. Cut, not drawn: the patch is
+  # a rectangle minus two slots, which is exactly how the run built it.
+  - op: sheet
+    name: InsetL
+    plane: xy
+    origin: ["-feed_W/2 - inset_g", "-patch_L/2", h]
+    size: [inset_g, inset_d]
+  - op: sheet
+    name: InsetR
+    plane: xy
+    origin: ["feed_W/2", "-patch_L/2", h]
+    size: [inset_g, inset_d]
+  - op: subtract
+    name: Patch
+    tools: [InsetL, InsetR]
+    keep_tools: false
+
+  # 50 ohm microstrip feed from the substrate edge into the inset, united with
+  # the patch so the port sees one conductor.
+  - op: sheet
+    name: Feed
+    material: metal
+    plane: xy
+    origin: ["-feed_W/2", "-sub_L/2", h]
+    size: [feed_W, "feed_run + inset_d"]
+  - op: unite
+    name: Patch
+    with: [Feed]
+
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2 - air_pad", "-sub_L/2 - air_pad", "-air_pad"]
+    size: ["sub_W + 2*air_pad", "sub_L + 2*air_pad", "h + 2*air_pad"]
+
+excitations:
+  - name: P1
+    type: lumped_port
+    # The -y face of the substrate, where the feed line reaches the edge.
+    # Symbolic: env-compat #7/#8 says assign by face object, never by id, and
+    # pyAEDT 1.3.0 rejects a FacePrimitive here (patch-2400 run) — the compiler
+    # resolves this to a sheet name plus the integration line below.
+    on:
+      face_of: Substrate
+      direction: "-y"
+      pick: largest_area
+    integration_line:
+      from:
+        edge_mid: [GroundPlane, "-y", "max_z"]
+      to:
+        edge_mid: [Patch, "-y", "min_z"]
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad1
+    type: radiation
+    on:
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 15
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: discrete
+    start: 2.0GHz
+    stop: 3.0GHz
+    count: 201
+
+qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]

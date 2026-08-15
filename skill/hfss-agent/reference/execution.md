@@ -6,7 +6,7 @@ Reference for `SKILL.md`; loaded by the agent when executing stages. Facts from 
 
 One run is three named sessions — `<name>-clarify`, `<name>-build`, `<name>-solve` — each starting fresh from `workspaces/<name>/state.md`, the **State ledger**. Only the ledger (plus the relevant staged scripts) crosses a session boundary.
 
-- The Clarification session **writes** the ledger; the Build session **amends** it (one-line delta per stage, snapshot pointer at the gate); the Solve+QA session **reads** it.
+- The Clarification session **writes** the ledger; the Build session **amends** it (one-line delta per stage, snapshot pointer at the gate); the Solve+QA session **reads it and amends it** (one delta per solve decision + a live-state block — see Solve-session discipline below).
 - Ledger contents: stage progress, locked parameters/variables, decisions and pending decisions, pitfalls hit, the model-snapshot pointer. Keep it ≤ ~2 KB, owned by the agent per stage.
 - **Machine state stays in `results/state/*.txt`** (`aedt_port.txt`, `aedt_process_id.txt`, `solve_progress.txt`, `solve_watchdog_pid.txt`, …) — written by scripts, read by the agent (or by a later session). Never hand-machine-state off in prose.
 - Resume rule: a killed session resumes from the ledger, never by replaying the prior conversation.
@@ -16,7 +16,7 @@ One run is three named sessions — `<name>-clarify`, `<name>-build`, `<name>-so
 Session state lives in the AEDT project — never in a Python process. Each script begins with the preamble, which either launches a desktop or attaches to the running one, and ends by leaving the desktop alive for the next stage.
 
 - Launch: `Hfss(version="2024.1", new_desktop=True, non_graphical=False, project=PROJECT, design=DESIGN, solution_type=<set from the Recipe — explicit, never the default>)` (EC#1, EC#11). Cold start is ~6–25 s.
-- Attach (preferred when a session is alive): `Desktop(version="2024.1", new_desktop=False)` then `Hfss(project=PROJECT, design=DESIGN, solution_type=<from the Recipe>, new_desktop=False)` — cross-process attach works, including reading state written by earlier stages (EC#2).
+- Attach (preferred when a session is alive): `Desktop(version="2024.1", new_desktop=False)` then `Hfss(project=PROJECT, design=DESIGN, solution_type=<from the Recipe>, new_desktop=False)` — cross-process attach works, including reading state written by earlier stages (EC#2). Resumes connect by the pinned port with a **bounded connect** (short timeout): a dead pin fails fast with the `stale pin — re-pinning` verdict, is cleared, and a fresh desktop is launched and re-pinned — never a hanging attach (pilot retrospective B5; see Solve-session discipline).
 - Project paths: absolute, inside the Workspace. Pass `remove_lock=True` when opening a project a crashed session may have locked (EC#9).
 - **Port-pinning for verify runners**: any desktop a runner launches is pinned to a dedicated port that can never collide with the user's desktop (helpers in the workspace template's `src/ws_common.py`); the runner records the port in `results/state/aedt_port.txt`, launches against it, and tears down against it.
 - Teardown at session end ONLY: `desktop.release_desktop(close_projects=True, close_on_exit=True)`, then kill the launched `aedt_process_id` tree until gone and assert zero `ansysedt.exe` left; end the script with `sys.stdout.flush()` + `os._exit(0)` (gRPC teardown hangs; release alone may not reap — EC#10). Release hygiene applies between stages: release the client WITHOUT closing (keep the server) or simply exit the script — the next preamble attaches. Runner teardown is port-pinned (previous bullet): only the process on the pinned port dies.
@@ -71,8 +71,30 @@ Two scripts orchestrate the solve; the agent does nothing but read machine state
   2. **In-flight-solve probe**: results-dir age + live solver processes (`ansysedt.exe`); **if a solve looks live, ask the user before submitting** (double-solves cost an hour — the guard exists to stop that class).
   3. **Submit**: `analyze(setup=<name>, blocking=False)`; its `True` return is *submission only*, not completion (EC#5).
   4. **Detach**: launch `poll_solve.py` via `Start-Process` (detached, `-WindowStyle Hidden`); record its PID in `results/state/solve_watchdog_pid.txt`; exit.
-- **`poll_solve.py`** (the watchdog): every ~20 s, recursively scan `.asol`/`.sd` growth under `<project>.aedtresults/` and append the state to `results/state/solve_progress.txt`; exit on completion, or signal a stall if growth stops before convergence.
-- **The agent**: reads machine state only — `results/state/*.txt`, the solve's own state in `solve_progress.txt`. **Never foreground-poll, never estimate solve time** — no `analyze(...)` looping, no manual process wrangling. Re-attach for model reads and retry flaky readouts (EC#6) — reads are fine, polling is not. *The solve is complete when the watchdog's independent completion signals appear* (progress file says done + results on disk).
+- **`poll_solve.py`** (the watchdog): every ~20 s it reads two independent observables under `<project>.aedtresults/` — the **stage-family artifacts** (`*.imesh`/`*.cmesh` → initial meshing, `*_ADP<pass>_*` → adaptive meshing, `*_F####_SU.txt` → frequency sweep) and the **newest `.profile`'s stage ledger** (`Initial Meshing` → `Adaptive Meshing` → `Frequency Sweep`, per-stage elapsed, adaptive-pass count) with its terminal `Status` footnote. One line per tick lands in `results/state/solve_progress.txt` carrying the stage plus evidence (stage-ledger extract, elapsed, family counts). Terminal states are evidenced before claiming: `status=complete` **only** when the profile's terminal `Status` is `Normal Completion` and the profile was written during the solve, plus a settle; `status=stalled` when there is no growth in the current stage past its window — the stage is named in the evidence (a mesh stuck forever and a running sweep never look alike); `status=aborted` when the profile status is anything non-Normal (appended **verbatim** — an engine-error profile is never claimed complete) or the in-flight semaphores are gone with no completion and the solver process is dead. No output-count prediction anywhere: the sweep-point guess parameter is removed — completion never depends on a guessed count. Exit codes mirror the last line: 0 complete, 2 stalled, 3 aborted.
+- **The agent**: reads machine state only — `results/state/*.txt`, the solve's own state in `solve_progress.txt`. **Never foreground-poll, never estimate solve time** — no `analyze(...)` looping, no manual process wrangling. Re-attach for model reads and retry flaky readouts (EC#6) — reads are fine, polling is not. *The solve is complete only when the progress file's terminal line says `status=complete` **with** `profile_status=normal_completion` and the results are on disk*; any terminal line that is not `status=complete` is an anomaly — escalate with the evidence tail (the profile's verbatim Status footnote distinguishes done from plateau). Bank the solve evidence before any teardown (ADR 0006 amendment / ticket 13).
+
+## Solve-session discipline: resolve-once + live ledger (ADR 0007 practice)
+
+The Solve+QA session obeys a discipline that ends the five-submission failure class (pilot retrospective B4–B5): each verified model state gets at most one submission, every solve decision is evidence-first, and the ledger carries a live-state block so "where is the sim" is one read — never archaeology.
+
+**Resolve-once.** After ANY solve anomaly — a watchdog `stalled`/`aborted` terminal line, an engine-error profile (verbatim non-Normal status), a false tick, a dead watchdog, or a resume against a changed world — read the evidence exactly once, and only from machine state: the watchdog's terminal line in `results/state/solve_progress.txt` (stage + evidence extract), the newest solve profile's terminal `Status` (verbatim), and the counts (sweep entries). One read. Then escalate to the user with that evidence; no re-reads, no re-archaeology, no silent re-submission while the question is out.
+
+Re-submission is legal through exactly two routes:
+
+1. **the user's explicit go** after that escalation; or
+2. **a user-approved model-state change** — Clarification-locked corrections or Review-gate edits run through read-back sync — that legitimately invalidates the solve (a submitted solve is evidence for the state it was submitted on, and only that state).
+
+A submission through any other route is a discipline violation, not a retry.
+
+**Ledger discipline.** The solve session appends exactly ONE delta to the State ledger per solve decision: `solve #<n> — reason: <one-line evidence>; user: <answer verbatim>` — the submission number, the reason (the anomaly evidence or the approved state change that invalidated it), and the user's answer. After every decision, refresh the ledger's **live-state block** (≤ 4 lines):
+
+- pin — the `results/state/aedt_port.txt` value; probed this session? re-pinned? (stale pins are cleared, never attached against)
+- solve status — the last terminal line of `results/state/solve_progress.txt`
+- solved marker — does `results/state/solved.txt` exist (banked, via `confirm_solve.py`), and its `status=` line
+- next action — one line: report to user, bank, guarded teardown, close out.
+
+Resume reads the ledger FIRST, always (ADR 0007): the live-state block plus the last delta answer "where is the sim" without disk archaeology. The run card attributes every submission to a user-approved reason from these deltas — an unattributed submission is a bug in the session record.
 
 ## Self-correction details
 

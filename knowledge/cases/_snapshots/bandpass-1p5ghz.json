@@ -1,0 +1,251 @@
+{
+ "_capture": {
+  "aedt_version": "2024.1",
+  "design": "HFSSDesign1",
+  "project": "Bandpass_Filter",
+  "route_around": "patched=15",
+  "solution_type": "Terminal",
+  "source": "capture_live.py (read-only, UI session)"
+ },
+ "bboxes": {
+  "Cavity": [
+   -1.0,
+   -1.7,
+   -0.3125,
+   1.0,
+   1.7,
+   0.3125
+  ],
+  "feed1": [
+   1.0,
+   -1.04,
+   -0.14,
+   1.75,
+   -0.76,
+   0.14
+  ],
+  "feed1_1": [
+   -1.75,
+   0.76,
+   -0.14,
+   -1.0,
+   1.04,
+   0.14
+  ],
+  "feedpin1": [
+   1.0,
+   -0.96,
+   -0.06,
+   1.75,
+   -0.84,
+   0.06
+  ],
+  "feedpin1_1": [
+   -1.75,
+   0.84,
+   -0.06,
+   -1.0,
+   0.96,
+   0.06
+  ],
+  "feedprobe1": [
+   0.85,
+   -0.96,
+   -0.06,
+   1.0,
+   -0.84,
+   0.06
+  ],
+  "feedprobe1_1": [
+   -1.0,
+   0.84,
+   -0.06,
+   -0.85,
+   0.96,
+   0.06
+  ],
+  "l1": [
+   -0.85,
+   -0.9625,
+   -0.03,
+   0.85,
+   -0.8375,
+   0.03
+  ],
+  "l1_1": [
+   -0.85,
+   0.8375,
+   -0.03,
+   0.85,
+   0.9625,
+   0.03
+  ],
+  "l2": [
+   -1.0,
+   -0.75,
+   -0.03,
+   0.818,
+   -0.625,
+   0.03
+  ],
+  "l2_1": [
+   -0.818,
+   0.625,
+   -0.03,
+   1.0,
+   0.75,
+   0.03
+  ],
+  "l3": [
+   -0.818,
+   -0.48,
+   -0.03,
+   1.0,
+   -0.355,
+   0.03
+  ],
+  "l3_1": [
+   -1.0,
+   0.355,
+   -0.03,
+   0.818,
+   0.48,
+   0.03
+  ],
+  "l4": [
+   -1.0,
+   -0.2,
+   -0.03,
+   0.818,
+   -0.075,
+   0.03
+  ],
+  "l4_1": [
+   -0.818,
+   0.075,
+   -0.03,
+   1.0,
+   0.2,
+   0.03
+  ]
+ },
+ "boundaries": {
+  "P1": "Wave Port",
+  "P2": "Wave Port",
+  "feedpin1_T1": "Wave Port",
+  "feedpin1_T2": "Wave Port"
+ },
+ "excitations": {},
+ "materials": {
+  "Cavity": "vacuum",
+  "feed1": "vacuum",
+  "feed1_1": "vacuum",
+  "feedpin1": "aluminum",
+  "feedpin1_1": "aluminum",
+  "feedprobe1": "aluminum",
+  "feedprobe1_1": "aluminum",
+  "l1": "aluminum",
+  "l1_1": "aluminum",
+  "l2": "aluminum",
+  "l2_1": "aluminum",
+  "l3": "aluminum",
+  "l3_1": "aluminum",
+  "l4": "aluminum",
+  "l4_1": "aluminum"
+ },
+ "model_units": "in",
+ "objects": [
+  "Cavity",
+  "feed1",
+  "feed1_1",
+  "feedpin1",
+  "feedpin1_1",
+  "feedprobe1",
+  "feedprobe1_1",
+  "l1",
+  "l1_1",
+  "l2",
+  "l2_1",
+  "l3",
+  "l3_1",
+  "l4",
+  "l4_1"
+ ],
+ "ports": {
+  "P1": "Wave Port",
+  "P2": "Wave Port",
+  "feedpin1_T1": "Wave Port",
+  "feedpin1_T2": "Wave Port"
+ },
+ "setups": {
+  "1p5GHz": {
+   "BasisOrder": 1,
+   "DoLambdaRefine": true,
+   "DoMaterialLambda": true,
+   "DrivenSolverType": "Auto Select Direct/Iterative",
+   "EnhancedLowFreqAccuracy": false,
+   "Frequency": "1.5GHz",
+   "ID": 0,
+   "IE Solver Accuracy": "Balanced",
+   "IESolverType": "ACA",
+   "InfiniteSphereSetup": -1,
+   "IsEnabled": true,
+   "LambdaTargetForIESolver": 0.15,
+   "MaxDeltaS": 0.02,
+   "MaxPass": 10,
+   "MaximumPasses": 15,
+   "MeshLink": {
+    "ImportMesh": false
+   },
+   "MinConvPass": 1,
+   "MinPass": 1,
+   "MinimumConvergedPasses": 1,
+   "MinimumPasses": 1,
+   "PerError": 1,
+   "PerRefine": 30,
+   "PercentRefinement": 30,
+   "PortAccuracy": 2,
+   "PortMaxTri": 500,
+   "PortMinTri": 100,
+   "SaveAnyFields": true,
+   "SaveRadFieldsOnly": false,
+   "SetLambdaTarget": false,
+   "SetPortMinMaxTri": false,
+   "SetupType": "HfssDriven",
+   "SolveType": "Single",
+   "Sweeps": {
+    "0p6_2p4GHz": {
+     "GenerateFieldsForAllFreqs": false,
+     "ID": 0,
+     "IsEnabled": true,
+     "RangeCount": 451,
+     "RangeEnd": "2.4GHz",
+     "RangeStart": "0.6GHz",
+     "RangeType": "LinearCount",
+     "SaveFields": true,
+     "SaveRadFields": false,
+     "Type": "Fast"
+    },
+    "MoveBackwards": false,
+    "NextUniqueID": 1
+   },
+   "Target": 0.3333,
+   "UseABCOnPort": false,
+   "UseDefaultLambdaTgtForIESolver": true,
+   "UseMatrixConv": false,
+   "UseMaxTetIncrease": false
+  }
+ },
+ "snapshot_version": 2,
+ "sweeps": [
+  "1p5GHz - Cavity_x='2in' Cavity_y='3.3999999999999999in' Cavity_z='0.625in' line_thickness='0.059999999999999998in' : Table",
+  "1p5GHz : 0p6_2p4GHz",
+  "1p5GHz : LastAdaptive"
+ ],
+ "variables": {
+  "Cavity_x": "2in",
+  "Cavity_y": "3.4in",
+  "Cavity_z": "0.625in",
+  "line_thickness": "0.06in"
+ }
+}

@@ -1,0 +1,195 @@
+{
+ "_capture": {
+  "aedt_version": "2024.1",
+  "design": "Co-Planar Waveguide",
+  "project": "Coplanar_waveguide",
+  "route_around": "patched=15",
+  "solution_type": "Terminal",
+  "source": "capture_live.py (read-only, UI session)"
+ },
+ "bboxes": {
+  "AirVol": [
+   -1.0,
+   -66.0,
+   -51.0,
+   1.0,
+   66.0,
+   51.0
+  ],
+  "GND": [
+   -1.0,
+   -60.0,
+   3.0,
+   1.0,
+   60.0,
+   3.7
+  ],
+  "Gap": [
+   -1.0,
+   -7.830796854,
+   3.0,
+   1.0,
+   7.830796854,
+   3.7
+  ],
+  "p1": [
+   -1.0,
+   -65.34,
+   -50.49,
+   -1.0,
+   65.34,
+   50.49
+  ],
+  "p2": [
+   1.0,
+   -65.34,
+   -50.49,
+   1.0,
+   65.34,
+   50.49
+  ],
+  "subtrate": [
+   -1.0,
+   -60.0,
+   -3.0,
+   1.0,
+   60.0,
+   3.0
+  ],
+  "trace": [
+   -1.0,
+   -6.0,
+   3.0,
+   1.0,
+   6.0,
+   3.7
+  ]
+ },
+ "boundaries": {
+  "1": "Wave Port",
+  "1_T1": "Wave Port",
+  "1_T2": "Wave Port",
+  "2": "Wave Port",
+  "2_T1": "Wave Port",
+  "2_T2": "Wave Port",
+  "PortOpen": "Perfect H",
+  "Rad1": "Radiation"
+ },
+ "excitations": {},
+ "materials": {
+  "AirVol": "air",
+  "GND": "copper",
+  "Gap": "air",
+  "p1": "",
+  "p2": "",
+  "subtrate": "myfr4",
+  "trace": "copper"
+ },
+ "model_units": "mil",
+ "objects": [
+  "AirVol",
+  "GND",
+  "Gap",
+  "p1",
+  "p2",
+  "subtrate",
+  "trace"
+ ],
+ "ports": {
+  "1": "Wave Port",
+  "1_T1": "Wave Port",
+  "1_T2": "Wave Port",
+  "2": "Wave Port",
+  "2_T1": "Wave Port",
+  "2_T2": "Wave Port"
+ },
+ "setups": {
+  "3GHz": {
+   "BasisOrder": 1,
+   "DoLambdaRefine": true,
+   "DoMaterialLambda": true,
+   "DrivenSolverType": "Direct Solver",
+   "EnhancedLowFreqAccuracy": false,
+   "Frequency": "3GHz",
+   "ID": 0,
+   "IE Solver Accuracy": "Balanced",
+   "IESolverType": "ACA",
+   "InfiniteSphereSetup": -1,
+   "IsEnabled": true,
+   "LambdaTargetForIESolver": 0.15,
+   "MaxDeltaS": 0.01,
+   "MaxPass": 10,
+   "MaximumPasses": 3,
+   "MeshLink": {
+    "ImportMesh": false
+   },
+   "MinConvPass": 1,
+   "MinPass": 1,
+   "MinimumConvergedPasses": 1,
+   "MinimumPasses": 3,
+   "PerError": 1,
+   "PerRefine": 30,
+   "PercentRefinement": 30,
+   "PortAccuracy": 0.1,
+   "PortMaxTri": 5000,
+   "PortMinTri": 100,
+   "SaveAnyFields": true,
+   "SaveRadFieldsOnly": false,
+   "SetLambdaTarget": false,
+   "SetPortMinMaxTri": true,
+   "SetupType": "HfssDriven",
+   "SolveType": "Single",
+   "Sweeps": {
+    "DC_10GHz": {
+     "EnforceCausality": false,
+     "EnforcePassivity": true,
+     "ID": 1,
+     "InterpDerivTolerance": 0.2,
+     "InterpMaxSolns": 50,
+     "InterpMinSolns": 0,
+     "InterpMinSubranges": 1,
+     "InterpTolerance": 0.5,
+     "InterpUsePortImped": true,
+     "InterpUsePropConst": true,
+     "InterpUseS": true,
+     "IsEnabled": true,
+     "MinSolvedFreq": "0.1GHz",
+     "PassivityErrorTolerance": 0.0001,
+     "RangeEnd": "10GHz",
+     "RangeStart": "0GHz",
+     "RangeStep": "20MHz",
+     "RangeType": "LinearStep",
+     "SMatrixOnlySolveMode": "Auto",
+     "SaveFields": false,
+     "SaveRadFields": false,
+     "Type": "Interpolating",
+     "UseDerivativeConvergence": false,
+     "UseFullBasis": true
+    },
+    "MoveBackwards": false,
+    "NextUniqueID": 2
+   },
+   "Target": 0.3333,
+   "UseABCOnPort": false,
+   "UseDefaultLambdaTgtForIESolver": true,
+   "UseMatrixConv": false,
+   "UseMaxTetIncrease": false
+  }
+ },
+ "snapshot_version": 2,
+ "sweeps": [
+  "3GHz - $losstan='0' ConductorThickness='0.69999999999999996mil' gap='1.8307968539325099mil' ModelLength='2mil' ModelWidth='120mil' S='10mil' SubstrateThickness='6.0000000000000009mil' W='12.000000000000002mil' : Table",
+  "3GHz : DC_10GHz",
+  "3GHz : LastAdaptive"
+ ],
+ "variables": {
+  "$losstan": "0",
+  "ConductorThickness": "0.7mil",
+  "ModelLength": "2mil",
+  "ModelWidth": "120mil",
+  "S": "10mil",
+  "SubstrateThickness": "6mil",
+  "W": "12mil",
+  "gap": "1.83079685393251mil"
+ }
+}

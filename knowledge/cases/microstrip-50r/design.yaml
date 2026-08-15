@@ -1,0 +1,120 @@
+# microstrip-50r as a Design Spec — the cheap Tier 1 case.
+#
+# Two ports, one trace, and the only canonical case whose target is an
+# impedance rather than a resonance, so it exercises a different estimator and
+# a different QA signal from everything else in the set.
+#
+# Every number is from `case.json`, where it was solved rather than looked up:
+# Hammerstad-Jensen inverted for 50 ohm on 1.6 mm FR4 gives W/h = 1.92684,
+# hence W = 3.0829 mm and ereff = 3.3323; the guide wavelength at 2.4 GHz is
+# 68.4282 mm and the line is half of it.
+spec_version: 1
+name: microstrip-50r
+recipe: microstrip-line
+solution_type: Modal
+
+provenance:
+  source: "Hammerstad-Jensen microstrip synthesis, solved for 50 ohm"
+  canonical_reading: closed-form
+  case: knowledge/cases/microstrip-50r
+
+target:
+  quantity: characteristic_impedance
+  value: 50ohm
+  tolerance_pct: 3
+
+variables:
+  f0: 2.4GHz
+  er: 4.4
+  h: 1.6mm
+  cu_t: 0.035mm
+  trace_W: 3.0829mm            # Hammerstad-Jensen, W/h > 1 branch
+  line_L: 34.2141mm            # half a guide wavelength at 2.4 GHz
+  # Ground and substrate are made wide enough that the trace's fringing
+  # fields close on the ground plane rather than on the box wall: a narrow
+  # substrate would change the impedance this case exists to measure.
+  sub_W: "trace_W + 12*h"
+  air_pad: 12mm                # ~lambda0/10 at 2.4 GHz above the trace
+
+materials:
+  fr4:
+    library: FR4_epoxy
+  metal:
+    library: pec
+  air:
+    library: air
+
+geometry:
+  - op: box
+    name: Substrate
+    material: fr4
+    origin: ["-sub_W/2", "0mm", "0mm"]
+    size: [sub_W, line_L, h]
+
+  - op: sheet
+    name: GroundPlane
+    material: metal
+    plane: xy
+    origin: ["-sub_W/2", "0mm", "0mm"]
+    size: [sub_W, line_L]
+
+  - op: sheet
+    name: Trace
+    material: metal
+    plane: xy
+    origin: ["-trace_W/2", "0mm", h]
+    size: [trace_W, line_L]
+
+  # A wave port needs a sheet spanning the substrate cross-section at each
+  # end of the line: ground to the box lid, full substrate width.
+  - op: sheet
+    name: Port1Sheet
+    plane: xz
+    origin: ["-sub_W/2", "0mm", "0mm"]
+    size: [sub_W, "h + air_pad"]
+  - op: sheet
+    name: Port2Sheet
+    plane: xz
+    origin: ["-sub_W/2", line_L, "0mm"]
+    size: [sub_W, "h + air_pad"]
+
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2", "0mm", "0mm"]
+    size: [sub_W, line_L, "h + air_pad"]
+
+excitations:
+  - name: P1
+    type: wave_port
+    on:
+      object: Port1Sheet
+    impedance: 50ohm
+  - name: P2
+    type: wave_port
+    on:
+      object: Port2Sheet
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad1
+    type: radiation
+    on:
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 12
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: interpolating
+    start: 1.0GHz
+    stop: 4.0GHz
+    count: 151
+
+qa_signals: [convergence, ports_excited]

@@ -1,0 +1,39 @@
+PROJECT=C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt
+PyAEDT INFO: Parsing C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt.
+PyAEDT INFO: Python version 3.10.0 (tags/v3.10.0:b494f59, Oct  4 2021, 19:00:18) [MSC v.1929 64 bit (AMD64)].
+PyAEDT INFO: PyAEDT version 1.3.0.
+PyAEDT INFO: Initializing new Desktop session.
+PyAEDT INFO: File C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: AEDT version 2024.1.
+PyAEDT INFO: New AEDT session is starting on gRPC port 49703.
+PyAEDT INFO: Starting new AEDT gRPC session on port 49703.
+PyAEDT INFO: Launching AEDT server with gRPC transport mode: wnua
+PyAEDT INFO: Electronics Desktop started on gRPC port 49703 after 40.2 seconds.
+PyAEDT INFO: AEDT installation Path C:\Program Files\AnsysEM\v241\Win64
+PyAEDT INFO: 2024.1 version started with process ID 28976.
+PyAEDT INFO: Project readout_probe has been opened.
+PyAEDT INFO: Active Design set to solve_design
+PyAEDT INFO: AEDT objects correctly read
+[open] ok
+--- shape A: design_solutions.solution_type (client bug surface) ---
+A: 'Modal'
+--- shape B: app-level solution_type ---
+B: 'Modal'
+--- shape C: existing_analysis_sweeps ---
+C: ['Setup1 : LastAdaptive', 'Setup1 : Sweep_MM13NY']
+--- shape D: get_solution_data, no context ---
+PyAEDT INFO: PostProcessor class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: PostProcessor class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Post class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Modeler class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+D: got=SolutionData valid=True
+--- shape E: get_solution_data, actual sweep name ---
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+E[Setup1 : LastAdaptive]: got=SolutionData valid=True
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+E[Setup1 : Sweep_MM13NY]: got=SolutionData valid=True
+PyAEDT INFO: Desktop has been released.

@@ -1,0 +1,36 @@
+{
+  "boundaries": [
+    "radiation"
+  ],
+  "case": "bowtie-3500",
+  "excitation": {
+    "type": "lumped_port"
+  },
+  "key_dimensions": {
+    "measured_resonance_ghz": 3.85,
+    "note": "taken from the delivered pilot model, not from a paper",
+    "source_artifact": "workspaces/bowtie-3500-pilot/results/state/model_snapshot.json"
+  },
+  "provenance_warning": "Astuti et al. 2022 is internally inconsistent and is NOT a source here.",
+  "qa_signals": [
+    "convergence",
+    "ports_excited",
+    "in_band_resonance"
+  ],
+  "recipe": "bow-tie patch antenna",
+  "schema_v1": true,
+  "solution_type": "Modal",
+  "substrate": {
+    "height_mm": 1.6,
+    "loss_tangent": 0.02,
+    "material": "FR4_epoxy",
+    "permittivity": 4.4
+  },
+  "target": {
+    "quantity": "resonant_frequency",
+    "tolerance_pct": 8.0,
+    "unit": "GHz",
+    "value": 3.5
+  },
+  "tier1_cost": "medium"
+}

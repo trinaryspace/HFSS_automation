@@ -18,3 +18,7 @@ batch.log
 
 # KB crawler run logs (regenerable; provenance.md in the KB is the record)
 scraping/*.log
+
+# Claude Code skill install: a LINK to skill/hfss-agent, recreated by
+# `python scripts/install_skill.py`. Never a second copy of the tree.
+.claude/skills/

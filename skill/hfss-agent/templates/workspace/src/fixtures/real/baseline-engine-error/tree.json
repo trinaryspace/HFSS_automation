@@ -1,0 +1,568 @@
+{
+  "entries": [
+    {
+      "path": ".Bowtie3500.asol.semaphore",
+      "size": 0,
+      "type": "file"
+    },
+    {
+      "path": ".Bowtie3500.asol_priv.semaphore",
+      "size": 0,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_MI0_V146.sd",
+      "size": 0,
+      "type": "dir"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S83_ADP6_V167.sd",
+      "size": 0,
+      "type": "dir"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S83_MI0_V147.sd",
+      "size": 0,
+      "type": "dir"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S83_SD1_V153.su",
+      "size": 835,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S83_SD2_V156.su",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S83_SD3_V159.su",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S83_SD4_V162.su",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S83_SD5_V165.su",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S83_SD6_V168.su",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S83_V106.profile",
+      "size": 112039,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S83_V98.cmesh",
+      "size": 0,
+      "type": "dir"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F371_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F372_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F373_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F374_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F375_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F376_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F377_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F378_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F379_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F380_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F381_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F382_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F383_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F384_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F385_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F386_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F387_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F388_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F389_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F390_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F391_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F392_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F393_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F394_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F395_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F396_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F397_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F398_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F399_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F400_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F401_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F402_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F403_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F404_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F405_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F406_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F407_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F408_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F409_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F410_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F411_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F412_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F413_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F414_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F415_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F416_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F417_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F418_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F419_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F420_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F421_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F422_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F423_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F424_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F425_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F426_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F427_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F428_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F429_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F430_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F431_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F432_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F433_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F434_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F435_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F436_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F437_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F438_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F439_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F440_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F441_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F442_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F443_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F444_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F445_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F446_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F447_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F448_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F449_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F450_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F451_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F452_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F453_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F454_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F455_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F456_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F457_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F458_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F459_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_S91_V142_F460_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_SOL84_M1_V150.sd",
+      "size": 2365,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_SOL84_M2_V154.sd",
+      "size": 2362,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_SOL84_M3_V157.sd",
+      "size": 2362,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_SOL84_M4_V160.sd",
+      "size": 2368,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_SOL84_M5_V163.sd",
+      "size": 2365,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_SOL84_M6_V166.sd",
+      "size": 2364,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_SOL85_M0_V151.sd",
+      "size": 2365,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_SOL91_M0_V170.sd",
+      "size": 118055,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3500.results/DV86_V93.imesh",
+      "size": 0,
+      "type": "dir"
+    }
+  ],
+  "other_bytes": 123162682,
+  "other_files": 1035,
+  "total_bytes": 123489582,
+  "total_files": 1142
+}

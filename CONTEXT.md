@@ -72,6 +72,10 @@ _Avoid_: checkpoint, approval, verification
 The agent's automated post-solve check of physics signals (convergence, ports excited, energy pass, in-band resonance, plausibility against the playbook). It flags anomalies and reports them; only the user decides whether results are junk.
 _Avoid_: validation, check, quality control
 
+**Readout**:
+The retrieval of result data from the AEDT project (e.g. S11 vs frequency) into the conversation — a fragile seam distinct from judging the results. Delivery source (UI or scripted) is recorded per run; the user's UI read is authoritative, a scripted readout is a bonus.
+_Avoid_: Result QA, results retrieval, pull
+
 **Learning loop**:
 The mechanism that turns experience into future capability: the agent fixes the current model now, THEN proposes a playbook amendment, and appends only after user approval. Three triggers earn a proposal: a user tweak that generalizes to the recipe class; a backend-compat discovery (lands in the environment-compat entry); a Result-QA anomaly whose resolution generalizes. Project-specific values stay in the summary.
 _Avoid_: feedback, lessons, improvement
@@ -79,6 +83,10 @@ _Avoid_: feedback, lessons, improvement
 **State ledger**:
 The per-Workspace file (`state.md`) recording stage progress, locked design variables, decisions, and pitfalls, written by each phase session and read by the next. Conversation state that survives between sessions; machine state lives in `results/state/*.txt`.
 _Avoid_: handoff doc, status file, notes
+
+**Bank** (verb):
+To persist solve evidence to `results/state/solved.txt` (profile status + sweep-point count) so a solved Workspace survives teardown. A workflow is *banked* or *unbanked*.
+_Avoid_: save, checkpoint, commit
 
 **Run card**:
 The per-run record of token spend, step count, and wall time, appended to `summary.md` by the measurement harness; the proof that an optimization refactor worked, judged against a baseline run.

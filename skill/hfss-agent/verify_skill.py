@@ -10,6 +10,8 @@ No AEDT or license required.
 Usage: python verify_skill.py
 """
 
+import json
+import re
 import os
 import sys
 from pathlib import Path
@@ -47,6 +49,15 @@ CONTRACT_MARKERS = {
     "static gate": ["py_compile", "import", "before any AEDT launch"],
     "idempotent stages": ["delete-then-create", "idempotent"],
     "kb rules": ["spine-api.md", ".rst.md", "rg -l"],
+    # Post-pilot solve ceremony (ADR 0006 amendment). SKILL.md carried none
+    # of this while execution.md did, so the skill told the agent to solve
+    # but never to bank — the drift that made these markers necessary.
+    "bank before teardown": ["confirm_solve", "solved.txt", "banked",
+                             "close_projects=False", "refuses"],
+    "stage-aware watchdog": ["stage-aware", "Normal Completion",
+                             "never pass a predicted output count"],
+    "resolve-once": ["escalate", "never re-submit"],
+    "readout one shot": ["one shot", "never iterate readout shapes"],
 }
 
 REFERENCE_PAPERS_README = REPO / "knowledge" / "reference-papers" / "README.md"
@@ -85,7 +96,8 @@ ADRS = {
 
 TEMPLATE_FILES = ["README.md", "summary.md", "state.md", "src"]
 TEMPLATE_SRC_FILES = ["ws_common.py", "poll_solve.py", "capture_state.py",
-                      "12_verify_sync.py", "00_static_gate.py", "stage_skeleton.py"]
+                      "12_verify_sync.py", "00_static_gate.py", "stage_skeleton.py",
+                      "confirm_solve.py", "profile_evidence.py", "real_fixtures.py"]
 
 
 def check(label, ok, detail=""):
@@ -136,6 +148,54 @@ def main() -> int:
     gi = GITIGNORE.read_text(encoding="utf-8") if GITIGNORE.is_file() else ""
     for pat in ["workspaces", "aedt", "results", "__pycache__"]:
         if not check(f"gitignore covers {pat}", pat in gi):
+            failures += 1
+
+    # Ticket 01: profile evidence has exactly one parser. A second regex for
+    # the terminal Status is how the banking guard silently went inert.
+    src = TEMPLATE / "src"
+    if not check("template src has profile_evidence.py",
+                 (src / "profile_evidence.py").is_file()):
+        failures += 1
+    # A second *compiled* Status pattern is the defect; prose and test
+    # fixtures legitimately contain the word.
+    status_re = re.compile(r"re\.compile\((?:[^()]|\([^()]*\))*Status")
+    own_parser = [p.name for p in sorted(src.glob("*.py"))
+                  if p.name != "profile_evidence.py"
+                  and not p.name.startswith("test_")
+                  and status_re.search(p.read_text(encoding="utf-8", errors="replace"))]
+    if not check("single profile parser (ticket 01)", not own_parser,
+                 f"modules carrying their own Status regex: {own_parser}"):
+        failures += 1
+
+    # Ticket 03: the real-artifact corpus, without which the parser tests
+    # silently become no-ops.
+    corpus = src / "fixtures" / "real"
+    if not check("real-artifact fixture corpus present", (corpus / "index.json").is_file()):
+        failures += 1
+    if not check("template src has real_fixtures.py", (src / "real_fixtures.py").is_file()):
+        failures += 1
+
+    # Ticket 04: the tiered harness and the cost-per-completion metric.
+    for name in ["tier0.py", "tier1.py", "capture_fixtures.py", "run_card.py"]:
+        if not check(f"scripts has {name}", (REPO / "scripts" / name).is_file()):
+            failures += 1
+    card_text = (REPO / "scripts" / "run_card.py").read_text(encoding="utf-8")
+    if not check("run card reports cost per completed simulation",
+                 "billed_per_completed_sim" in card_text):
+        failures += 1
+
+    # Ticket 05: the canonical case set that ends N=1 acceptance.
+    cases = REPO / "knowledge" / "cases"
+    if not check("canonical case index exists", (cases / "index.json").is_file()):
+        failures += 1
+    else:
+        listed = json.loads((cases / "index.json").read_text(encoding="utf-8"))["cases"]
+        missing = [c for c in listed if not (cases / c / "case.json").is_file()]
+        if not check("every listed case has a case.json", not missing,
+                     f"missing: {missing}"):
+            failures += 1
+        if not check("case set has at least five cases", len(listed) >= 5,
+                     f"found {len(listed)}"):
             failures += 1
 
     print("ALL PASS" if failures == 0 else f"{failures} FAILURE(S)")

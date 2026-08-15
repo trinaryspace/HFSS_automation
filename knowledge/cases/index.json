@@ -1,0 +1,16 @@
+{
+  "cases": [
+    "bowtie-3500",
+    "coupled-filter-2400",
+    "horn-10ghz",
+    "microstrip-50r",
+    "patch-2400"
+  ],
+  "schema_v1": [
+    "bowtie-3500",
+    "coupled-filter-2400",
+    "horn-10ghz",
+    "microstrip-50r",
+    "patch-2400"
+  ]
+}

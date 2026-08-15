@@ -1,0 +1,77 @@
+pre-patch: hasattr HfssConstants.default_solution = False
+pre-patch: HfssConstants.solution_default = 'HFSS Terminal Network'
+post-patch: hasattr HfssConstants.default_solution = True
+--- offline annex: HFSSDesignSolution(None, DesignType.HFSS).solution_type ---
+offline annex: solution_type = 'HFSS Terminal Network'
+PROJECT=C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt
+PyAEDT INFO: Parsing C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt.
+PyAEDT INFO: Python version 3.10.0 (tags/v3.10.0:b494f59, Oct  4 2021, 19:00:18) [MSC v.1929 64 bit (AMD64)].
+PyAEDT INFO: PyAEDT version 1.3.0.
+PyAEDT INFO: Initializing new Desktop session.
+PyAEDT INFO: File C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\projects\readout_probe.aedt correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: AEDT version 2024.1.
+PyAEDT INFO: New AEDT session is starting on gRPC port 53506.
+PyAEDT INFO: Starting new AEDT gRPC session on port 53506.
+PyAEDT INFO: Launching AEDT server with gRPC transport mode: wnua
+PyAEDT INFO: Electronics Desktop started on gRPC port 53506 after 11.3 seconds.
+PyAEDT INFO: AEDT installation Path C:\Program Files\AnsysEM\v241\Win64
+PyAEDT INFO: 2024.1 version started with process ID 44924.
+PyAEDT WARNING: Project is locked. Removing it and opening.
+PyAEDT INFO: Project readout_probe has been opened.
+PyAEDT INFO: Active Design set to solve_design
+PyAEDT INFO: AEDT objects correctly read
+[open] ok (patched)
+--- shape A: design_solutions.solution_type ---
+A: 'Modal'
+--- shape B: app-level solution_type ---
+B: 'Modal'
+--- shape C: existing_analysis_sweeps ---
+C: ['Setup1 : LastAdaptive', 'Setup1 : Sweep_MM13NY']
+--- shape D: get_solution_data, no context ---
+PyAEDT INFO: PostProcessor class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: PostProcessor class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Post class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Modeler class has been initialized! Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+D: got=SolutionData valid=True
+D: primary_sweep n=101 first=2.0 last=3.0
+D: full_matrix REAL FAILED TypeError: only length-1 arrays can be converted to Python scalars (unfilled shape)
+D: hasattr data_real = False
+--- shape E: get_solution_data, actual sweep name ---
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+E[Setup1 : LastAdaptive]: got=SolutionData valid=True
+E[Setup1 : LastAdaptive]: primary_sweep n=1 first=2.4 last=2.4
+E[Setup1 : LastAdaptive]: full_matrix REAL FAILED TypeError: only length-1 arrays can be converted to Python scalars (unfilled shape)
+E[Setup1 : LastAdaptive]: hasattr data_real = False
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+E[Setup1 : Sweep_MM13NY]: got=SolutionData valid=True
+E[Setup1 : Sweep_MM13NY]: primary_sweep n=101 first=2.0 last=3.0
+E[Setup1 : Sweep_MM13NY]: full_matrix REAL FAILED TypeError: only length-1 arrays can be converted to Python scalars (unfilled shape)
+E[Setup1 : Sweep_MM13NY]: hasattr data_real = False
+--- shape F: get_solution_data, LastAdaptive ---
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+F: got=SolutionData valid=True
+F: primary_sweep n=1 first=2.4 last=2.4
+F: full_matrix REAL FAILED TypeError: only length-1 arrays can be converted to Python scalars (unfilled shape)
+F: hasattr data_real = False
+--- shape G: results proxy get_solution_data ---
+G: EXC AttributeError: 'Hfss' object has no attribute 'results'
+--- shape H: post.create_report (actual sweep) ---
+H: Standard plot_name: rubar_probe
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+H.rpt: got=SolutionData valid=True
+H.rpt: primary_sweep n=1 first=2.4 last=2.4
+H.rpt: full_matrix REAL FAILED TypeError: only length-1 arrays can be converted to Python scalars (unfilled shape)
+H.rpt: hasattr data_real = False
+--- shape I: export_report_to_file (csv) ---
+I: C:\Users\afpim\Repos\HFSS_automation\workspaces\readout-route-around\src\..\evidence\rubar_probe.csv exists: True
+--- shape J: SolutionData.export_data_to_csv ---
+PyAEDT INFO: Solution Correctly loaded. Elapsed time: 0m 0sec
+PyAEDT INFO: Solution Correctly parsed. Elapsed time: 0m 0sec
+J: export_data_to_csv -> True
+PyAEDT INFO: Desktop has been released.

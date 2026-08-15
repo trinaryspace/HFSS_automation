@@ -1,0 +1,173 @@
+{
+ "_capture": {
+  "aedt_version": "2024.1",
+  "design": "HornPyramidal_ATK",
+  "project": "HornPyramidal_ATK1",
+  "route_around": "patched=15",
+  "solution_type": "Modal",
+  "source": "capture_live.py (read-only, UI session)"
+ },
+ "bboxes": {
+  "Horn": [
+   -0.964,
+   -0.764,
+   -1.0,
+   0.964,
+   0.764,
+   3.0
+  ],
+  "Port_Cap": [
+   -0.574,
+   -0.319,
+   -1.064,
+   0.574,
+   0.319,
+   -1.0
+  ],
+  "RadiatingSurface": [
+   -1.357700787,
+   -1.157700787,
+   -1.457700787,
+   1.357700787,
+   1.157700787,
+   3.393700787
+  ],
+  "WG_inner": [
+   -0.9,
+   -0.7,
+   -1.0,
+   0.9,
+   0.7,
+   3.0
+  ],
+  "port1": [
+   -0.51,
+   -0.255,
+   -1.0,
+   0.51,
+   0.255,
+   -1.0
+  ]
+ },
+ "boundaries": {
+  "AutoOpen1": "Radiation",
+  "p1": "Wave Port"
+ },
+ "excitations": {},
+ "materials": {
+  "Horn": "pec",
+  "Port_Cap": "pec",
+  "RadiatingSurface": "",
+  "WG_inner": "vacuum",
+  "port1": ""
+ },
+ "model_units": "in",
+ "objects": [
+  "Horn",
+  "Port_Cap",
+  "RadiatingSurface",
+  "WG_inner",
+  "port1"
+ ],
+ "ports": {
+  "p1": "Wave Port"
+ },
+ "setups": {
+  "ATK_Solution": {
+   "BasisOrder": 1,
+   "DoLambdaRefine": true,
+   "DoMaterialLambda": true,
+   "DrivenSolverType": "Direct Solver",
+   "EnhancedLowFreqAccuracy": false,
+   "Frequency": "10GHz",
+   "ID": 0,
+   "IE Solver Accuracy": "Balanced",
+   "IESolverType": "ACA",
+   "InfiniteSphereSetup": -1,
+   "IsEnabled": true,
+   "LambdaTargetForIESolver": 0.15,
+   "MaxDeltaS": 0.02,
+   "MaxPass": 10,
+   "MaximumPasses": 15,
+   "MeshLink": {
+    "ImportMesh": false
+   },
+   "MinConvPass": 1,
+   "MinPass": 1,
+   "MinimumConvergedPasses": 1,
+   "MinimumPasses": 1,
+   "PerError": 1,
+   "PerRefine": 30,
+   "PercentRefinement": 30,
+   "PortAccuracy": 2,
+   "PortMaxTri": 500,
+   "PortMinTri": 100,
+   "SaveAnyFields": true,
+   "SaveRadFieldsOnly": false,
+   "SetLambdaTarget": false,
+   "SetPortMinMaxTri": false,
+   "SetupType": "HfssDriven",
+   "SolveType": "Single",
+   "Sweeps": {
+    "FF_Sweep": {
+     "ID": 0,
+     "IsEnabled": true,
+     "RangeCount": 3,
+     "RangeEnd": "15GHz",
+     "RangeStart": "5GHz",
+     "RangeType": "LinearCount",
+     "SaveFields": true,
+     "SaveRadFields": false,
+     "Type": "Discrete"
+    },
+    "MoveBackwards": false,
+    "NextUniqueID": 2,
+    "SParam_Sweep": {
+     "EnforcePassivity": true,
+     "ID": 1,
+     "InterpDerivTolerance": 0.2,
+     "InterpMaxSolns": 250,
+     "InterpMinSolns": 0,
+     "InterpMinSubranges": 1,
+     "InterpTolerance": 0.5,
+     "InterpUsePortImped": false,
+     "InterpUsePropConst": true,
+     "InterpUseS": true,
+     "IsEnabled": true,
+     "PassivityErrorTolerance": 0.0001,
+     "RangeCount": 100,
+     "RangeEnd": "15GHz",
+     "RangeStart": "5GHz",
+     "RangeType": "LinearCount",
+     "SMatrixOnlySolveMode": "Auto",
+     "SaveFields": false,
+     "SaveRadFields": false,
+     "Type": "Interpolating",
+     "UseDerivativeConvergence": false,
+     "UseFullBasis": true
+    }
+   },
+   "Target": 0.3333,
+   "UseABCOnPort": false,
+   "UseDefaultLambdaTgtForIESolver": true,
+   "UseMatrixConv": false,
+   "UseMaxTetIncrease": false
+  }
+ },
+ "snapshot_version": 2,
+ "sweeps": [
+  "ATK_Solution - Horn_a='1.8in' Horn_b='1.3999999999999999in' Horn_length='2.9999999999999996in' WG_a='1.02in' WG_b='0.51000000000000001in' WG_length='1in' WG_Wall_Thickness='0.064000000000000001in' : Table",
+  "ATK_Solution : FF_Sweep",
+  "ATK_Solution : LastAdaptive",
+  "ATK_Solution : SParam_Sweep"
+ ],
+ "variables": {
+  "Horn_a": "1.8in",
+  "Horn_b": "1.4in",
+  "Horn_length": "3in",
+  "WG_Wall_Thickness": "0.064in",
+  "WG_a": "1.02in",
+  "WG_b": "0.51in",
+  "WG_length": "1in"
+ }
+}

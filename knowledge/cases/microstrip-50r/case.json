@@ -1,0 +1,54 @@
+{
+  "boundaries": [
+    "radiation"
+  ],
+  "case": "microstrip-50r",
+  "excitation": {
+    "count": 2,
+    "type": "wave_port"
+  },
+  "key_dimensions": {
+    "eff_permittivity": {
+      "source": "closed-form",
+      "value": 3.3323
+    },
+    "guide_wavelength_2400_mm": {
+      "source": "closed-form",
+      "value": 68.4282
+    },
+    "line_length_mm": {
+      "source": "half guide wavelength at 2.4 GHz",
+      "value": 34.2141
+    },
+    "trace_width_mm": {
+      "relation": "Hammerstad-Jensen, W/h>1 branch",
+      "source": "closed-form",
+      "value": 3.0829
+    },
+    "width_over_height": {
+      "source": "closed-form",
+      "value": 1.92684
+    }
+  },
+  "qa_signals": [
+    "convergence",
+    "ports_excited",
+    "impedance_in_band"
+  ],
+  "recipe": "50 ohm microstrip transmission line",
+  "schema_v1": true,
+  "solution_type": "Modal",
+  "substrate": {
+    "height_mm": 1.6,
+    "loss_tangent": 0.02,
+    "material": "FR4_epoxy",
+    "permittivity": 4.4
+  },
+  "target": {
+    "quantity": "characteristic_impedance",
+    "tolerance_pct": 3.0,
+    "unit": "ohm",
+    "value": 50.0
+  },
+  "tier1_cost": "cheap"
+}

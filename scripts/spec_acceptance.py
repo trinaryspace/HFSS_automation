@@ -81,7 +81,9 @@ def _build_and_capture(args):
 
     ws = _load(workspace / "src" / "ws_common.py", "_ws_common")
     capture = _load(workspace / "src" / "capture_state.py", "_capture_state")
+    _quieten_pyaedt()
     hfss = ws.attach(launch=True)
+    _quieten_pyaedt()
     try:
         build(spec, hfss, BuildLog(emit=lambda line: print(line, flush=True)))
     except CompileError as exc:
@@ -96,6 +98,21 @@ def _load(path: Path, name: str):
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _quieten_pyaedt():
+    """Silence pyAEDT's INFO stream *after* it has configured its logger.
+
+    Setting PYAEDT_LOG_LEVEL before the import is not enough — pyAEDT installs
+    its own handlers on the `Global` logger when `ansys.aedt.core` is imported,
+    which happens inside ws_common. Measured on the first live acceptance run,
+    which printed a dozen INFO lines despite the env var.
+    """
+    for name in ("Global", "pyaedt", "ansys.aedt.core"):
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.WARNING)
+        for handler in logger.handlers:
+            handler.setLevel(logging.WARNING)
 
 
 if __name__ == "__main__":

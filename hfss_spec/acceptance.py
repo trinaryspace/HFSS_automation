@@ -94,6 +94,35 @@ class Acceptance:
         return "\n".join(lines) + "\n"
 
 
+_RND_TAIL = "__<RND>"
+
+
+def _match_key(section: str, key: str) -> str:
+    """The form two snapshots of the same model must agree on.
+
+    Two normalisations, both learned from the first live acceptance run and
+    both about AEDT's own behaviour rather than about the compiler:
+
+    - **A boundary AEDT auto-named carries a random suffix; one the compiler
+      named does not.** `canon()` reduces the pilot's `Rad__M4WFEW` to
+      `Rad__<RND>`, and the compiler's deterministic `Rad` is the same
+      boundary. Dropping the canonical tail makes them comparable. The
+      determinism is an improvement, not a difference worth reporting.
+    - **Material names are case-insensitive in AEDT and come back
+      lower-cased.** The pilot's spec said `FR4_43` and its snapshot reads
+      `fr4_43`.
+    """
+    if section == "boundaries" and key.endswith(_RND_TAIL):
+        return key[: -len(_RND_TAIL)]
+    return key
+
+
+def _match_value(section: str, value):
+    if section == "materials" and isinstance(value, str):
+        return value.lower()
+    return value
+
+
 def compare(reference: dict, built: dict,
             sections: tuple[str, ...] = COMPARED_SECTIONS) -> Acceptance:
     """Diff a stored snapshot against a freshly captured one.
@@ -135,12 +164,14 @@ def _diff_objects(expected: list, actual: list, acceptance: Acceptance) -> None:
 
 def _diff_mapping(section: str, expected: dict, actual: dict,
                   acceptance: Acceptance) -> None:
-    for key in sorted(set(expected) | set(actual)):
-        if expected.get(key) == actual.get(key):
+    left = {_match_key(section, k): v for k, v in expected.items()}
+    right = {_match_key(section, k): v for k, v in actual.items()}
+    for key in sorted(set(left) | set(right)):
+        a, b = left.get(key), right.get(key)
+        if _match_value(section, a) == _match_value(section, b):
             continue
         acceptance.differences.append(Difference(
-            f"{section}.{key}", expected.get(key), actual.get(key),
-            _classify(section, key, expected.get(key), actual.get(key)),
+            f"{section}.{key}", a, b, _classify(section, key, a, b),
         ))
 
 

@@ -514,6 +514,12 @@ class TestCompilerGolden(unittest.TestCase):
         sweep = hfss.ops("sweep")[0][1]
         self.assertEqual(sweep["num_of_freq_points"], 201)
         self.assertEqual(sweep["sweep_type"], "Discrete")
+        # `unit` is singular and the endpoints are bare floats in it -- the
+        # first live acceptance run rejected `units=` plus unit-carrying
+        # strings. The authored unit is preserved so the UI reads GHz.
+        self.assertEqual(sweep["unit"], "GHz")
+        self.assertEqual((sweep["start_frequency"], sweep["stop_frequency"]),
+                         (2.0, 3.0))
 
     def test_validate_simple_failure_stops_the_build(self):
         with self.assertRaises(compiler.CompileError):
@@ -718,10 +724,127 @@ class TestAcceptance(unittest.TestCase):
             self.assertEqual(spec.variables.get(name), expression, name)
 
 
+class TestPhysicsEstimators(unittest.TestCase):
+    """Ticket 09. Each estimator against a worked example computed elsewhere.
+
+    The reference numbers come from `knowledge/cases/*/case.json`, where they
+    were recomputed from the textbook relations rather than copied out of a
+    paper — which is the whole point, given that a paper disagreeing with
+    itself is the failure this check exists to catch.
+    """
+
+    def test_effective_permittivity_balanis_14_1(self):
+        from hfss_spec import physics
+        ereff = physics.effective_permittivity(er=4.4, h=1.6e-3, w=38.0100e-3)
+        self.assertAlmostEqual(ereff, 4.0857, places=4)
+
+    def test_fringing_extension_balanis_14_2(self):
+        from hfss_spec import physics
+        dl = physics.fringing_extension(ereff=4.0857, h=1.6e-3, w=38.0100e-3)
+        self.assertAlmostEqual(dl * 1e3, 0.7388, places=4)
+
+    def test_patch_resonance_returns_the_frequency_it_was_synthesised_for(self):
+        from hfss_spec import physics
+        f = physics.patch_resonance(patch_l=29.4216e-3, patch_w=38.0100e-3,
+                                    h=1.6e-3, er=4.4)
+        self.assertAlmostEqual(f / 1e9, 2.4, places=3)
+
+    def test_hammerstad_reproduces_the_50_ohm_synthesis(self):
+        from hfss_spec import physics
+        z0, ereff = physics.microstrip_impedance(w=3.0829e-3, h=1.6e-3, er=4.4)
+        self.assertAlmostEqual(ereff, 3.3323, places=4)
+        self.assertAlmostEqual(z0, 50.0, places=1)
+
+    def test_guide_wavelength_matches_the_case(self):
+        from hfss_spec import physics
+        lam = physics.guide_wavelength(2.4e9, 3.3323)
+        self.assertAlmostEqual(lam * 1e3, 68.4282, places=3)
+
+    def test_wr90_te10_cutoff(self):
+        from hfss_spec import physics
+        f = physics.rectangular_waveguide_cutoff(a=0.9 * 25.4e-3)
+        self.assertAlmostEqual(f / 1e9, 6.5571, places=4)
+
+    def test_bowtie_estimator_against_the_MEASURED_pilot_resonance(self):
+        """The honesty test the ticket asks for.
+
+        The pilot's delivered geometry measured 3.85 GHz. If the estimator
+        cannot get near that, it has no business flagging anyone's paper.
+        """
+        from hfss_spec import physics
+        f = physics.bowtie_resonance(side=26.3269e-3, base=20.2168e-3,
+                                     h=1.6e-3, er=4.3)
+        error_pct = 100.0 * (f - 3.85e9) / 3.85e9
+        self.assertLess(abs(error_pct), 2.0,
+                        f"predicted {f/1e9:.4f} GHz against a measured 3.85 GHz "
+                        f"({error_pct:+.2f}%)")
+
+
+class TestPrecheck(unittest.TestCase):
+    def test_patch_spec_is_consistent(self):
+        from hfss_spec import physics
+        result = physics.check(load_spec(PATCH_SPEC))
+        self.assertEqual(result.verdict, "consistent", result.text())
+        self.assertLess(abs(result.prediction.delta_pct), 1.0)
+
+    def test_the_pilot_bowtie_is_flagged_against_its_own_target(self):
+        """The Astuti failure class, caught in microseconds.
+
+        The delivered geometry resonates at 3.85 GHz against a 3.5 GHz target.
+        That is a real disagreement, it survived four solves and twenty hours,
+        and the estimator sees it before anything is built.
+        """
+        from hfss_spec import physics
+        result = physics.check(load_spec(CASES / "bowtie-3500" / "design.yaml"))
+        self.assertEqual(result.verdict, "INCONSISTENT", result.text())
+        self.assertGreater(result.prediction.delta_pct, 8.0)
+
+    def test_astuti_table_reading_is_flagged_harder(self):
+        """Astuti et al. 2022's Table I, as a fixture.
+
+        Table I reads 46 x 23 mm where the figure and the equations give
+        52.64 x 26.32. Building the Table reading would have put the resonance
+        ~24% above the stated 3.5 GHz target.
+        """
+        from hfss_spec import physics
+        table = physics.bowtie_resonance(side=23.0e-3, base=46.0e-3,
+                                         h=1.6e-3, er=4.3)
+        figure = physics.bowtie_resonance(side=26.32e-3, base=52.64e-3,
+                                          h=1.6e-3, er=4.3)
+        self.assertGreater(100.0 * (table - 3.5e9) / 3.5e9, 15.0)
+        self.assertNotAlmostEqual(table / 1e9, figure / 1e9, places=1)
+
+    def test_tolerances_come_from_the_playbook_not_the_code(self):
+        from hfss_spec import physics
+        source = (REPO / "hfss_spec" / "physics.py").read_text(encoding="utf-8")
+        recipes = physics.load_tolerances()
+        self.assertIn("bow-tie-patch", recipes)
+        for entry in recipes.values():
+            self.assertIn("tolerance_pct", entry)
+        # No recipe's tolerance is hard-coded next to its estimator.
+        self.assertNotIn("tolerance_pct = 8", source)
+
+    def test_an_unknown_recipe_reports_rather_than_raising(self):
+        from hfss_spec import physics
+        spec = spec_from_dict(minimal_spec(recipe="not-a-recipe"))
+        result = physics.check(spec)
+        self.assertEqual(result.verdict, "no-estimator")
+
+    def test_the_check_never_blocks(self):
+        """Exit code 0 even on INCONSISTENT — the user arbitrates."""
+        import subprocess
+        out = subprocess.run(
+            [sys.executable, str(REPO / "scripts" / "precheck.py"),
+             str(CASES / "bowtie-3500" / "design.yaml")],
+            capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0)
+        self.assertIn("INCONSISTENT", out.stdout)
+
+
 class TestImportLayering(unittest.TestCase):
     def test_tier0_modules_do_not_mention_pyaedt(self):
         for name in ("units", "expressions", "schema", "validate",
-                     "snapshot_to_spec", "loader"):
+                     "snapshot_to_spec", "loader", "physics", "acceptance"):
             source = (REPO / "hfss_spec" / f"{name}.py").read_text(encoding="utf-8")
             with self.subTest(name):
                 self.assertNotIn("ansys.aedt", source)

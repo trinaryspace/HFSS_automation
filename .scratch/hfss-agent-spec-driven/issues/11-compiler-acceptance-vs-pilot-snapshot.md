@@ -21,8 +21,8 @@ backlog.
 
 **Status:** ready-for-human
 
-- [ ] `design.yaml` for the pilot bowtie compiles onto a fresh desktop and captures a snapshot — **needs a license**; the spec exists and validates clean
-- [~] Snapshot diff against the pilot's stored `model_snapshot.json` is empty after `canon()` normalization — the diff is built and regression-tested offline against the real pilot snapshot (identity, suffix normalisation, missing object, left-over intermediate, changed variable, bbox deltas); running it against a compiled model needs the desktop
+- [x] `design.yaml` for the pilot bowtie compiles onto a fresh desktop and captures a snapshot
+- [x] Snapshot diff against the pilot's stored `model_snapshot.json` is empty after `canon()` normalization — the diff is built and regression-tested offline against the real pilot snapshot (identity, suffix normalisation, missing object, left-over intermediate, changed variable, bbox deltas); running it against a compiled model needs the desktop
 - [x] Any residual difference is classified in Comments as compiler bug or schema gap, with the schema gaps filed — classifier implemented (compiler bug / schema gap / capture gap); the Comments entry lands with the live run
 - [x] Runs as a Tier 1 target (build only, no solve) and completes in minutes — `scripts/spec_acceptance.py`, which never solves
 - [ ] The same acceptance is repeated for the microstrip-line case as a second, cheaper data point — needs a `design.yaml` for microstrip-50r
@@ -45,3 +45,58 @@ backlog.
     bboxes match, and how the `PatchTriUp` / `FeedLine` intermediates classify
     - the pilot united them away, and whether the compiler leaves them behind
     is exactly the schema-gap question this ticket exists to answer.
+
+- 2026-08-15: **ACCEPTANCE PASSES ON A LIVE DESKTOP.** The compiler rebuilt the
+  pilot's bow-tie from `knowledge/cases/bowtie-3500/design.yaml` on a fresh
+  launched desktop (an isolated copy workspace — never the pilot, which holds
+  solved results), and the captured snapshot matches the stored one:
+
+      PASS: solution_type solution_type=Modal
+      PASS: variables design=12 project=0
+      PASS: materials declared=3 created=1
+      PASS: geometry ops=10 objects=7
+      PASS: excitations ports=1
+      PASS: boundaries count=1
+      PASS: mesh strategy=adaptive_only operations=0
+      PASS: setup_sweep setup=Setup1 passes=15 sweep=Sweep1
+      PASS: validate validate_simple=True objects=7
+      PASS: spec_acceptance sections=4 differences=0 compiler_bugs=0 schema_gaps=0
+        bbox objects differing: 0
+
+  **Every bounding box matches exactly** — the model the 25-hour pilot produced,
+  rebuilt from a document in about a minute, with `validate_simple()` True.
+
+- **The live run earned its keep: it found two API defects the recorder could
+  not.** Both are now library code, and both were mistakes of the exact class
+  the golden tests are blind to — a mocked call sequence cannot know a
+  signature is wrong.
+  1. `Materials.checkifmaterialexists` does not exist on pyAEDT 1.3.0. The real
+     predicate is `exists_material`; the pilot's own `03_materials.py` used
+     `materials[name]` indexing (returns None rather than raising). The
+     compiler now prefers the predicate and falls back to the index.
+  2. `create_linear_count_sweep` takes `unit` (singular) plus **bare float**
+     endpoints, not unit-carrying strings. The compiler now splits `3.2GHz`
+     into `("GHz", 3.2)` and preserves the authored unit so the UI reads GHz.
+  A third finding: `PYAEDT_LOG_LEVEL=WARNING` set before the import does NOT
+  suppress pyAEDT's INFO stream — it installs its handlers on the `Global`
+  logger at import time, so the level has to be re-applied afterwards.
+
+- **The three residual differences, classified** — none of them a compiler bug,
+  and the diff now normalises all three:
+  - `materials.Substrate` read `fr4_43` against the spec's `FR4_43`. AEDT
+    material names are case-insensitive and come back lower-cased. Compared
+    case-insensitively.
+  - the radiation boundary read `Rad__M4WFEW` against the compiler's `Rad`.
+    The pilot let AEDT auto-name and got a random suffix; the compiler names
+    it deterministically, which is an improvement rather than a difference.
+    `canon()` already reduces the suffix to `__<RND>`, so the diff now drops
+    that canonical tail when matching boundary keys.
+  - a prediction in the previous comment was **wrong**: `PatchTriUp` and
+    `FeedLine` do NOT survive as left-over intermediates. `unite` consumes
+    them exactly as the pilot's script did, so the live object count is 5, not
+    7. (`objects=7` in the geometry PASS line counts names the *spec*
+    declares, not objects left in the modeler.)
+
+- Still open: the same acceptance for microstrip-50r as a second, cheaper data
+  point, which needs a `design.yaml` for it.
+

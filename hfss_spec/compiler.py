@@ -130,7 +130,15 @@ def _stage_materials(spec: DesignSpec, hfss, log: BuildLog) -> None:
         if not isinstance(material, MaterialDef):
             continue
         name = key
-        if hfss.materials.checkifmaterialexists(name):
+        # `checkifmaterialexists` does not exist on pyAEDT 1.3.0 — found by the
+        # first live acceptance run. `exists_material` is the real predicate,
+        # and indexing is the pilot's shape (`materials[name]` returns None
+        # rather than raising when the material is absent), so both are used:
+        # the predicate where it exists, the index as the fallback.
+        probe = getattr(hfss.materials, "exists_material", None)
+        present = bool(probe(name)) if callable(probe) else \
+            hfss.materials[name] is not None
+        if present:
             existing = hfss.materials[name]
         else:
             existing = hfss.materials.add_material(name)
@@ -187,11 +195,15 @@ def _stage_setup_sweep(spec: DesignSpec, hfss, log: BuildLog) -> None:
     if setup_spec.sweep is not None:
         sweep = setup_spec.sweep
         sweep_name = sweep.name
+        # `create_linear_count_sweep` takes a single `unit` plus bare float
+        # endpoints — not strings carrying their own units, and the parameter
+        # is `unit`, singular. Found by the first live acceptance run.
+        unit, start, stop = _frequency_pair(spec, sweep)
         hfss.create_linear_count_sweep(
             setup=setup_spec.name,
-            units="",                       # units travel on the values
-            start_frequency=_as_aedt(sweep.start),
-            stop_frequency=_as_aedt(sweep.stop),
+            unit=unit,
+            start_frequency=start,
+            stop_frequency=stop,
             num_of_freq_points=sweep.count,
             name=sweep.name,
             sweep_type={"interpolating": "Interpolating",
@@ -540,3 +552,25 @@ def _number(value) -> float:
     """A literal quantity's magnitude, for the few APIs that demand a float."""
     from .units import parse_quantity
     return parse_quantity(value).value
+
+
+def _frequency_pair(spec: DesignSpec, sweep) -> tuple[str, float, float]:
+    """`(unit, start, stop)` for the sweep API's one-unit-plus-floats shape.
+
+    Literal endpoints keep their own unit, so `3.2GHz` stays `("GHz", 3.2,
+    4.2)` and reads correctly in the AEDT UI. An endpoint written as an
+    expression over variables is evaluated against the spec's variable table
+    and falls back to Hz, because there is no authored unit to preserve.
+    """
+    from .expressions import evaluate, resolve_all
+    from .units import UnitError, parse_quantity
+
+    try:
+        start_q, stop_q = parse_quantity(sweep.start), parse_quantity(sweep.stop)
+    except UnitError:
+        scope = resolve_all(spec.variable_scope())
+        start = evaluate(sweep.start, scope).si
+        stop = evaluate(sweep.stop, scope).si
+        return "Hz", start, stop
+    unit = start_q.unit or "Hz"
+    return unit, start_q.value, stop_q.to(unit).value

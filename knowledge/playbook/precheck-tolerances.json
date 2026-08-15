@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "Per-recipe tolerance for the closed-form physics pre-check (ticket 09).",
+    "Data, not code: what counts as a disagreement worth raising is a domain",
+    "judgement about how good the closed form is for that structure, and it",
+    "belongs where the domain knowledge lives. `tolerance_pct` is the signed",
+    "disagreement between the estimator's prediction and the spec's stated",
+    "target beyond which the Clarification block surfaces both numbers for the",
+    "user to arbitrate. The check NEVER blocks and never overrides the user.",
+    "",
+    "A spec's own `target.tolerance_pct` wins when it is present; these are the",
+    "fallback and the record of how far each closed form can be trusted."
+  ],
+  "recipes": {
+    "inset-fed-rectangular-patch": {
+      "tolerance_pct": 5.0,
+      "estimator": "patch_resonance",
+      "note": "Balanis 14-1/14-2/14-7 are good to a few percent on a thin substrate; FR4's own permittivity tolerance dominates the error."
+    },
+    "bow-tie-patch": {
+      "tolerance_pct": 8.0,
+      "estimator": "bowtie_resonance",
+      "note": "Wider than the patch: a bow-tie's resonance is not set by a single closed-form length. Validated against the delivered pilot model, where the equilateral-triangle relation predicts within ~1% of the measured 3.85 GHz."
+    },
+    "microstrip-line": {
+      "tolerance_pct": 3.0,
+      "estimator": "microstrip_impedance",
+      "note": "Hammerstad-Jensen is quoted at ~1% for W/h in 0.1-10; 3% leaves room for the substrate's own tolerance."
+    },
+    "parallel-coupled-line-filter": {
+      "tolerance_pct": 5.0,
+      "estimator": "microstrip_impedance",
+      "note": "v1 checks the feed-line synthesis only. The coupled-section design is not estimated, so a PASS here says less than it does for the other recipes."
+    },
+    "pyramidal-horn": {
+      "tolerance_pct": 10.0,
+      "estimator": "horn_cutoff",
+      "note": "v1 checks the feed waveguide's TE10 cutoff against the operating band, not the aperture gain. Wide, because it is a sanity check rather than a prediction."
+    }
+  }
+}

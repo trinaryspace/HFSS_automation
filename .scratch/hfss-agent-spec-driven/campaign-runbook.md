@@ -64,18 +64,71 @@ Not everything should be automated, and two of these are load-bearing:
   the failure mode being measured, and a self-graded false-green rate would be
   worth nothing. This one is not delegable.
 
-### The new pivotal unknown
+### The headless path is validated — cell X0a-DRY, 2026-08-16
 
-**Nobody has ever run the hfss-agent skill headless.** Its Clarification session
-ends *"Done when: the user confirmed the Recipe, the assumptions, and the QA
-signals"* — and there is no user. The agent will either self-confirm (which
-changes what Wave A measures) or stall waiting (a legitimate, recordable
-outcome, and a finding about the skill).
+The dry cell ran. Full record: `../hfss-agent-parallel-tests/cells/X0a-DRY.md`.
 
-**So: one dry cell before twelve.** Run a single Wave A cell end to end, confirm
-the skill behaves sanely without a human and that the JSON extraction yields the
-fields the record needs, then fan out. Do not spend twelve cells on an unvalidated
-harness — that is how `swift-otter` happened.
+**It works, and it is a two-turn protocol.** The skill loaded as the first tool
+call, followed its Read-first protocol, computed the closed forms itself, wrote
+`design.yaml` — **the first `design.yaml` ever authored by an LLM here** — and
+then **ended its turn cleanly at the Clarification confirmation gate**, exit 0.
+It did not stall, hang, or self-confirm. Resumed with `--session`, it took the
+correction, widened the sweep, wrote the ledger, and never launched AEDT.
+
+So a Wave A cell is two commands, not one:
+
+```
+# turn 1 - Clarification. Ends at the confirmation gate.
+opencode run --dir $CELLS\cell-<ID> --variant max --auto --format json "<prompt>" > $LOG\cells\<ID>.t1.json
+
+# read the session id out of the events, then answer as the operator:
+opencode run --dir $CELLS\cell-<ID> --session <ses_...> --variant max --auto --format json "<reply>" > $LOG\cells\<ID>.t2.json
+```
+
+**The operator reply is part of the experiment and goes in the record verbatim.**
+Keep it minimal and non-steering — confirm, correct only what the agent asked
+about, and repeat the scope bound. A reply that volunteers design help turns an
+authoring measurement into a collaboration.
+
+### The contamination this cell caught
+
+X0a's clean-room removed `knowledge/cases/patch-2400/design.yaml` and nothing
+else. The agent then read `patch-2400/case.json` and `notes.md`, which carry
+`key_dimensions` — width 38.0100, ereff 4.0857, dL 0.7388, length 29.4216 — and
+the derivation in prose. Its own summary cites *"case.json's lumped_port +
+Modal"*.
+
+Its `precheck` delta of **-0.00%** therefore proves nothing about authoring. Both
+gates passed on a spec copied from the answer key.
+
+**Moving the spec aside does not blind a cell.** Fixed: `campaign/base-nopatch`
+and `campaign/base-nohorn` remove the **entire case directory**, and
+`pilot_preflight --expect-missing` now fails if the directory merely exists.
+
+Note what this says about the gates themselves: `validate_spec` and `precheck`
+were both green on a spec of worthless provenance. **No automated gate caught
+it — only reading the transcript did.** That is the false-green mechanism in
+miniature, and it is why §7's human correctness verdict cannot be delegated.
+
+### The cost finding that should reshape the target
+
+| stage | billed | parts |
+|---|---|---|
+| fixed overhead (one word, no tools) | 10,086 | 5 |
+| **turn 1: Clarification + design.yaml** | **79,401** | **106** |
+| cumulative after turn 2 (+ ledger) | 84,691 | 130 |
+| acceptance threshold, **for a whole run** | ≤80,000 | ≤60 |
+
+**Clarification alone spent 99.3% of the token budget and 177% of the parts
+budget**, before any build or solve. Turn 2 added only ~5,290 billed and 24
+parts, so the cost sits in turn 1's reading protocol, not in the conversation.
+
+This relocates the phase-2 gap. It is not build overhead and not solve churn —
+`kind-rocket` already showed those shrinking. It is **the cost of reaching the
+first design decision**. Tickets 15 and 14 point there; nothing else does.
+
+Treat this as N=1 on a contaminated cell: the direction is solid, the exact
+figures are not yet a baseline.
 
 ### Confounds this introduces, to be written in every record
 

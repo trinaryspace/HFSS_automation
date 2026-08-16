@@ -23,8 +23,23 @@ $LOG   = C:\Users\afpim\Repos\HFSS_automation\.scratch\hfss-agent-parallel-tests
 
 ## Phase W0 — before any cell runs (you, ~90 min, no terminals)
 
-Ten tasks. **W0-5 and W0-6 are blocking for every measurement in the
-campaign**; everything else is blocking only for the wave it names.
+Ten tasks. **W0-5 is blocking for every measurement in the campaign**;
+everything else is blocking only for the wave it names.
+
+**Status as of 2026-08-16 — four are already done:**
+
+| task | owner | status |
+|---|---|---|
+| W0-1 merge | you | pending — one command |
+| W0-2 license seats | you | pending — needs VPN |
+| W0-3 clear desktops | you | pending — your machine |
+| W0-4 tier0 baseline | done | `PASS: tier0 suites=10 failed=0` (229 s) |
+| W0-5 attribution probe | you | pending — needs a real opencode session |
+| W0-6 run_card patch | done | landed unconditionally; regression verified |
+| W0-7 pilot_preflight | done | built and tested on all four paths |
+| W0-8 freeze skill | done | skill commit `2d47289`; `install_skill` 2/2 |
+| W0-9 create log | done | scaffold committed |
+| W0-10 Wave C scope | you | a decision, not a command |
 
 ### W0-1 — land the plan (2 min)
 
@@ -241,41 +256,63 @@ git worktree add $CELLS\cell-<ID> -b cell/<ID> main
 
 The path must contain `HFSS_automation` (W0-5). `$CELLS` satisfies this.
 
-**Step 3 — hygiene, printed not assumed.**
+**Step 3 — clean-room the worktree.** *Not optional, and not what the plan
+originally said.*
+
+**A fresh worktree is not empty.** 152 files under `workspaces/` are tracked —
+including all twelve of `workspaces/patch-2400/src/`'s staged scripts, complete
+and working. Verified 2026-08-16. So every cell would otherwise launch into a
+tree containing a finished, copyable solution for the reference case.
+
+This reframes `swift-otter` rather than excusing it: "a complete predecessor is
+sitting right there" was the **default condition of every run this repo has ever
+done**, not something unusual about that one. Empty is a state you make, not one
+you find.
 
 ```
 cd $CELLS\cell-<ID>
-python scripts\pilot_preflight.py --cell <ID>
+git rm -r -q workspaces
+git commit -q -m "wip"
 ```
 
-Manual equivalent until W0-7 lands:
+Neutral commit message on purpose — a cell branch whose log reads "remove
+predecessor workspaces so the agent cannot copy them" leaks the experiment to any
+agent that runs `git log`.
 
-```
-cd $CELLS\cell-<ID>
-git rev-parse HEAD
-Get-ChildItem workspaces -Directory
-Get-ChildItem knowledge\cases\*\design.yaml | Select-Object FullName
-python scripts\validate_cases.py
-```
-
-Paste the output verbatim into the cell record. Do **not** run `tier0.py` here —
-it fails in a worktree by design (the snapshot corpus under
-`workspaces/*/results/` is gitignored) and it is 290 s.
+Skip this **only** for D1-B, where a copyable predecessor is the experiment.
 
 **Step 4 — move specs aside, if this cell requires it.** Only X0a, X0b, S3 and
-D2-B. Commit the removal on the cell branch so the tree is clean and `git status`
-does not leak the manipulation to the agent:
+D2-B:
 
 ```
 cd $CELLS\cell-<ID>
-git rm knowledge\cases\patch-2400\design.yaml     # X0a / X0b
-git commit -m "wip"
+git rm -q knowledge\cases\patch-2400\design.yaml    # X0a / X0b / D2-B
+git commit -q -m "wip"
 ```
 
-(`horn-10ghz` for S3.) Neutral message on purpose. No `index.json` edit needed
-(W0-7 note).
+(`horn-10ghz` for S3.) No `index.json` edit needed — verified: `validate_cases`
+reports a spec-less case in its `without` list and explicitly does not fail.
 
-**Step 5 — launch.** Start opencode **from the worktree root**:
+**Step 5 — hygiene, printed not assumed.**
+
+```
+cd $CELLS\cell-<ID>
+python scripts\pilot_preflight.py --cell <ID> --expect-missing patch-2400
+```
+
+`--expect-missing` takes the case you moved aside in step 4 (omit it otherwise);
+`--allow-workspaces` is for D1-B only. Expect:
+
+```
+PASS: preflight cell=<ID> workspaces=0 specs=<n>
+```
+
+Paste the whole block verbatim into the cell record. A `FAIL:` here means the
+cell is contaminated — fix it before launching, not after. Do **not** run
+`tier0.py` here: it fails in a worktree by design (the snapshot corpus under
+`workspaces/*/results/` is gitignored) and takes ~230 s.
+
+**Step 6 — launch.** Start opencode **from the worktree root**:
 
 ```
 cd $CELLS\cell-<ID>
@@ -285,18 +322,18 @@ opencode
 Paste the cell's prompt from §3–§6 **verbatim**. Nothing else. No mention of
 routes, specs, tickets, tokens, waves, or these documents.
 
-**Step 6 — record the slug immediately.** Note the opencode session slug in the
+**Step 7 — record the slug immediately.** Note the opencode session slug in the
 cell record as soon as it exists. If the run splits into phase sessions or spawns
 subagents, record **every** slug. You cannot recover this later.
 
-**Step 7 — observe without steering.** Note, do not correct:
+**Step 8 — observe without steering.** Note, do not correct:
 route announced and the reason given; every `validate_spec` failure and its error
 path; the `precheck` verdict and whether the agent noticed an absent estimator;
 every escape hatch and its stated reason; parts before the first AEDT launch; any
 dimension it produced without naming the relation. A "wrong" route or a refusal
 is **data, not operator error** — let it run.
 
-**Step 8 — card it, immediately at cell end.**
+**Step 9 — card it, immediately at cell end.**
 
 ```
 cd $CELLS\cell-<ID>
@@ -317,7 +354,7 @@ Record **raw wall only.** The active-wall axis is dead by construction (ticket 0
 defect D2: nothing writes `solve_submitted_at.txt`, and `ledger_start_ms`'s regex
 never parses the start boundary). Do not report an active-wall number.
 
-**Step 9 — verdicts.** Fill the rest of the record, including the two that no
+**Step 10 — verdicts.** Fill the rest of the record, including the two that no
 script can produce: the **human correctness verdict** (correct / subtly wrong /
 grossly wrong) and the **failure-layer tag**. For a wrong spec, answer explicitly:
 *would any automated gate have caught this?* That answer is the false-green rate.
@@ -495,14 +532,18 @@ D1 and D2 — they must run to a natural gate for route choice to mean anything.
 
 Same prompt both sides — reuse the **S1** text without its scope line.
 
-- **D1-A**: fresh worktree, `workspaces/` empty. (Standard step 3.)
-- **D1-B**: before launch, copy a plausible predecessor in:
-  ```
-  cd $CELLS\cell-D1-B
-  git checkout main -- workspaces/patch-2400
-  git commit -m "wip"
-  ```
-  Verify `workspaces/patch-2400/src/*.py` is present, then launch.
+**Note the arms are the reverse of what the plan first assumed.** Tracked
+predecessors are the *default* state of any worktree (step 3), so:
+
+- **D1-A — the manipulated arm**: clean-roomed, `workspaces/` empty. Do step 3.
+- **D1-B — the status-quo arm**: skip step 3 entirely and launch with all nine
+  tracked workspaces in place, `patch-2400/src`'s twelve staged scripts included.
+  Run the pre-flight with `--allow-workspaces` so it records the state rather
+  than failing it.
+
+D1-B is what **every run this repo has ever done** looked like. That is what
+makes it worth measuring: if it copies, the finding is not about `swift-otter`,
+it is about every run.
 
 Scoring: did D1-B copy or adapt those scripts? Did the ledger say so? This
 converts §3's single uncontrolled observation into a controlled one.

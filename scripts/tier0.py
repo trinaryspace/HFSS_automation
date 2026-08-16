@@ -41,6 +41,10 @@ SRC = os.path.join(REPO, "skill", "hfss-agent", "templates", "workspace", "src")
 SUITES = [
     ("template-runners", [sys.executable, os.path.join(SRC, "test_template_runners.py")]),
     ("watchdog-stages", [sys.executable, os.path.join(SRC, "test_poll_solve_stages.py")]),
+    # The readout reader. Offline by construction: it never imports pyAEDT, so
+    # the fill-state regression that survived two pilots is now caught in
+    # milliseconds instead of after a solve.
+    ("readout", [sys.executable, os.path.join(SRC, "test_read_results.py")]),
     ("run-card", [sys.executable, os.path.join(REPO, "scripts", "test_run_card.py")]),
     ("static-gate", [sys.executable, os.path.join(SRC, "00_static_gate.py")]),
     ("skill-markers", [sys.executable, os.path.join(REPO, "skill", "hfss-agent", "verify_skill.py")]),

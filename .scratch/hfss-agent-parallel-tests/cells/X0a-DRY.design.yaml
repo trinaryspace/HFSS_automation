@@ -1,0 +1,139 @@
+# patch-2400 inset-fed rectangular microstrip patch — locked design (Clarification draft).
+#
+# Recipe: the canonical patch-2400 reference (knowledge/cases/patch-2400).
+# Every number below is recomputed from the recipe's stated relations, not
+# copied: patch width/length from Balanis 14-6 / 14-7 (via
+# hfss_spec.physics), feed width from Hammerstad-Jensen solved for 50 ohm,
+# inset depth from the cos^2 input-resistance model matched to 50 ohm.
+spec_version: 1
+name: patch-2400
+recipe: inset-fed-rectangular-patch
+solution_type: Modal
+
+provenance:
+  source: "closed-form: Balanis ch.14 (patch), Hammerstad-Jensen (feed), cos^2 match (inset)"
+  canonical_reading: closed-form
+  case: knowledge/cases/patch-2400
+
+target:
+  quantity: resonant_frequency
+  value: 2.4GHz
+  tolerance_pct: 5
+
+variables:
+  f0: 2.4GHz
+  er: 4.4
+  h: 1.6mm
+  cu_t: 0.035mm
+  patch_W: 38.0100mm            # Balanis 14-6
+  patch_L: 29.4216mm            # Balanis 14-7 with 14-2 fringing
+  feed_W: 3.0829mm              # Hammerstad-Jensen, 50 ohm on 1.6mm FR4
+  notch_g: 2mm                  # inset slot width, one side; tuned for match
+  inset_d: 11.65mm              # inset depth, cos^2 model -> 50 ohm (39.6% of L)
+  sub_W: "patch_W + 12*h"       # substrate >= 6h beyond patch edges
+  feed_run: 12mm                # feed overhang, patch bottom edge to substrate edge
+  sub_L: "patch_L + 6*h + feed_run"
+  air_pad: 32mm                 # ~lambda0/4 at 2.4 GHz
+
+materials:
+  fr4:
+    library: FR4_epoxy
+  metal:
+    library: pec
+  air:
+    library: air
+
+geometry:
+  - op: box
+    name: Substrate
+    material: fr4
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L, h]
+
+  - op: sheet
+    name: Ground
+    material: metal
+    plane: xy
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L]
+
+  - op: box
+    name: Patch
+    material: metal
+    origin: ["-patch_W/2", "-patch_L/2", h]
+    size: [patch_W, patch_L, cu_t]
+
+  # The two inset slots, cut out of the patch on either side of the feed.
+  - op: box
+    name: NotchL
+    material: metal
+    origin: ["-feed_W/2 - notch_g", "-patch_L/2", h]
+    size: [notch_g, inset_d, cu_t]
+  - op: box
+    name: NotchR
+    material: metal
+    origin: ["feed_W/2", "-patch_L/2", h]
+    size: [notch_g, inset_d, cu_t]
+
+  - op: subtract
+    name: Patch
+    tools: [NotchL, NotchR]
+
+  # Feed line from the substrate edge (port plane) to the inset notch bottom.
+  - op: box
+    name: FeedLine
+    material: metal
+    origin: ["-feed_W/2", "-sub_L/2", h]
+    size: [feed_W, "sub_L/2 - patch_L/2 + inset_d", cu_t]
+
+  - op: unite
+    name: Patch
+    with: [FeedLine]
+
+  # Lumped port: rectangle on the substrate edge, ground to feed-line top.
+  - op: sheet
+    name: PortSheet
+    plane: xz
+    origin: ["-feed_W/2", "-sub_L/2", "0mm"]
+    size: [feed_W, cu_t]
+
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2 - air_pad", "-sub_L/2 - air_pad", "-air_pad"]
+    size: ["sub_W + 2*air_pad", "sub_L + 2*air_pad", "h + cu_t + 2*air_pad"]
+
+excitations:
+  - name: P1
+    type: lumped_port
+    on:
+      object: PortSheet
+    integration_line:
+      from:
+        point: ["0mm", "-sub_L/2", "0mm"]
+      to:
+        point: ["0mm", "-sub_L/2", cu_t]
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad
+    type: radiation
+    on:
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 12
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: interpolating
+    start: 1.9GHz
+    stop: 3.0GHz
+    count: 101
+
+qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]

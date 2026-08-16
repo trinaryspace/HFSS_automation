@@ -107,14 +107,23 @@ def main(argv=None):
           + (f" - {', '.join(with_spec)}" if with_spec else ""))
     if without_spec:
         print(f"  specs absent  {', '.join(without_spec)}")
+    # A case's design.yaml is NOT the only copy of its answer. case.json carries
+    # key_dimensions (patch_width_mm, ereff, fringing dL, patch_length_mm) and
+    # notes.md carries the Balanis derivation. Cell X0a proved this the
+    # expensive way: with only design.yaml removed, the agent read notes.md and
+    # case.json, and its "closed form agrees to -0.00%" was four numbers read
+    # off the answer key rather than derived. A blind authoring cell needs the
+    # WHOLE case directory gone.
     for case in args.expect_missing:
-        if case in with_spec:
+        directory = CASES / case
+        if directory.exists():
+            leftovers = ", ".join(sorted(p.name for p in directory.iterdir()))
             failures.append(
-                f"'{case}' design.yaml is still present but this cell expects it "
-                "moved aside - the agent will find it (this is what invalidated "
-                "swift-otter)")
-        elif case not in without_spec:
-            failures.append(f"'{case}' is not a case directory at all — typo?")
+                f"'{case}' case directory still exists ({leftovers}) - this cell "
+                "expects it gone. Removing design.yaml alone is not enough: "
+                "case.json holds key_dimensions and notes.md holds the "
+                "derivation, so the agent reads the answer instead of deriving "
+                "it (measured on cell X0a)")
 
     # 4. The skill is shared across every worktree; record which one.
     skill_commit = git("log", "-1", "--format=%h %s", "--", "skill/hfss-agent")

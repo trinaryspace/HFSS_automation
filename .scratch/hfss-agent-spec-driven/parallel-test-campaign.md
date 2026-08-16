@@ -6,6 +6,10 @@ Written 2026-08-16, against `state-of-the-tool-2026-08-16.md`.
 Audience: the operator (you) driving several opencode terminals, plus whoever
 plans improvements afterwards.
 
+**The executable companion is `campaign-runbook.md`** — this file is the *why*
+and the design; that one is the *what*, in order, with the commands. Start there
+once you have read §1–§3 here.
+
 This is a **measurement plan, not a build plan**. Nothing here proposes a fix.
 Its whole job is to produce evidence sharp enough that the improvement plan
 writes itself — every cell ends with a *failure-layer tag*, and the improvement

@@ -1,0 +1,113 @@
+# dipole-2450 — half-wave dipole, 2.45 GHz, free space.
+#
+# Clarification 2026-08-16 (user-confirmed): two collinear copper-wire arms
+# (PEC — skin depth ~1.4 um at 2.45 GHz), 1 mm diameter, 2 mm feed gap, lumped
+# port at the gap, airbox + radiation boundary. Closed-form design:
+# lambda0 = 122.36 mm; L_tot = 0.474*lambda0 = 58 mm (468/f rule, Balanis);
+# l/d = 58. Expected Z_in ~ 65-72 ohm + j0 at resonance; S11 at 50 ohm ~ -15 dB.
+# Everything is a variable; a post-solve resonance tune is a variable edit.
+spec_version: 1
+name: dipole-2450
+recipe: half-wave-dipole
+solution_type: Modal
+
+provenance:
+  source: "Clarification 2026-08-16, textbook closed-form (468/f rule, Balanis)"
+  canonical_reading: closed-form
+  notes: >-
+    New recipe derived in Clarification — no playbook entry exists, so the
+    closed-form numbers here are the hand cross-check the user approved:
+    lambda0 122.36 mm, L_tot 58.0 mm = 0.474*lambda0, arms 28 mm each,
+    gap 2 mm, wire 1 mm (l/d = 58), expected Z_in ~ 65-72 ohm, S11 ~ -15 dB
+    at 50 ohm. PEC wire per approved assumption.
+
+target:
+  quantity: resonant_frequency
+  value: 2.45GHz
+  tolerance_pct: 5
+
+variables:
+  f0: 2.45GHz
+  L_arm: 28mm
+  Gap: 2mm
+  WireD: 1mm
+  PortW: 4mm
+  AirGap: 30.6mm
+  L_tot: 2*L_arm + Gap
+
+materials:
+  pec:
+    library: pec
+  air:
+    library: air
+
+geometry:
+  # Lower arm: spans z in [-L_arm - Gap/2, -Gap/2].
+  - op: cylinder
+    name: Arm1
+    material: pec
+    origin: ["0mm", "0mm", "-L_arm - Gap/2"]
+    radius: WireD/2
+    height: L_arm
+    axis: z
+
+  # Upper arm: spans z in [+Gap/2, +L_arm + Gap/2]. Arms touch nowhere;
+  # tip-to-tip length is L_tot = 2*L_arm + Gap.
+  - op: cylinder
+    name: Arm2
+    material: pec
+    origin: ["0mm", "0mm", "Gap/2"]
+    radius: WireD/2
+    height: L_arm
+    axis: z
+
+  # Port ribbon inside the gap, coplanar with the axis (XZ plane at y = 0);
+  # its +-z edges sit on the arm end faces, so the lumped port bridges the
+  # two conductors. Integration line runs along the current direction (z).
+  - op: sheet
+    name: PortSheet
+    plane: xz
+    origin: ["-PortW/2", "0mm", "-Gap/2"]
+    size: [PortW, Gap]
+
+  # Radiation airbox: lambda0/4 = AirGap clearance from the wire surface.
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-AirGap - WireD", "-AirGap - WireD", "-L_tot/2 - AirGap"]
+    size: ["2*(AirGap + WireD)", "2*(AirGap + WireD)", "L_tot + 2*AirGap"]
+
+excitations:
+  - name: "1"
+    type: lumped_port
+    "on":
+      object: PortSheet
+    integration_line:
+      from:
+        point: ["0mm", "0mm", "-Gap/2"]
+      to:
+        point: ["0mm", "0mm", "Gap/2"]
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad
+    type: radiation
+    "on":
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 15
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: discrete
+    start: 1.9GHz
+    stop: 3.0GHz
+    count: 221
+
+qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]

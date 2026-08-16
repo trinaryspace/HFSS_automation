@@ -1,0 +1,138 @@
+# patch-5800 as a Design Spec.
+#
+# Inset-fed rectangular patch, 5.8 GHz, Rogers RO4350B, 0.762 mm, er 3.48.
+# Geometry from Balanis ch.14 closed form (same procedure as patch-2400),
+# feed width from Hammerstad (50 ohm), inset from the match-tuner rule.
+spec_version: 1
+name: patch-5800
+recipe: inset-fed-rectangular-patch
+solution_type: Modal            # explicit, never the default (env-compat #11)
+
+provenance:
+  source: "Balanis, Antenna Theory ch.14 design procedure (14-1, 14-2, 14-6, 14-7); Hammerstad-Jensen for the 50 ohm feed"
+  canonical_reading: closed-form
+  notes: >-
+    Closed-form, not paper-sourced, so there is no Table/Figure disagreement to
+    arbitrate. Construction shape mirrors the delivered patch-2400 run.
+
+target:
+  quantity: resonant_frequency
+  value: 5.8GHz
+  tolerance_pct: 5
+
+variables:
+  f0: 5.8GHz
+  er: 3.48
+  h: 0.762mm
+  cu_t: 0.035mm
+  patch_W: 17.2679mm            # Balanis 14-6
+  patch_L: 13.6238mm            # Balanis 14-7 with 14-2 fringing
+  feed_W: 1.7427mm              # Hammerstad 50 ohm on this stack
+  inset_d: 3.4mm                # the match tuner (~L/4); resonance is set by patch_L
+  inset_g: 1.2mm
+  sub_W: 33mm
+  sub_L: 33mm
+  air_pad: 13mm                 # ~lambda0/4 at f0
+  feed_run: "sub_L/2 - patch_L/2"
+
+materials:
+  ro4350b:
+    permittivity: er
+    loss_tangent: 0.0037
+  metal:
+    library: pec
+  air:
+    library: air
+
+geometry:
+  - op: box
+    name: Substrate
+    material: ro4350b
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L, h]
+
+  - op: sheet
+    name: GroundPlane
+    material: metal
+    plane: xy
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L]
+
+  - op: sheet
+    name: Patch
+    material: metal
+    plane: xy
+    origin: ["-patch_W/2", "-patch_L/2", h]
+    size: [patch_W, patch_L]
+
+  # The two inset notches that set the feed match. Cut, not drawn: the patch is
+  # a rectangle minus two slots, exactly how the patch-2400 run built it.
+  - op: sheet
+    name: InsetL
+    plane: xy
+    origin: ["-feed_W/2 - inset_g", "-patch_L/2", h]
+    size: [inset_g, inset_d]
+  - op: sheet
+    name: InsetR
+    plane: xy
+    origin: ["feed_W/2", "-patch_L/2", h]
+    size: [inset_g, inset_d]
+  - op: subtract
+    name: Patch
+    tools: [InsetL, InsetR]
+    keep_tools: false
+
+  # 50 ohm microstrip feed from the substrate edge into the inset, united with
+  # the patch so the port sees one conductor.
+  - op: sheet
+    name: Feed
+    material: metal
+    plane: xy
+    origin: ["-feed_W/2", "-sub_L/2", h]
+    size: [feed_W, "feed_run + inset_d"]
+  - op: unite
+    name: Patch
+    with: [Feed]
+
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2 - air_pad", "-sub_L/2 - air_pad", "-air_pad"]
+    size: ["sub_W + 2*air_pad", "sub_L + 2*air_pad", "h + 2*air_pad"]
+
+excitations:
+  - name: P1
+    type: lumped_port
+    on:
+      face_of: Substrate
+      direction: "-y"
+      pick: largest_area
+    integration_line:
+      from:
+        edge_mid: [GroundPlane, "-y", "max_z"]
+      to:
+        edge_mid: [Patch, "-y", "min_z"]
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad1
+    type: radiation
+    on:
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 15
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: discrete
+    start: 5.0GHz
+    stop: 6.6GHz
+    count: 201
+
+qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]

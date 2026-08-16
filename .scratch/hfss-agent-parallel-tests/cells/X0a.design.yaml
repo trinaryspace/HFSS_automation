@@ -1,0 +1,152 @@
+# patch-2400-inset — 2.4 GHz inset-fed rectangular microstrip patch on 1.6 mm FR4
+#
+# Rectangular patch, inset microstrip feed, 50 ohm, single element, S11 readout.
+# Every patch dimension is Balanis ch. 14 closed form, recomputed here rather
+# than looked up, and cross-checked by scripts/precheck.py (estimator
+# `patch_resonance`, worked example anchor: W 38.0100 mm, L 29.4216 mm,
+# er 4.4, h 1.6 mm -> 2.4 GHz).
+#
+#   W = lambda0/2 * sqrt(2/(er+1))                          (Balanis 14-6)
+#   ereff = (er+1)/2 + (er-1)/2*(1+12h/W)^-1/2              (14-1)
+#   dL = 0.412 h (ereff+0.3)(W/h+0.264)/((ereff-0.258)(W/h+0.8))   (14-2)
+#   L = c/(2 f0 sqrt(ereff)) - 2 dL                         (14-7, solved)
+#   feed width from Hammerstad-Jensen solved for 50 ohm     (microstrip-50r)
+#   inset depth y0: R_in(y0) = R_in(edge) cos^2(pi y0/L) = 50,
+#     R_in(edge) = 1/(2 G1), G1 = W/(120 lambda0) (slot-conductance model)
+#     -> y0 = 9.77 mm; the alternative edge-resistance relation gives
+#     R_in(edge) = 307 ohm -> y0 = 10.82 mm. Both bracket L/3. The inset
+#     sets the impedance match, not the resonance; it is the tuning variable.
+spec_version: 1
+name: patch-2400-inset
+recipe: inset-fed-rectangular-patch
+solution_type: Modal
+
+provenance:
+  source: "Balanis ch. 14 closed forms + Hammerstad-Jensen, recomputed in this repo"
+  canonical_reading: closed-form
+  case: knowledge/cases/patch-2400
+
+target:
+  quantity: resonant_frequency
+  value: 2.4GHz
+  tolerance_pct: 5
+
+variables:
+  f0: 2.4GHz
+  er: 4.4
+  h: 1.6mm
+  cu_t: 0.035mm
+  patch_W: 38.0100mm              # Balanis 14-6
+  patch_L: 29.4216mm              # Balanis 14-1/14-2/14-7 solved
+  feed_W: 3.0829mm                # Hammerstad-Jensen, 50 ohm (W/h > 1)
+  inset_d: 9.77mm                 # inset depth y0, slot-conductance model; tuning var
+  gap: 2mm                        # notch gap either side of the feed line
+  sub_W: 60mm                     # substrate / ground extent (x)
+  sub_L: 60mm                     # substrate / ground extent (y, feed direction)
+  air_pad_side: 15mm              # ~lambda0/10 at 2.4 GHz
+  air_pad_top: 31.2mm             # ~lambda0/4 at 2.4 GHz above the substrate
+  port_h: 13.6mm                  # wave-port height = h + 12mm (smoke-matrix shape)
+
+materials:
+  fr4:
+    library: FR4_epoxy
+  metal:
+    library: pec
+  air:
+    library: air
+
+geometry:
+  # Substrate, centered on x, flush with the feed edge at y=0.
+  - op: box
+    name: Substrate
+    material: fr4
+    origin: ["-sub_W/2", "0mm", "0mm"]
+    size: [sub_W, sub_L, h]
+
+  - op: sheet
+    name: Ground
+    material: metal
+    plane: xy
+    origin: ["-sub_W/2", "0mm", "0mm"]
+    size: [sub_W, sub_L]
+
+  # Patch, centered on x; its bottom edge sits on the substrate centre line.
+  - op: sheet
+    name: Patch
+    material: metal
+    plane: xy
+    origin: ["-patch_W/2", "(sub_L - patch_L)/2", h]
+    size: [patch_W, patch_L]
+
+  # Two notch cut-outs (gap x inset_d) either side of the feed line,
+  # from the patch bottom edge up into the patch.
+  - op: sheet
+    name: Notch1
+    material: metal
+    plane: xy
+    origin: ["(feed_W/2)", "(sub_L - patch_L)/2", h]
+    size: [gap, inset_d]
+  - op: sheet
+    name: Notch2
+    material: metal
+    plane: xy
+    origin: ["-(feed_W/2 + gap)", "(sub_L - patch_L)/2", h]
+    size: [gap, inset_d]
+  - op: subtract
+    name: Patch
+    tools: [Notch1, Notch2]
+    keep_tools: false
+
+  # 50-ohm feed trace, from the substrate feed edge up into the notch.
+  - op: sheet
+    name: Feed
+    material: metal
+    plane: xy
+    origin: ["-feed_W/2", "0mm", h]
+    size: [feed_W, "(sub_L - patch_L)/2 + inset_d"]
+
+  # Air region: feed-end wall flush with the substrate edge (port wall),
+  # lambda0/4 above the substrate, ~lambda0/10 on the other sides.
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2 - air_pad_side", "0mm", "0mm"]
+    size: [sub_W + 2*air_pad_side, sub_L + air_pad_side, h + air_pad_top]
+
+  # Wave port on the feed-end wall, ground to port_h, full substrate width
+  # (the smoke-matrix validated sheet-port shape, env-compat #7/#8).
+  - op: sheet
+    name: PortSheet
+    plane: xz
+    origin: ["-sub_W/2", "0mm", "0mm"]
+    size: [sub_W, port_h]
+
+excitations:
+  - name: P1
+    type: wave_port
+    on:
+      object: PortSheet
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad1
+    type: radiation
+    on:
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 12
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: interpolating
+    start: 1.8GHz
+    stop: 3.0GHz
+    count: 401
+
+qa_signals: [convergence, ports_excited, in_band_resonance]

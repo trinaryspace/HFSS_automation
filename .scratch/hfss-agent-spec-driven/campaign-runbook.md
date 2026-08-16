@@ -355,8 +355,27 @@ git worktree add $CELLS\cell-<ID> -b cell/<ID> main
 
 The path must contain `HFSS_automation` (W0-5). `$CELLS` satisfies this.
 
-**Step 3 — clean-room the worktree.** *Not optional, and not what the plan
-originally said.*
+**Steps 3 and 4 are pre-baked into base branches.** A worktree-isolated session
+cannot run git inside *another* worktree, and doing the surgery per cell is a
+step that can be forgotten. So the clean-room lives in branches instead, cut once:
+
+```
+campaign/base           = main, with workspaces/ removed          (all cells)
+campaign/base-nopatch   = campaign/base, minus patch-2400/design.yaml   (X0a, X0b, D2-B)
+campaign/base-nohorn    = campaign/base, minus horn-10ghz/design.yaml   (S3)
+```
+
+A cell is then one command, and cannot be launched un-clean-roomed:
+
+```
+git worktree add -q -b cell/<ID> $CELLS\cell-<ID> campaign/base-nopatch
+```
+
+Cells that need predecessors present (**D1-B**) branch from `main` instead.
+Everything below explains what those branches contain and why; you no longer
+execute it per cell.
+
+*Not optional, and not what the plan originally said.*
 
 **A fresh worktree is not empty.** 152 files under `workspaces/` are tracked —
 including all twelve of `workspaces/patch-2400/src/`'s staged scripts, complete
@@ -495,9 +514,15 @@ measure authoring blind. Say which in each record.
 
 ### The Wave A scope line
 
+**Prompts are ASCII-only, deliberately.** They are passed as shell arguments to
+`opencode run`, and a stray em dash or curly quote can be mangled in transit on
+Windows — which would silently make two "identical" replicate cells not
+identical. Keep them plain; the noise floor depends on X0a and X0b receiving
+byte-identical text.
+
 Every Wave A prompt ends with this sentence, verbatim:
 
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 **Known limitation, write it in the records:** this instruction makes Wave A a
@@ -514,7 +539,7 @@ line. Score Wave A cells on authoring; note the route but do not weight it.
 > 1.6 mm FR4. Inset microstrip feed, 50 ohm, single element. I care about the
 > resonance landing within about 5% and I want to see S11.
 >
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 **S1:**
@@ -523,7 +548,7 @@ line. Score Wave A cells on authoring; note the route but do not weight it.
 > RO4350B, 0.762 mm thick, permittivity 3.48. Single element, microstrip feed,
 > 50 ohm. I want S11 and the resonance within 5%.
 >
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 **S3:**
@@ -531,7 +556,7 @@ line. Score Wave A cells on authoring; note the route but do not weight it.
 > I need a pyramidal horn antenna for 10 GHz, fed from WR-90 waveguide, designed
 > for about 15 dBi of gain. I want the gain and the return loss.
 >
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 **S4:**
@@ -540,7 +565,7 @@ line. Score Wave A cells on authoring; note the route but do not weight it.
 > a small feed gap, driven by a lumped port at the gap. Copper wire, about 1 mm
 > diameter. I want S11 and the input impedance around resonance.
 >
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 **S7:**
@@ -549,7 +574,7 @@ line. Score Wave A cells on authoring; note the route but do not weight it.
 > RO4350B, fed by a corporate microstrip feed network from a single 50 ohm input,
 > elements spaced about half a wavelength. I want S11 and the broadside gain.
 >
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 ### Wave A batch 1 acceptance
@@ -592,7 +617,7 @@ in the menu.
 > I need a circular microstrip patch antenna at 2.4 GHz on 1.6 mm FR4, probe or
 > inset fed, 50 ohm. I want S11 and the resonance within 5%.
 >
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 **S11** — correct outcome is a refusal, or a scoped partial that names the gap.
@@ -601,7 +626,7 @@ A confident full build is a **failure of the cell, not a success**.
 > I need a parallel-coupled-line bandpass filter centred at 2.4 GHz on 1.6 mm
 > FR4 — third order, about 10% bandwidth, 50 ohm ports. I want S21 and S11.
 >
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 **S12** — no scope line. The whole cell is about whether Clarification asks.
@@ -614,7 +639,7 @@ A confident full build is a **failure of the cell, not a success**.
 > 12 GHz on 0.787 mm RO4350B, microstrip-to-slotline feed. I want S11 across the
 > band.
 >
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 **S10:**
@@ -622,7 +647,7 @@ A confident full build is a **failure of the cell, not a success**.
 > I need a U-slot patch antenna covering both 2.4 GHz and 5.8 GHz on 1.6 mm FR4,
 > single probe feed. I want S11 showing both bands.
 >
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 **S2:**
@@ -630,7 +655,7 @@ A confident full build is a **failure of the cell, not a success**.
 > I need a 50 ohm microstrip line feeding a quarter-wave transformer up to
 > 100 ohm at 3.5 GHz, on 1.6 mm FR4. I want S11 and S21 so I can check the match.
 >
-> Let's lock the design down first — don't open AEDT yet, I want to review the
+> Let's lock the design down first - don't open AEDT yet, I want to review the
 > numbers before anything gets built.
 
 ---

@@ -1,0 +1,151 @@
+# patch-2400 as a Design Spec — authored in this cell (reference case file
+# intentionally absent: the clean-room cell measures authoring from the
+# physics, not transcription).
+#
+# Numbers derived here, not copied:
+#   - patch_W (Balanis 14-6)  and patch_L (14-7)  via hfss_spec/physics,
+#     er 4.4, h 1.6 mm, f0 2.4 GHz  ->  38.0100 x 29.4216 mm
+#   - feed_W via Hammerstad-Jensen, 50 ohm on the same stack  ->  3.0829 mm
+#   - inset_d/inset_g per the reference recipe (9.0 / 1.0 mm); the inset
+#     depth places the 50-ohm tap at cos^2(pi*inset_d/patch_L) = 0.328 of the
+#     edge resistance, which is what a 50-ohm inset feed wants.
+#   - substrate 80 x 80 mm, a round fixed ground size for a ~38 x 29 mm patch
+#     (the reference snapshot reads sub_W = 80mm, sub_L = 80mm).
+#   - air_pad = lambda0/4 at 2.4 GHz from c0/f0, the reference airbox inset.
+#
+# Shape follows the golden tests in hfss_spec/test_hfss_spec.py (the only
+# surviving record of the reference spec's call sequence): port on the
+# Substrate end face (assignment "Substrate"), lumped port with an explicit
+# integration line, discrete 201-point sweep 2.0-3.0 GHz, 15 passes.
+spec_version: 1
+name: patch-2400
+recipe: inset-fed-rectangular-patch
+solution_type: Modal
+
+provenance:
+  source: "Balanis, Antenna Theory ch.14 design procedure; Hammerstad-Jensen feed synthesis; reference recipe from the canonical case"
+  canonical_reading: closed-form
+  notes: >-
+    Derived from the closed-form relations in hfss_spec/physics.py (worked
+    examples: W 38.0100 mm, L 29.4216 mm, ereff 4.0857, dL 0.7388 mm) and
+    Hammerstad-Jensen for 50 ohm. The reference case file was absent from this
+    cell by design; the golden tests' asserted call sequence and sweep shape
+    were used as the structural record.
+
+target:
+  quantity: resonant_frequency
+  value: 2.4GHz
+  tolerance_pct: 5
+
+variables:
+  f0:        2.4GHz
+  er:        4.4
+  h:         1.6mm
+  patch_W:   38.0100mm
+  patch_L:   29.4216mm
+  feed_W:    3.0829mm
+  inset_d:   9.0mm
+  inset_g:   1.0mm
+  sub_W:     80mm
+  sub_L:     80mm
+  feed_run:  "sub_L/2 - patch_L/2"
+  air_pad:   "0.25 * c0 / f0"
+
+materials:
+  substrate: {library: FR4_epoxy}
+  metal:     {library: pec}
+  air:       {library: air}
+
+geometry:
+  - op: box
+    name: Substrate
+    material: substrate
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L, h]
+
+  - op: sheet
+    name: GroundPlane
+    material: metal
+    plane: xy
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L]
+
+  - op: sheet
+    name: Patch
+    material: metal
+    plane: xy
+    origin: ["-patch_W/2", "-patch_L/2", h]
+    size: [patch_W, patch_L]
+
+  # The two notch cuts that make the inset: one on each side of the feed,
+  # inset_g wide, inset_d deep, carved out of the patch's feed edge.
+  - op: sheet
+    name: InsetL
+    plane: xy
+    origin: ["-feed_W/2 - inset_g", "-patch_L/2", h]
+    size: [inset_g, inset_d]
+  - op: sheet
+    name: InsetR
+    plane: xy
+    origin: ["feed_W/2", "-patch_L/2", h]
+    size: [inset_g, inset_d]
+
+  - op: subtract
+    name: Patch
+    tools: [InsetL, InsetR]
+    keep_tools: false
+
+  # The 50-ohm feed line, from the substrate edge up to the inset tap point.
+  - op: sheet
+    name: Feed
+    material: metal
+    plane: xy
+    origin: ["-feed_W/2", "-sub_L/2", h]
+    size: [feed_W, "feed_run + inset_d"]
+
+  - op: unite
+    name: Patch
+    with: [Feed]
+
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2 - air_pad", "-sub_L/2 - air_pad", "-air_pad"]
+    size: ["sub_W + 2*air_pad", "sub_L + 2*air_pad", "h + 2*air_pad"]
+
+excitations:
+  # Lumped port on the substrate's -y end face, where the feed exits; the
+  # integration line runs up the face from the ground plane (z=0) to the feed
+  # trace (z=h) at x=0. Face-object semantics per env-compat #7/#8.
+  - name: P1
+    type: lumped_port
+    on:
+      face_of: Substrate
+      direction: "-y"
+    integration_line:
+      from: {edge_mid: [Substrate, "-y", "min_z"]}
+      to:   {edge_mid: [Substrate, "-y", "max_z"]}
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad
+    type: radiation
+    on:
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 15
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: discrete
+    start: 2.0GHz
+    stop: 3.0GHz
+    count: 201
+
+qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]

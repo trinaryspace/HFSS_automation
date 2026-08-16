@@ -1,0 +1,144 @@
+# horn-10ghz as a Design Spec — a 15 dBi pyramidal horn at 10 GHz on WR-90.
+#
+# Every dimension is synthesised from Balanis ch. 13 (optimum pyramidal horn)
+# via hfss_spec.physics.optimum_pyramidal_horn, NOT looked up or read off a
+# picture — the Astuti lesson. The synthesis, run at 15 dBi / 10 GHz on
+# WR-90's inner cross-section (a=0.9in, b=0.4in):
+#
+#   a1 = 3.045in   (H-plane aperture)
+#   b1 = 2.25in    (E-plane aperture)
+#   axial length pe = ph = 1.501in   (both flares meet the feed at one station)
+#   achieved gain = 14.99 dBi at eap 0.51
+#
+# The feed stays single-mode TE10: cutoff = c/(2*0.9in) = 6.557 GHz,
+# f/fc = 1.525 (1 < 1.525 < 2). Wall thickness is WR-90's standard 0.050in
+# (outer 1.000 x 0.500 in).
+#
+# Construction (the tutorial/ATK topology, which this box has a captured
+# fixture of): one PEC lofted body and one vacuum lofted void, coincident at
+# the wall inner surface, with a wave-port sheet spanning the throat opening
+# at the port plane z=0. The two lofts are terminal — nothing later references
+# them by name, so the model does not depend on the loft's result name.
+spec_version: 1
+name: horn-10ghz
+recipe: pyramidal-horn
+solution_type: Modal
+
+provenance:
+  source: "Balanis ch. 13 optimum pyramidal horn synthesis (optimum_pyramidal_horn at 15 dBi, 10 GHz, WR-90 inner 0.9x0.4in)"
+  canonical_reading: closed-form
+  case: knowledge/cases/horn-10ghz
+
+target:
+  quantity: gain
+  value: 15
+  tolerance_pct: 10
+
+variables:
+  f0: 10GHz
+  # WR-90 inner cross-section (the electrically significant part).
+  wg_a: 0.9in
+  wg_b: 0.4in
+  # WR-90 standard wall thickness (outer 1.000 x 0.500 in).
+  wall: 0.05in
+  # Optimum-horn apertures, from the synthesis.
+  horn_a: 3.045in
+  horn_b: 2.25in
+  # Axial flare length (pe = ph = 1.501in from the synthesis).
+  flare_len: 1.501in
+  # Airbox pad, ~lambda0/3 at 10 GHz, all six sides (the tutorial horn pads 10mm).
+  air_pad: 0.4in
+
+materials:
+  pec:
+    library: pec
+  air:
+    library: air
+  vacuum:
+    library: vacuum
+
+geometry:
+  # Void profiles: the throat (port plane, z=0) and the radiating aperture.
+  - op: sheet
+    name: Throat
+    material: vacuum
+    plane: xy
+    origin: ["-wg_a/2", "-wg_b/2", "0in"]
+    size: [wg_a, wg_b]
+
+  - op: sheet
+    name: Aper
+    material: vacuum
+    plane: xy
+    origin: ["-horn_a/2", "-horn_b/2", "flare_len"]
+    size: [horn_a, horn_b]
+
+  # The interior void: one loft from the WR-90 throat to the aperture.
+  - op: connect
+    name: VoidLoft
+    profiles: [Throat, Aper]
+
+  # Body profiles: the same two stations, offset outward by the wall.
+  - op: sheet
+    name: WallThroat
+    material: pec
+    plane: xy
+    origin: ["-(wg_a + 2*wall)/2", "-(wg_b + 2*wall)/2", "0in"]
+    size: ["wg_a + 2*wall", "wg_b + 2*wall"]
+
+  - op: sheet
+    name: WallAper
+    material: pec
+    plane: xy
+    origin: ["-(horn_a + 2*wall)/2", "-(horn_b + 2*wall)/2", "flare_len"]
+    size: ["horn_a + 2*wall", "horn_b + 2*wall"]
+
+  # The PEC body: one loft from the outer throat to the outer aperture.
+  - op: connect
+    name: BodyLoft
+    profiles: [WallThroat, WallAper]
+
+  # Wave-port sheet spanning the throat opening at the port plane.
+  - op: sheet
+    name: Port
+    material: vacuum
+    plane: xy
+    origin: ["-wg_a/2", "-wg_b/2", "0in"]
+    size: [wg_a, wg_b]
+
+  # Radiation box, padded around the aperture (the widest section).
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-(horn_a + 2*wall)/2 - air_pad", "-(horn_b + 2*wall)/2 - air_pad", "-air_pad"]
+    size: ["horn_a + 2*wall + 2*air_pad", "horn_b + 2*wall + 2*air_pad", "flare_len + 2*air_pad"]
+
+excitations:
+  - name: "1"
+    type: wave_port
+    on:
+      object: Port
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad
+    type: radiation
+    on:
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 15
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: interpolating
+    start: 8.0GHz
+    stop: 12.0GHz
+    count: 201
+
+qa_signals: [convergence, ports_excited, gain_plausible]

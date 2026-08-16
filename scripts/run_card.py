@@ -285,15 +285,30 @@ def connect(db_path):
     return con
 
 
-def load_card(con, slug=None, latest=False):
+def load_card(con, slug=None, latest=False, worktree=None):
     """Return the card dict for one session, or None if not found.
 
     Sessions are constrained to the HFSS project (worktree contains
     PROJECT_MARKER), mirroring the reference SQL of analysis section 10;
     slug ties (duplicate slugs across projects) are broken by recency.
+
+    `IN`, not `=`: opencode registers a `project` row per worktree, so a
+    parallel campaign running cells from several worktrees has several rows
+    matching PROJECT_MARKER. The scalar form silently bound to whichever row
+    SQLite happened to return first, which made every session in every other
+    worktree invisible — a run that cost real tokens would card as "no session
+    ... in the HFSS_automation project", or worse, card the wrong one.
+
+    `worktree` narrows to one exact project path when a cell needs to be sure
+    which checkout it is reading (paths are stored with forward slashes).
     """
-    where = ["s.project_id = (SELECT id FROM project WHERE worktree LIKE '%' || ? || '%')"]
-    args = [PROJECT_MARKER]
+    if worktree is not None:
+        where = ["s.project_id IN (SELECT id FROM project WHERE worktree = ?)"]
+        args = [str(worktree).replace("\\", "/").rstrip("/")]
+    else:
+        where = ["s.project_id IN "
+                 "(SELECT id FROM project WHERE worktree LIKE '%' || ? || '%')"]
+        args = [PROJECT_MARKER]
     if slug is not None:
         where.append("s.slug = ?")
         args.append(slug)
@@ -491,6 +506,9 @@ def main(argv=None):
                              "completed, else 0)")
     parser.add_argument("--escape-hatch", type=int, dest="escape_hatch",
                         help="stage scripts written outside the compiler")
+    parser.add_argument("--worktree",
+                        help="exact project worktree path; disambiguates cells "
+                             "run from separate worktrees (parallel campaigns)")
     args = parser.parse_args(argv)
 
     if args.latest == (args.slug is not None):
@@ -505,7 +523,8 @@ def main(argv=None):
         print(f"error: cannot open database {db_path}: {exc}", file=sys.stderr)
         return 1
     try:
-        card = load_card(con, slug=args.slug or None, latest=args.latest)
+        card = load_card(con, slug=args.slug or None, latest=args.latest,
+                         worktree=args.worktree)
     except sqlite3.Error as exc:
         print(f"error: query failed: {exc}", file=sys.stderr)
         return 1
@@ -513,8 +532,9 @@ def main(argv=None):
         con.close()
     if card is None:
         subject = f"whose slug is '{args.slug}' " if args.slug else ""
-        print(f"error: no session {subject}in the HFSS_automation project",
-              file=sys.stderr)
+        scope = (f"worktree '{args.worktree}'" if args.worktree
+                 else "the HFSS_automation project")
+        print(f"error: no session {subject}in {scope}", file=sys.stderr)
         return 1
     summary_path = Path(args.summary) if args.summary else None
     workspace = args.workspace or (str(summary_path.parent) if summary_path else None)

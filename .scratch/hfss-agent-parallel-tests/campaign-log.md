@@ -47,14 +47,34 @@ rows no longer collapse to one arbitrary row. The probe is therefore no longer
 *blocking* — it is confirmation, and it tells you whether to pass `--worktree`
 routinely.
 
-Result after the probe:
+**ANSWERED 2026-08-16.** A headless session (`opencode run --dir <worktree>`)
+was started in `.claude/worktrees/probe-attrib`, session `stellar-wizard`:
 
 ```
-(paste the checker output here)
+project rows matching 'HFSS_automation': 1
+     53 sessions  C:/Users/afpim/Repos/HFSS_automation
+verdict: one project row - opencode resolves worktrees to the main project.
+PASS: check_attribution project_rows=1
 ```
 
-Verdict: ☐ one row — `--slug` alone is sufficient
-         ☐ several rows — pass `--worktree $CELLS\cell-<ID>` on every card
+Session count 52 → 53 in the **main** project row. Carded clean:
+`run_card.py --slug stellar-wizard` → 10,086 billed / 5 parts.
+
+Verdict: ☑ **one row — `--slug` alone is sufficient**
+
+Two consequences:
+- Worktrees do **not** partition sessions. Slug is the only discriminator, so
+  recording it per cell is mandatory and `--latest` is unusable with parallel
+  cells (on top of ticket 06's D1 defect).
+- The `IN`-not-`=` patch is defensive, not load-bearing — the failure it prevents
+  cannot occur on this configuration. It stays because it is correct.
+
+### Fixed overhead floor
+
+`stellar-wizard`'s only instruction was "reply with one word, use no tools":
+**10,086 billed / 5 parts.** That is what every cell pays to load `AGENTS.md` and
+the skill before doing any work — 13% of the 80,000-token acceptance budget and
+8% of the 60-part budget, spent before the first useful token.
 
 ---
 

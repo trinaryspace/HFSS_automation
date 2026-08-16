@@ -5,8 +5,91 @@ Feature: hfss-agent-spec-driven
 Written 2026-08-16. Companion to `parallel-test-campaign.md` (the *why*); this
 file is the *what*, in execution order, with the commands.
 
-**Assumes 6 terminals.** Scale-down rules are at §9. Every command is run from
-the path shown. Windows paths, PowerShell-safe (no `&&`).
+**Revised 2026-08-16** after `opencode` landed on PATH (v1.18.18) — see §0,
+which changes who runs most of this. Scale-down rules for a terminal-driven
+campaign are still at §9. Every command is run from the path shown. Windows
+paths, PowerShell-safe (no `&&`).
+
+---
+
+## §0 Execution model — the campaign is mostly headless now
+
+`opencode run` is non-interactive, and everything it needs is a flag:
+
+```
+opencode run --dir <worktree> --variant <low|max> --format json "<prompt>"
+```
+
+Verified end to end 2026-08-16: a session started with `--dir` pointing at a
+worktree, ran, landed in the database, and carded by slug
+(`stellar-wizard`, 10,086 billed / 5 parts).
+
+**This is not a terminal-width campaign any more.** The offline waves do not need
+six humans watching six TUIs; they need one process spawning N runs and a human
+judging the output. What that changes:
+
+| | before | now |
+|---|---|---|
+| Wave A (12 authoring cells) | 6 terminals, you driving | headless, driven for you, parallel |
+| D3 (low vs max) | edit `opencode.json` per worktree, verify with `opencode debug config` | `--variant low` / `--variant max` as a flag |
+| observation | operator hand-notes route, round-trips, escape hatches | `--format json` event stream, parsed into the record |
+| cell identity | note the slug off the screen before it scrolls | read it from the run's own output |
+
+**Three flags with consequences, not conveniences:**
+
+- **`--variant`** sets reasoning effort per run. This deletes W0's config-pinning
+  ceremony *and* ticket 08's silent failure mode, where a misresolved variant
+  showed empty and startup still "succeeded". Still echo what resolved.
+- **`--format json`** emits raw events. Validator round-trips, route choice,
+  escape hatches and tool calls become *extracted*, not eyeballed — which is a
+  real upgrade to the measurement, because hand-noting is where observation
+  protocols quietly rot.
+- **`--auto`** auto-approves permissions. Necessary for an unattended offline
+  cell, and it **changes the permission surface versus an interactive run.**
+  Record it. Do **not** use it for Wave B or C, where the approvals are the
+  point.
+
+### What stays yours, and why
+
+Not everything should be automated, and two of these are load-bearing:
+
+- **VPN, license, AEDT desktops** (W0-2, W0-3) — physical machine state.
+- **The visual Review gate.** ADR 0003 makes it deliberately human, and
+  `kind-rocket` proved it load-bearing: the first transcribed S11 was wrong and
+  the *user* caught it.
+- **Wave C solves** — serial, hardware, and the readout is the thing under test.
+- **The human correctness verdict (U2).** The campaign's headline number is the
+  false-green rate: specs that pass every automated gate and are still the wrong
+  antenna. **I must not grade that.** A tool scoring its own output is precisely
+  the failure mode being measured, and a self-graded false-green rate would be
+  worth nothing. This one is not delegable.
+
+### The new pivotal unknown
+
+**Nobody has ever run the hfss-agent skill headless.** Its Clarification session
+ends *"Done when: the user confirmed the Recipe, the assumptions, and the QA
+signals"* — and there is no user. The agent will either self-confirm (which
+changes what Wave A measures) or stall waiting (a legitimate, recordable
+outcome, and a finding about the skill).
+
+**So: one dry cell before twelve.** Run a single Wave A cell end to end, confirm
+the skill behaves sanely without a human and that the JSON extraction yields the
+fields the record needs, then fan out. Do not spend twelve cells on an unvalidated
+harness — that is how `swift-otter` happened.
+
+### Confounds this introduces, to be written in every record
+
+- **Headless ≠ interactive.** `kind-rocket` (the 269,378 / 412 comparator) was
+  interactive with a human answering Clarification. Any Wave A number compared to
+  it carries that difference. X0a-vs-X0b stays clean — both headless.
+- **`--auto` permission surface**, as above.
+- **Fixed overhead ≈ 10,086 billed / 5 parts**, measured on a session whose only
+  instruction was to reply with one word and use no tools. That is the floor any
+  cell pays for loading `AGENTS.md` and the skill before doing anything. Against
+  a target of ≤80,000 / ≤60 it is 13% of the token budget and 8% of the parts
+  budget, spent before the work starts.
+
+---
 
 Two constants used throughout:
 
@@ -23,10 +106,8 @@ $LOG   = C:\Users\afpim\Repos\HFSS_automation\.scratch\hfss-agent-parallel-tests
 
 ## Phase W0 — before any cell runs (you, ~90 min, no terminals)
 
-Ten tasks. **W0-5 is blocking for every measurement in the campaign**;
-everything else is blocking only for the wave it names.
-
-**Status as of 2026-08-16 — four are already done:**
+**Status as of 2026-08-16 — six of ten done; three left are yours, one is a
+decision:**
 
 | task | owner | status |
 |---|---|---|
@@ -34,12 +115,30 @@ everything else is blocking only for the wave it names.
 | W0-2 license seats | you | pending — needs VPN |
 | W0-3 clear desktops | you | pending — your machine |
 | W0-4 tier0 baseline | done | `PASS: tier0 suites=10 failed=0` (229 s) |
-| W0-5 attribution probe | you | pending — needs a real opencode session |
-| W0-6 run_card patch | done | landed unconditionally; regression verified |
+| W0-5 attribution probe | **done** | **one project row — see below** |
+| W0-6 run_card patch | done | landed; regression verified |
 | W0-7 pilot_preflight | done | built and tested on all four paths |
 | W0-8 freeze skill | done | skill commit `2d47289`; `install_skill` 2/2 |
 | W0-9 create log | done | scaffold committed |
 | W0-10 Wave C scope | you | a decision, not a command |
+
+### W0-5, answered
+
+A headless session was started with `--dir` pointing at a worktree
+(`stellar-wizard`). The project row count stayed at **1** and the session landed
+in the main checkout's project (52 → 53 sessions).
+
+**opencode resolves a worktree to the main project.** Therefore:
+
+- `--slug` alone is sufficient; `--worktree` is available but unnecessary.
+- **Worktrees do not partition sessions at all.** Every cell in the campaign
+  lands in one project row, so the slug is the *only* discriminator. That makes
+  "record the slug" more important than the plan first implied, and `--latest`
+  more dangerous — with parallel cells it is a coin toss on top of the D1 defect.
+- Honest note: the `IN`-not-`=` patch (W0-6) turned out to be **defensive, not
+  load-bearing** — the failure it prevents cannot occur on this configuration.
+  It is still correct and stays, but it did not save the campaign, and the
+  earlier framing that it might have is now known to be wrong.
 
 ### W0-1 — land the plan (2 min)
 
@@ -312,15 +411,28 @@ cell is contaminated — fix it before launching, not after. Do **not** run
 `tier0.py` here: it fails in a worktree by design (the snapshot corpus under
 `workspaces/*/results/` is gitignored) and takes ~230 s.
 
-**Step 6 — launch.** Start opencode **from the worktree root**:
+**Step 6 — launch.** Headless, one command per cell:
+
+```
+opencode run --dir $CELLS\cell-<ID> --variant max --auto --format json "<prompt>" > $LOG\cells\<ID>.events.json
+```
+
+The prompt comes from §3–§6 **verbatim**. Nothing else — no mention of routes,
+specs, tickets, tokens, waves, or these documents (R3). Do **not** pass `--title`
+with anything descriptive: the title is derived from the prompt by default, and a
+title like "array schema stress cell" would leak the experiment into the session.
+
+`--auto` for offline Wave A cells only. Wave B and C run **interactively**, from
+the worktree root, because their approvals and the Review gate are the point:
 
 ```
 cd $CELLS\cell-<ID>
 opencode
 ```
 
-Paste the cell's prompt from §3–§6 **verbatim**. Nothing else. No mention of
-routes, specs, tickets, tokens, waves, or these documents.
+Interactive is also available for any cell you want to watch — `--variant` and
+`--dir` work the same way. The measurement does not care which, as long as the
+record says which, because headless and interactive are not the same experiment.
 
 **Step 7 — record the slug immediately.** Note the opencode session slug in the
 cell record as soon as it exists. If the run splits into phase sessions or spawns
@@ -563,19 +675,21 @@ flattery — the exact effect that made `swift-otter`'s 123,448 meaningless.
 **The best return on terminal-time in the campaign after U1/U2.** Same structure
 both sides (use **S1** with its scope line), three cells per side.
 
-Set the tier per cell, in that worktree's `opencode.json`:
-`agent.build.variant` → `max` for D3-max-1/2/3, `low` for D3-low-1/2/3.
-
-**Verify it resolved, every time:**
+**No config editing any more** — the tier is a flag:
 
 ```
-cd $CELLS\cell-D3-<x>
-opencode debug config
+opencode run --dir $CELLS\cell-D3-max-1 --variant max --auto --format json "<S1 prompt>"
+opencode run --dir $CELLS\cell-D3-low-1 --variant low --auto --format json "<S1 prompt>"
 ```
 
-Ticket 08 recorded a silent failure mode where a misresolved variant shows as
-empty with no warning and startup still succeeds. An unverified variant wastes
-the cell. Paste the resolved variant into the record.
+This removes ticket 08's silent failure mode as a *procedure* risk — a
+misresolved `opencode.json` variant used to show empty with no warning while
+startup still "succeeded". Still echo the resolved variant from the run's own
+output into the record; a flag can be ignored as easily as a config key.
+
+Because the tier no longer requires separate config state, D3's six cells can
+share a single clean-roomed worktree template — they only need distinct
+workspaces, not distinct checkouts.
 
 Scoring: compare billed, parts, validator round-trips, and the human correctness
 verdict across the two triples. Judge correctness **before** you look at which

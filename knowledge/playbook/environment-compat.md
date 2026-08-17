@@ -5,7 +5,9 @@ here are appendable only through the smoke-matrix ceremony or an approved
 learning-loop amendment (ADR 0002). Readers: the hfss-agent skill consults
 this entry before promising any API on this machine.
 
-Last updated: 2026-08-02 (ticket 02 matrix). Machine context: local Windows,
+Last updated: **2026-08-17** — entry #6 (readout) amended under ADR 0002 with
+maintainer approval; the 08-02 text is retained inline for provenance. Base
+matrix still 2026-08-02 (ticket 02). Machine context: local Windows,
 AEDT 2024 R1 (`v241`, `C:\Program Files\AnsysEM\v241\Win64`), Python 3.10.0,
 pyAEDT **1.3.0** (importable namespace `ansys.aedt.core`; `pip check` clean).
 
@@ -89,7 +91,60 @@ not complete". Follow-up ticket 07 exists to close this gap for Proof 1.
 an independent signal (results-on-disk growth or a blocking re-analyze).
 Artifact: `workspaces/smoke-matrix/src/probe_solve.py` (submission PASS).
 
-### 6. Reading results (`post.get_solution_data`) — WORKS, FLAKY (single observation)
+### 6. Reading results (`post.get_solution_data`) — WORKS. The "flakiness" was mostly a broken reader.
+
+**Amended 2026-08-17 (approved learning-loop amendment, ADR 0002).** The entry
+below is the 2026-08-02 matrix observation and is kept for provenance, but its
+conclusion is superseded: the dominant cause of "unfilled SolutionData" was
+**our own fill-state check**, not the server.
+
+- **`SolutionData.data_real` does not exist in pyAEDT 1.3.0** — zero occurrences
+  in the installed wheel. Every reader that judged fill-state with
+  `hasattr(data, "data_real")` or `data.data_real()` therefore reported
+  "unfilled" **on a perfectly good fetch**, and discarded it. That is what the
+  fail-era probes were measuring.
+- **`hfss.results` does not exist either** — `Hfss` has no `results` attribute,
+  so `hfss.results.get_solution_data(...)` always raises.
+- **Correct 1.3.0 accessors**: `full_matrix_real_imag`, or
+  `get_expression_data(expr, formula="real")` (what the touchstone parser uses),
+  plus `primary_sweep_values` for the axis.
+- **Verified working on a solved project** (2026-08-07, three independent fresh
+  attaches): `get_solution_data("dB(S(1,1))")` with no context returned filled
+  data; with `setup_sweep_name` set to the real sweep name it filled in all
+  three sessions. `post.export_report_to_file` (csv/tab) and
+  `SolutionData.export_data_to_csv` both wrote real values, and
+  `export_report_to_jpg` returned True.
+- **Sweep names carry a random suffix** (`Setup1 : Sweep_MM13NY`), so read the
+  name back from `existing_analysis_sweeps` — never hardcode it.
+- **`HfssConstants.default_solution` does not exist**, and pyAEDT's own
+  `HFSSDesignSolution` solution_type getter/setter fallbacks reference it.
+  Confirmed live on this box 2026-08-17: `HfssConstants.solution_default` is
+  `'HFSS Terminal Network'` while `HfssConstants.default_solution` raises
+  `AttributeError`. The class lives in
+  **`ansys.aedt.core.generic.aedt_constants`** (not `application.design_solutions`,
+  where an earlier note placed it). The trap only fires when `design_solutions`
+  has no odesign or `GetSolutionType()` raises — i.e. when the gRPC transport is
+  already flaking, which is exactly when a readout is being retried.
+  **Route-around**: alias `default_solution = solution_default` before
+  constructing `Hfss`. One line, changes nothing on the working path.
+
+**Route-around, consolidated**: use
+`skill/hfss-agent/templates/workspace/src/read_results.py`. It carries all of
+the above — the correct accessors, the sweep-name read-back, the export
+fallbacks and the constants alias — and is covered by the tier-0 `readout`
+suite so the `data_real` regression cannot return silently. Do not hand-write a
+fill-state check; every run that did got it wrong.
+
+**Still true**: the readout can genuinely raise (`GrpcApiError` on
+`GetVariables`/`GetSetups`) on a partially functional channel, reproducibly, even
+on a fresh attach to a copy. So keep the skill's one-shot policy: one scripted
+attempt plus one retry on a fresh attach, then hand the plot to the user and
+report the signal as read from the UI. `read_results.read_expression` never loops
+and returns an actionable note instead of raising.
+
+---
+
+**Original 2026-08-02 observation, retained for provenance:**
 `hfss.post.get_solution_data(expressions="dB(S(1,1))")` returned real S11
 data (min ≈ 0.47 dB for the smoke antenna) exactly once — on a fresh
 attach to a project solved by an earlier session (`diag_readout.py`).

@@ -86,6 +86,37 @@ def patch_resonance(patch_l: float, patch_w: float, h: float, er: float) -> floa
     return C0 / (2.0 * (patch_l + 2.0 * dl) * math.sqrt(ereff))
 
 
+def circular_patch_effective_radius(a: float, h: float, er: float) -> float:
+    """Balanis 14-66: the fringing-corrected radius of a circular patch, metres.
+
+        ae = a * sqrt(1 + (2h / (pi * a * er)) * (ln(pi * a / (2h)) + 1.7726))
+
+    The disc looks electrically larger than it is, exactly as the rectangular
+    patch looks longer than it is (14-2); this is the circular analogue.
+    """
+    if a <= 0 or h <= 0 or er <= 0:
+        raise ValueError("radius, substrate height and permittivity must be positive")
+    return a * math.sqrt(
+        1.0 + (2.0 * h / (math.pi * a * er)) * (math.log(math.pi * a / (2.0 * h)) + 1.7726)
+    )
+
+
+def circular_patch_resonance(a: float, h: float, er: float) -> float:
+    """Dominant TM110 resonance of a circular microstrip patch, in Hz.
+
+    Balanis 14-65 with the 14-66 effective radius:
+
+        f110 = 1.8412 * c / (2 * pi * ae * sqrt(er))
+
+    1.8412 is the first zero of J1'. Registered because cell S6 (2026-08-17) was
+    asked for a circular patch, found no estimator, and — rather than relabel
+    the recipe to borrow the rectangular one — proposed exactly this and stopped
+    for approval. This is that approval landed.
+    """
+    ae = circular_patch_effective_radius(a, h, er)
+    return 1.8412 * C0 / (2.0 * math.pi * ae * math.sqrt(er))
+
+
 def bowtie_resonance(side: float, base: float, h: float, er: float) -> float:
     """Dominant-mode resonance of a bow-tie patch, in Hz.
 
@@ -281,6 +312,20 @@ class Prediction:
         suffix = "" if delta is None else \
             f"      delta: {delta:+.2f}%   tolerance: {self.tolerance_pct:g}%"
         lines.append(f"      {'closed-form':<22} {self._fmt(self.predicted)}{suffix}")
+        # A delta of exactly zero is not the best possible result; it is a sign
+        # the dimensions were produced by this same relation, so the check is
+        # confirming its own arithmetic. Measured 2026-08-17: two authored specs
+        # reported -0.00%, and their transcripts showed one importing
+        # `hfss_spec.physics` to size the patch and the other re-running
+        # `precheck` until it agreed. The horn, synthesised independently, came
+        # in at -0.09%. A residual is the healthy outcome.
+        if delta is not None and abs(delta) < 0.005:
+            lines.append("")
+            lines.append("      NOTE: delta is essentially zero, which usually "
+                         "means the dimensions came from this same relation.")
+            lines.append("            The check then confirms its own "
+                         "arithmetic rather than the design; treat it as "
+                         "unverified unless the numbers came from elsewhere.")
         if self.note:
             lines.append("")
             lines.append(f"      note: {self.note}")
@@ -300,14 +345,23 @@ class Precheck:
         return "consistent" if self.prediction.consistent else "INCONSISTENT"
 
     def text(self) -> str:
-        head = "PASS" if self.verdict != "INCONSISTENT" else "FAIL"
+        # A gate that checked nothing must not render as a gate that passed.
+        # `PASS: precheck ... verdict=no-estimator` reads as a pass to anyone
+        # skimming for the verification line, and cell S4 was exactly that: no
+        # registered estimator, printed as PASS, and it also carried a real port
+        # defect. UNCHECKED is its own word so the line cannot be misread.
+        if self.verdict == "no-estimator":
+            head = "UNCHECKED"
+            tail = " - no estimator for this recipe; nothing was verified"
+        elif self.verdict == "INCONSISTENT":
+            head, tail = "FAIL", " — arbitrate before building"
+        else:
+            head, tail = "PASS", ""
         body = ""
         if self.prediction is not None:
             body = self.prediction.text() + "\n\n"
         elif self.reason:
             body = f"      {self.reason}\n\n"
-        tail = ("" if self.verdict != "INCONSISTENT"
-                else " — arbitrate before building")
         return (f"{body}{head}: precheck recipe={self.recipe} "
                 f"verdict={self.verdict}{tail}\n")
 
@@ -435,6 +489,22 @@ def _patch(spec, scope, target, tolerance, note) -> Prediction:
     )
 
 
+def _circular_patch(spec, scope, target, tolerance, note) -> Prediction:
+    radius = _var(scope, "patch_a", "patch_R", "a", "radius", "patch_radius")
+    h = _var(scope, "h", "SubH", "sub_h")
+    er = _permittivity(spec, scope)
+    ae = circular_patch_effective_radius(radius, h, er)
+    predicted = circular_patch_resonance(radius, h, er)
+    return Prediction(
+        "resonant_frequency", target, predicted, "GHz", tolerance,
+        [("physical radius a", _mm(radius)),
+         ("effective radius ae (14-66)", _mm(ae)),
+         ("substrate h", _mm(h)),
+         ("er", f"{er:.4f}")],
+        note,
+    )
+
+
 def _bowtie(spec, scope, target, tolerance, note) -> Prediction:
     side = _var(scope, "PatchLeg", "patch_leg", "leg")
     base = _var(scope, "PatchBase", "patch_base", "base")
@@ -500,6 +570,7 @@ def _horn(spec, scope, target, tolerance, note) -> Prediction:
 
 _ESTIMATORS = {
     "patch_resonance": _patch,
+    "circular_patch_resonance": _circular_patch,
     "bowtie_resonance": _bowtie,
     "microstrip_impedance": _microstrip,
     "horn_cutoff": _horn,

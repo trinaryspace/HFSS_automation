@@ -55,6 +55,10 @@ SUITES = [
     # sequences against a recorder. The whole point of the bet is that the
     # build path becomes checkable without license-hours, so it belongs here.
     ("design-spec", [sys.executable, os.path.join(REPO, "hfss_spec", "test_hfss_spec.py")]),
+    # Relational checks (clearance, port geometry) — the two rules written
+    # against the 2026-08-17 review, where three of six machine-clean specs
+    # were wrong and no existing check could see any of it.
+    ("model-checks", [sys.executable, os.path.join(REPO, "hfss_spec", "test_model_checks.py")]),
     ("canonical-specs", [sys.executable, os.path.join(REPO, "scripts", "validate_cases.py")]),
 ]
 

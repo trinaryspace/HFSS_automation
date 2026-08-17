@@ -29,6 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+from . import model_checks
 from .expressions import ExpressionError, Value, evaluate, resolve_all
 from .schema import DesignSpec, MaterialDef, MaterialRef
 from .units import (
@@ -123,6 +124,7 @@ def validate(spec: DesignSpec) -> Report:
     _check_boundaries(spec, findings)
     _check_setup(spec, findings, scope)
     _check_recipe_completeness(spec, findings)
+    _check_model_relations(spec, findings, scope)
     return Report(findings)
 
 
@@ -421,6 +423,26 @@ def _check_recipe_completeness(spec: DesignSpec, findings: list[Finding]) -> Non
             f"express this geometry",
             hint="escape-hatch rate is the metric that says whether v1 is right",
         ))
+
+
+def _check_model_relations(spec: DesignSpec, findings: list[Finding],
+                           scope: dict[str, Value]) -> None:
+    """Whole-model checks (`model_checks`), reported as warnings.
+
+    Warnings, not errors, and the distinction is deliberate. Both rules encode a
+    rule of thumb rather than a law: a deliberately tight airbox or a flared port
+    can be right, and an ERROR would block a legitimate design on a heuristic —
+    the one failure mode worse than missing a defect. They are loud enough to be
+    read and cheap enough to be acted on.
+
+    They exist because the 2026-08-17 review found three real defects in six
+    machine-clean specs and **no existing check could have seen any of them**.
+    These two would have caught five of the six specs between them.
+    """
+    for path, message, hint in model_checks.radiation_clearance(spec, scope):
+        findings.append(Finding(path, WARNING, message, hint=hint))
+    for path, message, hint in model_checks.port_geometry(spec, scope):
+        findings.append(Finding(path, WARNING, message, hint=hint))
 
 
 def _did_you_mean(name: str, candidates: Iterable[str]) -> str:

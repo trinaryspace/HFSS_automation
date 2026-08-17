@@ -17,6 +17,11 @@
       "estimator": "patch_resonance",
       "note": "Balanis 14-1/14-2/14-7 are good to a few percent on a thin substrate; FR4's own permittivity tolerance dominates the error."
     },
+    "probe-fed-circular-patch": {
+      "tolerance_pct": 5.0,
+      "estimator": "circular_patch_resonance",
+      "note": "Balanis 14-65/14-66: TM110 at 1.8412c/(2*pi*ae*sqrt(er)), with the fringing-corrected effective radius. Same standing as the rectangular patch - good to a few percent on a thin substrate, and the substrate's own permittivity tolerance dominates. Added 2026-08-17: cell S6 was asked for a circular patch, found no estimator, declined to relabel the recipe to borrow the rectangular one, and proposed this with its equations. Approved."
+    },
     "bow-tie-patch": {
       "tolerance_pct": 8.0,
       "estimator": "bowtie_resonance",

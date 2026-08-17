@@ -749,6 +749,29 @@ class TestPhysicsEstimators(unittest.TestCase):
                                     h=1.6e-3, er=4.4)
         self.assertAlmostEqual(f / 1e9, 2.4, places=3)
 
+    def test_circular_patch_reproduces_balanis_example_14_4(self):
+        """er 2.32, h 0.1588 cm, a 0.529 cm, designed for 10 GHz.
+
+        Landed 2026-08-17 from cell S6, which was asked for a circular patch,
+        found no registered estimator, and proposed this rather than relabelling
+        the recipe to borrow the rectangular one.
+        """
+        from hfss_spec import physics
+        f = physics.circular_patch_resonance(a=0.529e-2, h=0.1588e-2, er=2.32)
+        self.assertAlmostEqual(f / 1e9, 10.0, delta=0.5)   # -3.7%, inside 5%
+
+    def test_circular_patch_fringing_always_lowers_the_frequency(self):
+        """The disc looks electrically larger than it is, so ae > a and f falls.
+        A sign error here would read as a plausible number in the wrong
+        direction, which is the class of defect this whole gate exists for."""
+        import math
+        from hfss_spec import physics
+        a, h, er = 10e-3, 1.6e-3, 4.4
+        ae = physics.circular_patch_effective_radius(a, h, er)
+        self.assertGreater(ae, a)
+        naive = 1.8412 * physics.C0 / (2 * math.pi * a * math.sqrt(er))
+        self.assertLess(physics.circular_patch_resonance(a, h, er), naive)
+
     def test_hammerstad_reproduces_the_50_ohm_synthesis(self):
         from hfss_spec import physics
         z0, ereff = physics.microstrip_impedance(w=3.0829e-3, h=1.6e-3, er=4.4)

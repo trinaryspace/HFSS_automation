@@ -69,6 +69,22 @@ def load_spec(path) -> DesignSpec:
     return spec_from_dict(_read(path))
 
 
+def load_spec_text(text: str) -> DesignSpec:
+    """Load a spec from a YAML string — same path as `load_spec`, no file.
+
+    Tests that want to vary one dimension of a spec should not have to write a
+    temp file to do it, and must not hand-roll the load: `_unbool_keys` is the
+    reason a bare `on:` key works at all, and a test that skipped it would be
+    exercising a spec shape no real file can produce.
+    """
+    import yaml
+    data = _unbool_keys(yaml.safe_load(text))
+    if not isinstance(data, dict):
+        raise SpecLoadError(Report([Finding(
+            "<text>", ERROR, "a spec must be a mapping at the top level")]))
+    return spec_from_dict(data)
+
+
 def _findings(exc: ValidationError) -> list[Finding]:
     findings = []
     for error in exc.errors():

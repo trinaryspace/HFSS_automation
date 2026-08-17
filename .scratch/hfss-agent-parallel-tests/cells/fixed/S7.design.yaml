@@ -1,0 +1,298 @@
+# patch-array-5800 as a Design Spec — 2x2 corporate-fed microstrip patch array.
+#
+# Locked in Clarification (2026-08-16, workspaces/patch-array-5800/state.md).
+# Element: Balanis 14-6/14-7 recomputed on RO4350B (er 3.48, h 0.762 mm) —
+# closes at exactly 5.8000 GHz. Feed lines: Hammerstad synthesis on this stack
+# (same math as knowledge/cases/microstrip-50r). Corporate feed, REVISED after
+# design review: elements inset-matched to 50 ohm; every line 50 ohm; a
+# lambda_g/4 section at 35.3553 ohm at each junction undoes the parallel
+# combination (25 -> 50), one on the trunk below T1 and one per arm below T2.
+# All geometry is variable driven; the inset depth is the match tuner (not the
+# resonance).
+#
+# The as-authored version had correct line widths but terminated four 100 ohm
+# lines into insets computed for 50 ohm, mismatching every element 2:1. Both
+# offline gates passed on it. See wave-a-batch-1-findings.md.
+spec_version: 1
+name: patch-array-5800
+recipe: corporate-patch-array
+solution_type: Modal            # explicit, never the default (env-compat #11)
+
+provenance:
+  source: "Balanis ch.14 (14-1/14-2/14-6/14-7) element + Hammerstad synthesis feed lines, recomputed for 5.8 GHz on RO4350B 0.762 mm"
+  canonical_reading: closed-form
+  notes: >-
+    Not paper-sourced, so no Table/Figure arbitration. Numbers recomputed in
+    Clarification and recorded in the State ledger; the element resonance
+    closes at 5.8000 GHz by construction. Inset depth (inset_d) is the match
+    tuner and is expected to move +/-2 mm in the build; patch_L fixes the
+    resonance.
+
+target:
+  quantity: resonant_frequency
+  value: 5.8GHz
+  tolerance_pct: 5
+
+variables:
+  f0: 5.8GHz
+  er: 3.48
+  tand: 0.0037
+  h: 0.762mm
+  cu_t: 0.035mm
+  patch_W: 17.2679mm            # Balanis 14-6
+  patch_L: 13.6238mm            # Balanis 14-7 with 14-2 fringing
+  S: 25.8442mm                  # lambda0/2 at 5.8 GHz
+  # REVIEW FIX - the corporate feed is now a true two-stage network.
+  #
+  # What was wrong: every line width was individually correct (0.9464 mm really
+  # is 70.7 ohm, 0.4403 mm really is 100 ohm), and the network was internally
+  # self-consistent - but it terminated in four 100 ohm lines while the element
+  # inset was computed for a 50 ohm match. Every patch was mismatched 2:1. The
+  # arithmetic was right and the design was wrong, which no gate could see.
+  #
+  # The fix: all lines are 50 ohm, and a quarter-wave transformer at each
+  # junction undoes the parallel combination.
+  #
+  #   patch 50 | two 50 in parallel = 25 | lambda_g/4 @ 35.36 -> 50 (T2)
+  #            | two 50 arms in parallel = 25 | lambda_g/4 @ 35.36 -> 50 (T1)
+  #            | 50 ohm input
+  #
+  # Z_xfmr = 50/sqrt(2) = 35.3553 ohm, since sqrt(25*50) = 35.3553.
+  # Three sections total: one on the trunk below T1, one per arm below T2.
+  # The patches keep the 50 ohm inset that was already correct.
+  feed50_W: 1.7427mm            # Hammerstad, 50 ohm on this stack (unchanged)
+  xfmr_W: 2.9084mm              # Hammerstad, 35.3553 ohm; eeff 2.8491
+  q_x: 7.6556mm                 # lambda_g/4 on the 35.3553 ohm line at 5.8 GHz
+  inset_d: 2.0mm                # match tuner (start; tune against S11)
+  inset_g: 1.0mm                # inset slot width (gap arm<->patch metal)
+  # REVIEW FIX: substrate enlarged. The array itself spans +-21.55 mm in x
+  # (patch centre S/2 = 12.92 plus patch_W/2 = 8.63), so 52 mm left only ~4 mm
+  # of board beyond the outer element edges. 70 mm gives ~13.5 mm, about
+  # lambda0/4, and leaves room for the longer trunk the two-stage feed needs.
+  sub_W: 70mm
+  sub_L: 70mm
+  # REVIEW FIX: lambda0/3 on all sides (was lambda0/4). lambda0 = 51.6884 mm.
+  air_pad: 17.2295mm            # lambda0/3 at f0
+  port_w: 8mm                   # wave port width, ~4.6 * feed50_W
+
+materials:
+  ro4350b:
+    permittivity: 3.48
+    loss_tangent: 0.0037
+  metal:
+    library: pec
+  air:
+    library: air
+
+geometry:
+  - op: box
+    name: Substrate
+    material: ro4350b
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L, h]
+
+  - op: sheet
+    name: GroundPlane
+    material: metal
+    plane: xy
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L]
+
+  # The four elements at (+/-S/2, +/-S/2). P1 bottom-left, P2 top-left,
+  # P3 top-right, P4 bottom-right.
+  - op: sheet
+    name: P1
+    material: metal
+    plane: xy
+    origin: ["-S/2 - patch_W/2", "-S/2 - patch_L/2", h]
+    size: [patch_W, patch_L]
+  - op: sheet
+    name: P2
+    material: metal
+    plane: xy
+    origin: ["-S/2 - patch_W/2", "S/2 - patch_L/2", h]
+    size: [patch_W, patch_L]
+  - op: sheet
+    name: P3
+    material: metal
+    plane: xy
+    origin: ["S/2 - patch_W/2", "S/2 - patch_L/2", h]
+    size: [patch_W, patch_L]
+  - op: sheet
+    name: P4
+    material: metal
+    plane: xy
+    origin: ["S/2 - patch_W/2", "-S/2 - patch_L/2", h]
+    size: [patch_W, patch_L]
+
+  # Corporate feed network, all at z = h. Input line up x=0 to T1 at (0,0);
+  # 50 ohm arms run to x = +/-(S/2 - q_x); 35.36 ohm lambda/4 sections run
+  # to the column T2 junctions at (+/-S/2, 0); 50 ohm element lines drop +-y
+  # into the insets, ending at the notch bottom (junction with the patch).
+  # 50 ohm input line: board edge up to the trunk transformer.
+  - op: sheet
+    name: InLine
+    material: metal
+    plane: xy
+    origin: ["-feed50_W/2", "-sub_L/2", h]
+    size: [feed50_W, "sub_L/2 - q_x"]
+  # Stage-1 transformer, on the trunk: sees 25 ohm at T1 (two 50 ohm arms in
+  # parallel) and presents 50 ohm to the input line.
+  - op: sheet
+    name: Xfmr1
+    material: metal
+    plane: xy
+    origin: ["-xfmr_W/2", "-q_x", h]
+    size: [xfmr_W, q_x]
+  # 50 ohm arms, T1 outward in +-x, stopping short of the stage-2 sections.
+  - op: sheet
+    name: ArmL
+    material: metal
+    plane: xy
+    origin: ["-(S/2 - q_x) - feed50_W/2", "-feed50_W/2", h]
+    size: ["S/2 - q_x", feed50_W]
+  - op: sheet
+    name: ArmR
+    material: metal
+    plane: xy
+    origin: ["feed50_W/2", "-feed50_W/2", h]
+    size: ["S/2 - q_x", feed50_W]
+  # Stage-2 transformers, one per arm: each sees 25 ohm at its T2 column
+  # junction (two 50 ohm element lines in parallel) and presents 50 ohm to
+  # the arm.
+  - op: sheet
+    name: Xfmr2L
+    material: metal
+    plane: xy
+    origin: ["-S/2 - xfmr_W/2", "-xfmr_W/2", h]
+    size: [q_x, xfmr_W]
+  - op: sheet
+    name: Xfmr2R
+    material: metal
+    plane: xy
+    origin: ["S/2 - q_x - xfmr_W/2", "-xfmr_W/2", h]
+    size: [q_x, xfmr_W]
+  - op: sheet
+    name: UpL
+    material: metal
+    plane: xy
+    origin: ["-S/2 - feed50_W/2", "0mm", h]
+    size: [feed50_W, "S/2 - patch_L/2 + inset_d"]
+  - op: sheet
+    name: DownL
+    material: metal
+    plane: xy
+    origin: ["-S/2 - feed50_W/2", "-(S/2 - patch_L/2 + inset_d)", h]
+    size: [feed50_W, "S/2 - patch_L/2 + inset_d"]
+  - op: sheet
+    name: UpR
+    material: metal
+    plane: xy
+    origin: ["S/2 - feed50_W/2", "0mm", h]
+    size: [feed50_W, "S/2 - patch_L/2 + inset_d"]
+  - op: sheet
+    name: DownR
+    material: metal
+    plane: xy
+    origin: ["S/2 - feed50_W/2", "-(S/2 - patch_L/2 + inset_d)", h]
+    size: [feed50_W, "S/2 - patch_L/2 + inset_d"]
+
+  # One conductor: the united body keeps the first operand's name (P1).
+  - op: unite
+    name: P1
+    with: [P2, P3, P4, InLine, Xfmr1, ArmL, Xfmr2L, ArmR, Xfmr2R,
+           UpL, DownL, UpR, DownR]
+
+  # The 8 inset notches: two per element, flanking its feed arm, cut from the
+  # element's feed edge (facing its T2) to depth inset_d. Cut, not drawn,
+  # exactly like patch-2400.
+  - op: sheet
+    name: N1L
+    plane: xy
+    origin: ["-S/2 - feed50_W/2 - inset_g", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d]
+  - op: sheet
+    name: N1R
+    plane: xy
+    origin: ["-S/2 + feed50_W/2", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d]
+  - op: sheet
+    name: N2L
+    plane: xy
+    origin: ["-S/2 - feed50_W/2 - inset_g", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d]
+  - op: sheet
+    name: N2R
+    plane: xy
+    origin: ["-S/2 + feed50_W/2", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d]
+  - op: sheet
+    name: N3L
+    plane: xy
+    origin: ["S/2 - feed50_W/2 - inset_g", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d]
+  - op: sheet
+    name: N3R
+    plane: xy
+    origin: ["S/2 + feed50_W/2", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d]
+  - op: sheet
+    name: N4L
+    plane: xy
+    origin: ["S/2 - feed50_W/2 - inset_g", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d]
+  - op: sheet
+    name: N4R
+    plane: xy
+    origin: ["S/2 + feed50_W/2", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d]
+
+  - op: subtract
+    name: P1
+    tools: [N1L, N1R, N2L, N2R, N3L, N3R, N4L, N4R]
+    keep_tools: false
+
+  # Wave port at the input edge: xz sheet from ground to the airbox lid,
+  # centered on the 50 ohm line (microstrip-50r pattern; airbox -y face is
+  # flush with this plane so the port terminates the radiation boundary).
+  - op: sheet
+    name: PortSheet
+    plane: xz
+    origin: ["-port_w/2", "-sub_L/2", "0mm"]
+    size: [port_w, "h + air_pad"]
+
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2 - air_pad", "-sub_L/2", "-air_pad"]
+    size: ["sub_W + 2*air_pad", "sub_L + air_pad", "h + 2*air_pad"]
+
+excitations:
+  - name: Port1
+    type: wave_port
+    on:
+      object: PortSheet
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad
+    type: radiation
+    on:
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 15
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: discrete
+    start: 5.4GHz
+    stop: 6.2GHz
+    count: 161
+
+qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass, gain_plausible]

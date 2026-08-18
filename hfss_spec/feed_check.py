@@ -125,7 +125,15 @@ def _port_impedance(spec, scope, declared):
 
 
 def walk(spec, scope):
-    """(path, message, hint) for each way the declared feed fails to close."""
+    """(path, severity, message, hint) for each finding.
+
+    Chain arithmetic is an ERROR: the designer declared what the elements
+    present, so either it closes or the array is mismatched. The provenance of
+    that declaration is a WARNING - it is methodology rather than algebra, and
+    making it fatal would block every array spec until someone runs a multi-port
+    extraction, which is the right order of work but not a reason to refuse to
+    validate a document.
+    """
     out = []
     net = getattr(spec, "feed_network", None)
     if net is None or not getattr(net, "chain", None):
@@ -133,13 +141,13 @@ def walk(spec, scope):
 
     h, er = _substrate_stack(spec, scope)
     if not h or not er:
-        return [("feed_network",
+        return [("feed_network", "error",
                  "cannot read the substrate stack, so no line impedance is computable",
                  "declare h as a length variable and a permittivity on the substrate material")]
 
     z_elem = _num(net.element_impedance, scope, RESISTANCE)
     if not z_elem or z_elem <= 0:
-        return [("feed_network.element_impedance",
+        return [("feed_network.element_impedance", "error",
                  "element_impedance must be a positive impedance",
                  "read as " + repr(net.element_impedance))]
 
@@ -149,6 +157,24 @@ def walk(spec, scope):
 
     from .model_checks import _target_frequency
     f0 = _target_frequency(spec)
+
+    # A chain with a junction is a multi-element array, and in an array the
+    # figure that matters is the ACTIVE impedance - what an element presents
+    # while its neighbours are driven - not its isolated value. At lambda/2 the
+    # difference is not small: a perfectly matched isolated element can present
+    # about 41 ohm active, a 17% error that reads as roughly -20 dB at the input.
+    # "Mostly matches" is exactly what a feed solved against the wrong load looks
+    # like, which is why this is surfaced rather than assumed away.
+    if any(stage.junction for stage in net.chain) and             net.element_impedance_source != "active_measured":
+        out.append((
+            "feed_network.element_impedance_source", "warning",
+            "this feed drives multiple elements, but element_impedance is marked "
+            "%r rather than measured" % net.element_impedance_source,
+            "simulate the elements with individual ports and no feed network, "
+            "take the active impedance from the S-matrix "
+            "(gamma_act,i = sum_j S_ij a_j/a_i), and match to that; matching to "
+            "the isolated value leaves a mismatch no feed arithmetic can remove",
+        ))
 
     z = z_elem
     steps = ["element %.2f" % z_elem]
@@ -163,24 +189,24 @@ def walk(spec, scope):
 
         name = stage.line or stage.quarter_wave
         if not name:
-            out.append((path, "a stage must set one of line, quarter_wave or junction", ""))
+            out.append((path, "error", "a stage must set one of line, quarter_wave or junction", ""))
             return out
         op = ops.get(name)
         if op is None:
             close = difflib.get_close_matches(str(name), list(ops), n=1)
-            out.append((path, "%r is not a geometry object" % name,
+            out.append((path, "error", "%r is not a geometry object" % name,
                         ("did you mean %r?" % close[0]) if close else "check the object name"))
             return out
 
         extents = _strip_extents(op, scope)
         if extents is None:
-            out.append((path, "cannot measure %r as a strip" % name,
+            out.append((path, "error", "cannot measure %r as a strip" % name,
                         "the walk needs a resolvable width and length"))
             return out
         width, length = extents
         pair = _impedance_of(width, h, er)
         if pair is None:
-            out.append((path,
+            out.append((path, "error",
                         "no trustworthy impedance for %r: W/h = %.3f, outside "
                         "Hammerstad's usable range" % (name, width / h),
                         "a 200 ohm line on this stack is about 0.04 mm wide, both "
@@ -194,7 +220,12 @@ def walk(spec, scope):
                 from .physics import guide_wavelength
                 quarter = guide_wavelength(f0, eeff) / 4.0
                 if abs(length - quarter) / quarter > 0.05:
-                    out.append((path,
+                    # ERROR, not a warning: the walk computes Z^2/Z_load,
+                    # which holds only at exactly a quarter wavelength. A
+                    # section off that length does not perform the transform the
+                    # chain declares, so the closure reported downstream is
+                    # fiction rather than an approximation.
+                    out.append((path, "error",
                                 "%r acts as a quarter-wave section but is %.3f mm long "
                                 "against lambda_g/4 = %.3f mm at %.4g GHz"
                                 % (name, length * 1e3, quarter * 1e3, f0 / 1e9),
@@ -206,7 +237,7 @@ def walk(spec, scope):
 
         if abs(z_line - z) / z > tol:
             ratio = max(z_line, z) / min(z_line, z)
-            out.append((path,
+            out.append((path, "error",
                         "%r is a %.2f ohm line (%.3f mm) into a %.2f ohm load - "
                         "%.2f:1 mismatch" % (name, z_line, width * 1e3, z, ratio),
                         "match the line, add a quarter-wave section, or declare a "
@@ -216,7 +247,7 @@ def walk(spec, scope):
         steps.append("line %s %.2f" % (name, z_line))
 
     if abs(z - z_port) / z_port > tol:
-        out.append(("feed_network",
+        out.append(("feed_network", "error",
                     "the chain does not close: a %.2f ohm element presents %.2f ohm "
                     "at the port, which wants %.2f ohm" % (z_elem, z, z_port),
                     "walk: " + " | ".join(steps)))

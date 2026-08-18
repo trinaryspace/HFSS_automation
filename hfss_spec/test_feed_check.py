@@ -203,6 +203,61 @@ class TestHonestLimits(unittest.TestCase):
         self.assertEqual(feed_errors(text), [])
 
 
+class TestActiveImpedance(unittest.TestCase):
+    """Mutual coupling moves the driven impedance off the isolated value, so a
+    feed matched to the isolated number is solved against the wrong load."""
+
+    def test_a_perfectly_matched_isolated_element_is_not_50_when_driven(self):
+        from hfss_spec.physics import active_impedance
+        # S11 = 0 - a flawless isolated match - with modest coupling to three
+        # neighbours in a 2x2.
+        z = active_impedance([0.0 + 0j, -0.06 + 0.02j, -0.05 - 0.03j, 0.015 + 0.01j])
+        self.assertLess(abs(z), 50.0)
+        self.assertGreater(abs(abs(z) - 50.0) / 50.0, 0.10)   # >10% off
+
+    def test_no_coupling_reproduces_the_isolated_value(self):
+        from hfss_spec.physics import active_impedance
+        z = active_impedance([0.0 + 0j, 0j, 0j, 0j])
+        self.assertAlmostEqual(z.real, 50.0, places=6)
+
+    def test_uniform_excitation_is_the_default(self):
+        from hfss_spec.physics import active_reflection
+        row = [0.1 + 0j, 0.02 + 0j, 0.03 + 0j]
+        self.assertAlmostEqual(active_reflection(row).real, 0.15, places=9)
+        self.assertAlmostEqual(
+            active_reflection(row, [1, 1, 1]).real, 0.15, places=9)
+
+    def test_an_array_feed_matched_to_an_assumed_impedance_is_flagged(self):
+        """A junction means multiple elements, and for those the impedance has
+        to come from a multi-port extraction rather than an assumption."""
+        text = spec_with({"Arm": (100, LONG), "Trunk": (50, LONG)},
+                         ["junction: 2", "line: Arm", "junction: 2", "line: Trunk"],
+                         "200ohm")
+        report = validate(load_spec_text(text))
+        flagged = [f for f in report.warnings
+                   if f.path.endswith("element_impedance_source")]
+        self.assertTrue(flagged)
+        self.assertIn("measured", flagged[0].message)
+
+    def test_declaring_it_measured_clears_the_flag(self):
+        text = spec_with({"Arm": (100, LONG), "Trunk": (50, LONG)},
+                         ["junction: 2", "line: Arm", "junction: 2", "line: Trunk"],
+                         "200ohm")
+        text = text.replace("  element_impedance: 200ohm",
+                            "  element_impedance: 200ohm\n"
+                            "  element_impedance_source: active_measured")
+        report = validate(load_spec_text(text))
+        self.assertEqual([f for f in report.warnings
+                          if f.path.endswith("element_impedance_source")], [])
+
+    def test_a_single_element_feed_is_not_asked_for_an_extraction(self):
+        """No junction means one element, where the isolated value is the truth."""
+        text = spec_with({"Trunk": (50, LONG)}, ["line: Trunk"], "50ohm")
+        report = validate(load_spec_text(text))
+        self.assertEqual([f for f in report.warnings
+                          if f.path.endswith("element_impedance_source")], [])
+
+
 if __name__ == "__main__":
     result = unittest.main(exit=False, verbosity=0).result
     failed = len(result.failures) + len(result.errors)

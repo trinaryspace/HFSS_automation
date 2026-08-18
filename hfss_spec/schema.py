@@ -459,6 +459,13 @@ class FeedNetwork(SpecModel):
     """
 
     element_impedance: Expr
+    # Where element_impedance came from. For anything with a junction - i.e. any
+    # multi-element array - the honest answer must be a multi-port extraction,
+    # because at half-wavelength spacing mutual coupling moves the driven
+    # impedance well off the isolated value. A perfectly matched isolated element
+    # can present ~41 ohm active, which is a 17% error and about -20 dB at the
+    # input: "mostly matches", and wrong.
+    element_impedance_source: Literal["active_measured", "isolated", "assumed"] = "assumed"
     port_impedance: Optional[Expr] = None
     tolerance_pct: float = Field(default=5.0, gt=0)
     chain: list[FeedStage] = Field(default_factory=list)

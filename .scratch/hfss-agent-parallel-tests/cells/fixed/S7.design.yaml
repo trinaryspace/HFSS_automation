@@ -303,6 +303,13 @@ qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass, gain_pl
 # verify every line width against the load it actually sees.
 feed_network:
   element_impedance: 50ohm      # each patch, inset-matched
+  # Honest provenance: this is the ISOLATED design value, not the driven one.
+  # At lambda/2 the elements couple, so the impedance a fed element actually
+  # presents is its active impedance and will not be exactly 50. The validator
+  # warns about this on purpose - it is the open question the simulation task
+  # exists to answer, and the number should be replaced by an extraction from a
+  # four-port run of the elements alone before the feed is trusted.
+  element_impedance_source: isolated
   port_impedance: 50ohm
   chain:
     - {line: UpL}               # 50 ohm element line

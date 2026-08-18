@@ -575,3 +575,49 @@ _ESTIMATORS = {
     "microstrip_impedance": _microstrip,
     "horn_cutoff": _horn,
 }
+
+
+def active_reflection(s_row, excitation=None):
+    """Active reflection coefficient of one element in an excited array.
+
+    `s_row` is that element's row of the array S-matrix (complex, port order
+    fixed); `excitation` is the incident wave at each port, defaulting to uniform
+    broadside (all equal). Returns the complex active reflection coefficient
+
+        gamma_act,i = sum_j S_ij * (a_j / a_i)
+
+    **Why this matters, and why an isolated patch impedance is the wrong target.**
+    At half-wavelength spacing the elements are strongly enough coupled that what
+    a feed actually sees is not the isolated element impedance. Matching to the
+    isolated value leaves a real mismatch that no amount of correct feed
+    arithmetic removes, because the arithmetic was solved against the wrong load.
+
+    The proper order is therefore: simulate the elements with individual ports
+    and no feed network, extract the S-matrix, compute the active impedance from
+    it, and only then synthesise the match.
+    """
+    values = list(s_row)
+    if not values:
+        raise ValueError("s_row must contain at least the element's own S_ii")
+    if excitation is None:
+        excitation = [1.0] * len(values)
+    excitation = list(excitation)
+    if len(excitation) != len(values):
+        raise ValueError("excitation must have one entry per port")
+    self_a = excitation[0]
+    if self_a == 0:
+        raise ValueError("the element's own excitation cannot be zero")
+    return sum(s * (a / self_a) for s, a in zip(values, excitation))
+
+
+def impedance_from_gamma(gamma, z0=50.0):
+    """Convert a reflection coefficient to an impedance, `Z = Z0 (1+g)/(1-g)`."""
+    denominator = 1.0 - gamma
+    if denominator == 0:
+        raise ValueError("gamma = 1 is an open circuit; impedance is unbounded")
+    return z0 * (1.0 + gamma) / denominator
+
+
+def active_impedance(s_row, excitation=None, z0=50.0):
+    """The impedance one element presents while the whole array is driven."""
+    return impedance_from_gamma(active_reflection(s_row, excitation), z0)

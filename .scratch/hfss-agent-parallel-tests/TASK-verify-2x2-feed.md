@@ -69,6 +69,44 @@ at all. Fits at lambda/2 with room to spare. Fewest discontinuities.
 **Recommended starting point** — but the inset depth for a 100 ohm match is a
 tuned parameter, so expect to move it.
 
+## The methodology — two solves, in this order
+
+**Do not match the feed to the isolated patch impedance.** At lambda/2 the
+elements couple, so what a feed actually sees is the *active* impedance - what an
+element presents while its neighbours are driven. Matching to the isolated value
+leaves a mismatch no amount of correct feed arithmetic removes, because the
+arithmetic was solved against the wrong load.
+
+**Stage 1 - characterise the elements, no feed network.**
+Build the four patches at S = lambda0/2 with an individual lumped port at each
+intended feed point. No corporate feed, no transformers. Solve, and export the
+full 4x4 S-matrix.
+
+Then compute the active impedance for uniform broadside excitation:
+
+    gamma_act,i = sum_j S_ij * (a_j / a_i)      with all a_j equal
+    Z_act,i     = Z0 * (1 + gamma_act,i) / (1 - gamma_act,i)
+
+`hfss_spec.physics.active_impedance(s_row)` does exactly this - use it rather
+than re-deriving.
+
+**A 2x2 is the easy case**: by symmetry every element has one neighbour in x, one
+in y and one on the diagonal, so all four active impedances are identical. One
+number to match to. (Larger arrays differ by edge/corner/interior and need each.)
+
+Record Z_act in the ledger. It is the real design target and the reason this
+stage exists.
+
+**Stage 2 - synthesise the feed to Z_act and solve the fed array.**
+Set `element_impedance` to the measured value and
+`element_impedance_source: active_measured`; the validator warns while it is
+still marked `isolated` or `assumed`, which is the current state of
+`cells/fixed/S7.design.yaml`. Then pick a candidate feed, route it, and solve.
+
+Everything stays parameterised so the values can be tuned by hand afterwards -
+that is the point of the spec route, and the inset depth in particular should be
+expected to move.
+
 ## QA signals — with the numbers that decide it
 
 One solve separates the element from the feed, which is the whole reason this is
@@ -77,14 +115,19 @@ worth running:
 - **Resonance position tests the elements.** The S11 dip should sit at
   5.8 GHz +/-5% (5.51-6.09 GHz). If it lands there, the Balanis synthesis is
   vindicated and any remaining problem is the feed.
-- **Dip depth tests the feed.** A properly matched network gives
-  **S11 < -15 dB** at f0. **A 2:1 element mismatch gives |gamma| = 1/3, i.e.
-  about -9.5 dB** — so the discriminator is roughly:
-  - S11 < -15 dB at f0: the feed works.
-  - S11 around -9 to -10 dB with the dip in band: the elements are fine and
-    **the feed is mismatched** — this is the exact signature of the original
-    defect, and finding it is a successful run.
-  - no dip in band: the elements are wrong, not the feed. Report that separately.
+- **Dip depth tests the feed**, and the bands are now calibrated against how
+  much coupling alone can cost:
+  - **S11 < -25 dB**: matched to the active impedance. The stage-1 extraction
+    was used and worked.
+  - **around -20 dB**: the signature of a feed matched to the *isolated* 50 ohm
+    while the elements actually present something else. A perfectly matched
+    isolated element under modest lambda/2 coupling reads about 41 ohm active,
+    a 17% error and roughly -20 dB. **This is the predicted outcome if stage 1
+    is skipped** - "mostly matches", and solved against the wrong load.
+  - **around -9 to -10 dB** with the dip in band: a 2:1 element mismatch
+    (|gamma| = 1/3). The elements are fine and **the feed is wrong** - this is
+    the original defect's exact signature, and finding it is a successful run.
+  - **no dip in band**: the elements are wrong, not the feed. Report separately.
 - **Broadside gain**: a 2x2 of ~7 dBi patches should reach roughly **12-13 dBi**.
   Materially less, with a good S11, points at unequal element excitation — the
   corporate feed's actual job.
@@ -147,3 +190,8 @@ that is the most valuable outcome available, because it is currently unknown.
 > patches are excited equally. Tell me what would show the feed to be broken
 > before you build it. There's a candidate design and the reasoning in
 > .scratch/hfss-agent-parallel-tests/TASK-verify-2x2-feed.md - read it first.
+>
+> One thing I want done properly: don't match the feed to the isolated patch
+> impedance. Simulate the four patches on their own first, with a port on each and
+> no feed network, pull the active impedance out of the S-matrix, and match to
+> that. At half-wave spacing they couple and the driven impedance won't be 50.

@@ -447,8 +447,9 @@ def _check_model_relations(spec: DesignSpec, findings: list[Finding],
     # of thumb: the designer has declared what the elements present, and either
     # the arithmetic closes or the network is mismatched. S7 shipped a 2:1
     # mismatch on every element past three green gates.
-    for path, message, hint in feed_check.walk(spec, scope):
-        findings.append(Finding(path, ERROR, message, hint=hint))
+    for path, severity, message, hint in feed_check.walk(spec, scope):
+        findings.append(Finding(path, ERROR if severity == "error" else WARNING,
+                                message, hint=hint))
 
 
 def _did_you_mean(name: str, candidates: Iterable[str]) -> str:

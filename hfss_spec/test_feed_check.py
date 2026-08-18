@@ -111,6 +111,23 @@ class TestLegitimateTopologies(unittest.TestCase):
                  "line: Arm", "junction: 2", "quarter_wave: X1", "line: Trunk"]
         self.assertEqual(feed_errors(spec_with(lines, chain, "50ohm")), [])
 
+    def test_canonical_fifty_ohm_patches_six_transformers(self):
+        """The canonical 50-ohm-patch corporate feed, and the one to compare
+        against: 50 trunk -> T -> two 100 ohm branches -> lambda/4 @ 70.71 to 50
+        -> T -> four 100 ohm lines -> lambda/4 @ 70.71 to each 50 ohm patch.
+        Six transformers, and nothing ever leaves 50 or 100 ohm. 70.71 is
+        sqrt(50*100), the classic quarter-wave value, and its line is 0.946 mm
+        against the 2.908 mm a 35.36 ohm section needs.
+        """
+        x = math.sqrt(50 * 100)
+        lines = {"XP": (x, quarter_for(x)), "El": (100, LONG),
+                 "Br": (50, LONG), "XB": (x, quarter_for(x)),
+                 "Bo": (100, LONG), "Trunk": (50, LONG)}
+        chain = ["quarter_wave: XP", "line: El", "junction: 2",
+                 "line: Br", "quarter_wave: XB", "line: Bo", "junction: 2",
+                 "line: Trunk"]
+        self.assertEqual(feed_errors(spec_with(lines, chain, "50ohm")), [])
+
     def test_b_two_hundred_ohm_elements_pure_halving_no_sections(self):
         """The elegant one: 200 is 4x a 50 ohm input, so two parallel
         combinations land on it with no matching sections at all. Written with the

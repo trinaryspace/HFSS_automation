@@ -63,10 +63,27 @@ about **boundaries** rather than length.
 aesthetic; it is *what a session of each type may and may not do*, enforced by
 the runner. Ship that boundary first, with the three seams following.
 
-- [ ] **Session boundaries enforced by the runner: Clarification cannot write
-      code or run implementation loops; Build cannot solve; a breach escalates**
-- [ ] **A per-session budget the runner owns, so a loop is capped by the harness
-      rather than by the agent noticing**
+- [x] **Session boundaries enforced: Clarification cannot reach a licence or a
+      solver; Build cannot solve; a breach exits non-zero** — `hfss_spec/session.py`,
+      17 tier-0 tests, wired into `compile_spec` (`--launch` and `compile_model`).
+      Verified end to end: a declared clarify session refuses
+      `compile_spec --launch` with exit 1 *before* any AEDT contact, and a build
+      session passes through. **Partial by construction** — it covers every
+      expensive action that goes through this repo's tooling (licence, live
+      model, solver) and does **not** cover an arbitrary `python -c`, which is
+      how S11 actually wrote its solver. Closing that needs per-phase tool
+      gating in the harness; see the remaining item below.
+- [x] **A per-session call budget with an escalation verdict** — default 60, matching
+      SKILL.md. Honest limit: it binds whoever calls `note_call`, so today it
+      serves a driver rather than a conversation. S11's 250 parts would have
+      escalated four times over.
+- [ ] **Per-phase tool gating in the harness** — the residual from the two items
+      above: deny the tools a phase has no business using, so the boundary holds
+      for arbitrary bash as well as for repo entry points. This is the piece that
+      would actually have stopped S11.
+- [ ] An undeclared session is currently unguarded (deliberate, so the guard
+      could land without breaking existing workspaces). Decide when to flip that
+      default to "declare or refuse".
 - [ ] Exactly three LLM call sites; a test asserts no others exist
 - [ ] All three use structured output against the exported JSON Schema
 - [ ] Ledger remains the sole resume point; a killed run resumes without redoing clarification

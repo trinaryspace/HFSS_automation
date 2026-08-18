@@ -59,6 +59,10 @@ SUITES = [
     # against the 2026-08-17 review, where three of six machine-clean specs
     # were wrong and no existing check could see any of it.
     ("model-checks", [sys.executable, os.path.join(REPO, "hfss_spec", "test_model_checks.py")]),
+    # The session boundary (ticket 14): a clarify session cannot reach a licence
+    # or a solver. Written against cell S11, which spent 51 minutes writing a
+    # field solver inside a Clarification block.
+    ("session", [sys.executable, os.path.join(REPO, "hfss_spec", "test_session.py")]),
     ("canonical-specs", [sys.executable, os.path.join(REPO, "scripts", "validate_cases.py")]),
 ]
 

@@ -81,6 +81,21 @@ def main(argv=None):
               f"escape_hatch={spec.escape_hatch_count}")
         return 0
 
+    # The phase boundary (ticket 14). Launching a desktop costs a licence seat
+    # and compiling geometry mutates a live model; neither belongs to a
+    # Clarification session. An undeclared session is unguarded - see
+    # hfss_spec.session.require - so this changes nothing for existing
+    # workspaces and refuses only where a phase has actually been declared.
+    from hfss_spec.session import PhaseViolation, require as require_phase
+    state_dir = workspace / "results" / "state"
+    try:
+        if args.launch:
+            require_phase("launch_desktop", state_dir)
+        require_phase("compile_model", state_dir)
+    except PhaseViolation as exc:
+        print(f"FAIL: compile_spec phase-boundary - {exc}")
+        return 1
+
     ws = load_ws_common(workspace)
     hfss = ws.attach(launch=args.launch)
     log = BuildLog(emit=lambda line: print(line, flush=True))

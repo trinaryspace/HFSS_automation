@@ -422,6 +422,49 @@ class Setup(SpecModel):
 # --- the spec --------------------------------------------------------------
 
 
+class FeedStage(SpecModel):
+    """One step of a feed network, walking from the element toward the port.
+
+    Exactly one of the three is set. `line` is a matched section whose declared
+    impedance must equal the load it sees; `quarter_wave` transforms that load as
+    Z^2/Z_load; `junction` combines N identical branches in parallel.
+    """
+
+    line: Optional[str] = None
+    quarter_wave: Optional[str] = None
+    junction: Optional[int] = Field(default=None, gt=1)
+
+
+class FeedNetwork(SpecModel):
+    """The designer's stated impedance intent, so the algebra can be checked.
+
+    Optional, and deliberately declarative. The checker cannot derive an
+    element's input impedance - inset depth or feed position sets it, and that is
+    synthesis rather than arithmetic - so the design states it and the walk
+    verifies everything downstream against the geometry's own widths.
+
+    This exists because of cell S7 (2026-08-17). Every line width in that spec
+    was individually correct and the network was internally self-consistent, but
+    it terminated four 100 ohm lines into elements inset-matched to 50 ohm:
+    every element mismatched 2:1. Both offline gates passed. What was missing was
+    not a calculation but a *statement* of what the network demanded at its
+    elements, which is what `element_impedance` is.
+
+    The walk is topology-agnostic on purpose. A 2x2 array can be fed with 50 ohm
+    elements and three quarter-wave junction sections, or with 200 ohm elements
+    and pure impedance halving and no sections at all (200 being exactly 4x the
+    50 ohm input), or with 200 ohm elements stepped down through quarter-wave
+    transformers. All three are legitimate and all three close; a checker that
+    enforced any one of them would reject the other two.
+    """
+
+    element_impedance: Expr
+    port_impedance: Optional[Expr] = None
+    tolerance_pct: float = Field(default=5.0, gt=0)
+    chain: list[FeedStage] = Field(default_factory=list)
+
+
+
 class DesignSpec(SpecModel):
     """One design. The single source of truth for a simulation."""
 
@@ -442,6 +485,7 @@ class DesignSpec(SpecModel):
     geometry: list[GeometryOp] = Field(default_factory=list)
     excitations: list[Excitation] = Field(default_factory=list)
     boundaries: list[Boundary] = Field(default_factory=list)
+    feed_network: Optional[FeedNetwork] = None
     mesh: list[Mesh] = Field(default_factory=lambda: [Mesh()])
     setup: Setup
     qa_signals: list[Literal["convergence", "ports_excited", "in_band_resonance",

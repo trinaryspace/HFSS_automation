@@ -296,3 +296,19 @@ setup:
     count: 161
 
 qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass, gain_plausible]
+
+# The impedance chain, stated so it can be checked (hfss_spec/feed_check.py).
+# S7 as authored had correct widths and no statement of what its network demanded
+# at the elements; that omission was the defect. Declaring it makes the walk
+# verify every line width against the load it actually sees.
+feed_network:
+  element_impedance: 50ohm      # each patch, inset-matched
+  port_impedance: 50ohm
+  chain:
+    - {line: UpL}               # 50 ohm element line
+    - {junction: 2}             # UpL || DownL -> 25 ohm at T2
+    - {quarter_wave: Xfmr2L}    # 35.36 ohm lambda/4 -> 50 ohm
+    - {line: ArmL}              # 50 ohm arm
+    - {junction: 2}             # ArmL || ArmR -> 25 ohm at T1
+    - {quarter_wave: Xfmr1}     # 35.36 ohm lambda/4 -> 50 ohm
+    - {line: InLine}            # 50 ohm input

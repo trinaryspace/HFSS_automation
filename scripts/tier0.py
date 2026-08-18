@@ -63,6 +63,10 @@ SUITES = [
     # or a solver. Written against cell S11, which spent 51 minutes writing a
     # field solver inside a Clarification block.
     ("session", [sys.executable, os.path.join(REPO, "hfss_spec", "test_session.py")]),
+    # The feed-network impedance walk: the gate that catches S7's 2:1 element
+    # mismatch, and accepts every legitimate feed topology including the 200-ohm
+    # halving design that needs no transformers at all.
+    ("feed-check", [sys.executable, os.path.join(REPO, "hfss_spec", "test_feed_check.py")]),
     ("canonical-specs", [sys.executable, os.path.join(REPO, "scripts", "validate_cases.py")]),
 ]
 

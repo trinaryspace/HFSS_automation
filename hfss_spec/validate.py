@@ -29,7 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from . import model_checks
+from . import feed_check, model_checks
 from .expressions import ExpressionError, Value, evaluate, resolve_all
 from .schema import DesignSpec, MaterialDef, MaterialRef
 from .units import (
@@ -443,6 +443,12 @@ def _check_model_relations(spec: DesignSpec, findings: list[Finding],
         findings.append(Finding(path, WARNING, message, hint=hint))
     for path, message, hint in model_checks.port_geometry(spec, scope):
         findings.append(Finding(path, WARNING, message, hint=hint))
+    # The feed-network walk is an ERROR, unlike the other two. It is not a rule
+    # of thumb: the designer has declared what the elements present, and either
+    # the arithmetic closes or the network is mismatched. S7 shipped a 2:1
+    # mismatch on every element past three green gates.
+    for path, message, hint in feed_check.walk(spec, scope):
+        findings.append(Finding(path, ERROR, message, hint=hint))
 
 
 def _did_you_mean(name: str, candidates: Iterable[str]) -> str:

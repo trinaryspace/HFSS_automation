@@ -1,6 +1,6 @@
 # HFSS Automation
 
-This repo lets a conversation with an agent produce a complete, correct ANSYS HFSS simulation — geometry, materials, excitations, setups, solves, plots, and results. Read `CONTEXT.md` for the domain glossary and `docs/adr/` for settled decisions before working.
+This repo lets a conversation with an agent produce a complete, correct ANSYS HFSS simulation — geometry, materials, excitations, setups, solves, plots, and results. Read `VISION.md` for what the project is for and what work is answerable to, `CONTEXT.md` for the domain glossary, and `docs/adr/` for settled decisions before working.
 
 ## Agent skills
 

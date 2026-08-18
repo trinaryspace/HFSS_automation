@@ -150,6 +150,38 @@ class TestPortGeometry(unittest.TestCase):
             port_warnings(air_pad_mm=60.0, port_w_mm=1.4, wire_d_mm=1.0), [])
 
 
+class TestFlushFaces(unittest.TestCase):
+    """A flush boundary face is only legitimate under a wave port.
+
+    Caught at a Review gate 2026-08-17: a four-lumped-port array was built with
+    its -y face flush, copied from a wave-port design. Every automated gate
+    passed it - including this one, which excused any flush face on the
+    assumption a wave port explained it, and never checked.
+    """
+
+    def test_a_flush_face_on_a_lumped_port_design_is_flagged(self):
+        # The dipole fixture uses a lumped port; pull the airbox flush in -x by
+        # placing it exactly on the wire surface.
+        text = spec_text(air_pad_mm=60.0).replace(
+            'origin: ["-WireD/2 - Pad", "-WireD/2 - Pad", "-L_arm - Gap/2 - Pad"]',
+            'origin: ["-WireD/2", "-WireD/2 - Pad", "-L_arm - Gap/2 - Pad"]')
+        report = validate(load_spec_text(text))
+        flagged = [f.message for f in report.warnings
+                   if "radiation boundary" in f.message]
+        self.assertTrue(flagged, "a lumped-port design gets no flush-face pass")
+
+    def test_the_rule_is_about_the_port_type_not_the_geometry(self):
+        """Same geometry, wave port instead: flush is then legitimate."""
+        text = spec_text(air_pad_mm=60.0).replace(
+            'origin: ["-WireD/2 - Pad", "-WireD/2 - Pad", "-L_arm - Gap/2 - Pad"]',
+            'origin: ["-WireD/2", "-WireD/2 - Pad", "-L_arm - Gap/2 - Pad"]')
+        text = text.replace("type: lumped_port", "type: wave_port")
+        report = validate(load_spec_text(text))
+        flagged = [f.message for f in report.warnings
+                   if "radiation boundary" in f.message]
+        self.assertEqual(flagged, [])
+
+
 class TestSeverity(unittest.TestCase):
     def test_both_are_warnings_never_errors(self):
         """A heuristic must not block a design. Blocking a correct model on a

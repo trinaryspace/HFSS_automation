@@ -232,13 +232,26 @@ def radiation_clearance(spec, scope) -> list[tuple[str, str, str]]:
             gaps.append((lo[i] - outer[i][0], "-" + "xyz"[i]))
             gaps.append((outer[i][1] - hi[i], "+" + "xyz"[i]))
 
-        # A face flush with the model is a deliberate pattern - a wave port on
-        # the boundary face, or a box sitting on a ground plane - so drop those
-        # faces and judge the rest. Dropping the *boundary* on a flush face
-        # (an earlier version of this) let a deliberate zero mask a genuinely
-        # tight face: X0a is flush in -y and -z and clears by lambda0/8 in x,
-        # and went unreported.
-        padded = [g for g in gaps if abs(g[0]) > 1e-12]
+        # A flush face is only legitimate when a WAVE PORT sits on it: a wave
+        # port is a 2D port on the outer surface of the solution domain, so the
+        # boundary has to be flush there. A lumped port is internal, and a
+        # design that uses only lumped ports must keep the full clearance on
+        # every face.
+        #
+        # Caught at a Review gate 2026-08-17: a four-lumped-port array was built
+        # with its -y face flush, copied from a wave-port design's port side.
+        # Every automated gate passed it, including this one, because an earlier
+        # version excused any flush face on the assumption a wave port explained
+        # it - an assumption the code never checked. The maintainer caught it by
+        # eye. That is the defect this branch closes.
+        has_wave_port = any(
+            getattr(e, "type", None) == "wave_port"
+            for e in (getattr(spec, "excitations", []) or [])
+        )
+        if has_wave_port:
+            padded = [g for g in gaps if abs(g[0]) > 1e-12]
+        else:
+            padded = list(gaps)          # lumped-port design: no free passes
         if not padded:
             continue
         tightest, face = min(padded, key=lambda g: g[0])

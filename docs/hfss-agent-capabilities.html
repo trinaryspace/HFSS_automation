@@ -1,0 +1,1206 @@
+<title>The HFSS Agent</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,600;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+
+<style>
+  /* ---------- tokens: light is the base, both dark states redefine only these ---------- */
+  :root {
+    --ground:      #f4f6f8;
+    --surface:     #ffffff;
+    --surface-sunk:#eceff3;
+    --ink:         #16222e;
+    --ink-soft:    #435463;
+    --ink-faint:   #74848f;
+    --rule:        #d5dce2;
+    --rule-soft:   #e5eaee;
+    --teal:        #0d6874;
+    --teal-soft:   #e2eff0;
+    --copper:      #9c5424;
+    --copper-soft: #f6ece4;
+    --pass:        #2c6f4a;
+    --warn:        #8f6410;
+    --fail:        #9d2f2f;
+    --shadow:      0 1px 2px rgb(22 34 46 / .05), 0 8px 24px -16px rgb(22 34 46 / .18);
+
+    --display: "Chivo", "Helvetica Neue", Arial, sans-serif;
+    --body:    "Source Serif 4", Georgia, "Times New Roman", serif;
+    --mono:    "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0e1620;
+      --surface:     #16202b;
+      --surface-sunk:#111a24;
+      --ink:         #e3eaf1;
+      --ink-soft:    #a8b6c2;
+      --ink-faint:   #7d8b98;
+      --rule:        #2a3846;
+      --rule-soft:   #212e3b;
+      --teal:        #59b6c0;
+      --teal-soft:   #16323a;
+      --copper:      #d18d5a;
+      --copper-soft: #2c2119;
+      --pass:        #6cbb8b;
+      --warn:        #d7ab4a;
+      --fail:        #e08282;
+      --shadow:      0 1px 2px rgb(0 0 0 / .3), 0 10px 28px -18px rgb(0 0 0 / .6);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0e1620;
+    --surface:     #16202b;
+    --surface-sunk:#111a24;
+    --ink:         #e3eaf1;
+    --ink-soft:    #a8b6c2;
+    --ink-faint:   #7d8b98;
+    --rule:        #2a3846;
+    --rule-soft:   #212e3b;
+    --teal:        #59b6c0;
+    --teal-soft:   #16323a;
+    --copper:      #d18d5a;
+    --copper-soft: #2c2119;
+    --pass:        #6cbb8b;
+    --warn:        #d7ab4a;
+    --fail:        #e08282;
+    --shadow:      0 1px 2px rgb(0 0 0 / .3), 0 10px 28px -18px rgb(0 0 0 / .6);
+  }
+
+  /* ---------- base ---------- */
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+  }
+
+  @media (min-width: 1040px) {
+    .shell { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 56px; padding-left: 32px; }
+    .masthead { grid-column: 1 / -1; }
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    padding: 72px 0 40px;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin: 0 0 22px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+  }
+  .eyebrow span:not(:first-child)::before { content: "· "; color: var(--ink-faint); }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(2.6rem, 7vw, 4.6rem);
+    line-height: .96;
+    letter-spacing: -.03em;
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: clamp(1.06rem, 2.1vw, 1.32rem);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 40ch;
+    margin: 0 0 40px;
+  }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  .factstrip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+  .fact {
+    background: var(--surface);
+    padding: 14px 16px 16px;
+  }
+  .fact dt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 6px;
+  }
+  .fact dd {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.1rem;
+    letter-spacing: -.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .fact dd small { display: block; font-family: var(--body); font-weight: 400; font-size: .78rem; color: var(--ink-soft); letter-spacing: 0; }
+
+  /* ---------- section rail ---------- */
+  .rail { display: none; }
+  @media (min-width: 1040px) {
+    .rail {
+      display: block;
+      align-self: start;
+      position: sticky;
+      top: 28px;
+      padding-top: 52px;
+    }
+    .rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+    .rail a {
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      line-height: 1.35;
+      letter-spacing: .02em;
+      color: var(--ink-faint);
+      text-decoration: none;
+      padding: 2px 0;
+      border-left: 2px solid transparent;
+      padding-left: 10px;
+      margin-left: -12px;
+    }
+    .rail a:hover, .rail a:focus-visible { color: var(--teal); border-left-color: var(--teal); }
+    .rail a b { color: var(--ink-soft); font-weight: 500; }
+  }
+
+  /* ---------- sections ---------- */
+  main { padding-top: 52px; max-width: 74ch; }
+
+  section { margin: 0 0 68px; scroll-margin-top: 24px; }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(1.5rem, 3.2vw, 1.95rem);
+    line-height: 1.12;
+    letter-spacing: -.02em;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  h2 .num {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: .14em;
+    color: var(--teal);
+    margin-bottom: 10px;
+  }
+  h2 + .deck {
+    color: var(--ink-soft);
+    font-size: 1.02rem;
+    margin: 0 0 26px;
+    max-width: 62ch;
+  }
+
+  h3 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.06rem;
+    letter-spacing: -.01em;
+    margin: 34px 0 10px;
+  }
+
+  p { margin: 0 0 16px; max-width: 66ch; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  a { color: var(--teal); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; border-radius: 2px; }
+
+  code, .mono { font-family: var(--mono); font-size: .855em; }
+  p code, li code, td code, dd code {
+    background: var(--surface-sunk);
+    border: 1px solid var(--rule-soft);
+    padding: .06em .32em;
+    border-radius: 2px;
+    word-break: break-word;
+  }
+
+  ul, ol { margin: 0 0 16px; padding-left: 22px; max-width: 66ch; }
+  li { margin-bottom: 8px; }
+  li::marker { color: var(--ink-faint); }
+
+  /* ---------- ordered stage list (the Spine, the sessions) ---------- */
+  .stages { list-style: none; padding: 0; margin: 0 0 20px; counter-reset: stage; max-width: none; }
+  .stages > li {
+    counter-increment: stage;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 14px;
+    padding: 13px 0;
+    border-top: 1px solid var(--rule-soft);
+    margin: 0;
+  }
+  .stages > li:last-child { border-bottom: 1px solid var(--rule-soft); }
+  .stages > li::before {
+    content: counter(stage, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--teal);
+    padding-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stages b { font-family: var(--display); font-weight: 600; font-size: .99rem; }
+  .stages .done {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+  .stages .done::before { content: "done when "; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .08em; font-size: 10px; }
+
+  /* ---------- cards ---------- */
+  .cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(238px, 1fr)); margin: 0 0 22px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--teal);
+    padding: 16px 18px 18px;
+    box-shadow: var(--shadow);
+  }
+  .card.copper { border-top-color: var(--copper); }
+  .card h4 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1rem;
+    margin: 0 0 4px;
+    letter-spacing: -.01em;
+  }
+  .card .path { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); display: block; margin-bottom: 9px; word-break: break-all; }
+  .card p { font-size: .93rem; margin: 0; color: var(--ink-soft); max-width: none; }
+  .card p + p { margin-top: 9px; }
+
+  /* ---------- tables ---------- */
+  .scroller { overflow-x: auto; margin: 0 0 20px; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  caption {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 12px 14px 0;
+  }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  thead th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  td.cmd { font-family: var(--mono); font-size: .8rem; white-space: nowrap; }
+
+  /* ---------- status chips ---------- */
+  .chip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .chip.pass { color: var(--pass); }
+  .chip.warn { color: var(--warn); }
+  .chip.fail { color: var(--fail); }
+  .chip.flat { color: var(--ink-faint); }
+
+  /* ---------- verification ladder ---------- */
+  .ladder { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin: 0 0 22px; }
+  @media (min-width: 720px) { .ladder { grid-template-columns: repeat(4, 1fr); } }
+  .rung { background: var(--surface); padding: 15px 16px 17px; display: flex; flex-direction: column; gap: 6px; }
+  .rung .tier { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--teal); }
+  .rung .cost { font-family: var(--display); font-weight: 800; font-size: 1.5rem; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .rung .what { font-size: .88rem; color: var(--ink-soft); }
+  .rung .lic { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); margin-top: auto; padding-top: 8px; }
+  .rung:nth-child(1) .cost { color: var(--pass); }
+  .rung:nth-child(4) .cost { color: var(--copper); }
+
+  /* ---------- pull quote / verification line ---------- */
+  .terminal {
+    background: var(--surface-sunk);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--copper);
+    font-family: var(--mono);
+    font-size: .8rem;
+    line-height: 1.75;
+    padding: 14px 16px;
+    margin: 0 0 22px;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--ink);
+  }
+  .terminal .k { color: var(--pass); font-weight: 600; }
+  .terminal .f { color: var(--fail); font-weight: 600; }
+  .terminal .c { color: var(--ink-faint); }
+
+  /* ---------- rules list (numbered from source) ---------- */
+  .rules { list-style: none; padding: 0; margin: 0 0 20px; max-width: none; }
+  .rules li {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 12px;
+    padding: 11px 0;
+    border-top: 1px solid var(--rule-soft);
+    margin: 0;
+    font-size: .95rem;
+  }
+  .rules li:last-child { border-bottom: 1px solid var(--rule-soft); }
+  .rules .n { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--copper); padding-top: 3px; }
+  .rules b { font-family: var(--display); font-weight: 600; }
+  .rules .adr { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
+
+  /* ---------- honest limits ---------- */
+  .limits { border: 1px solid var(--rule); border-left: 3px solid var(--warn); background: var(--surface); padding: 4px 20px 8px; }
+  .limits h3:first-of-type { margin-top: 18px; }
+
+  footer {
+    border-top: 2px solid var(--ink);
+    padding: 22px 0 0;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: var(--ink-faint);
+    max-width: 74ch;
+  }
+  footer strong { color: var(--ink-soft); font-weight: 500; }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">
+      <span>Capability report</span><span>2026-08-18</span><span>HFSS_automation @ main</span>
+    </p>
+    <h1>The HFSS Agent</h1>
+    <p class="standfirst">
+      A conversation turns into a complete, correct ANSYS HFSS simulation — geometry, materials,
+      excitations, setups, a solved result and plots — driven against a <strong>live AEDT desktop</strong>
+      through a typed design document, a tested compiler, and gates that refuse rather than advise.
+    </p>
+    <dl class="factstrip">
+      <div class="fact"><dt>Backend</dt><dd>AEDT 2024 R1<small>pyAEDT 1.3.0, gRPC</small></dd></div>
+      <div class="fact"><dt>Tier 0 suites</dt><dd>13 / 13<small>232 tests, ~57 s, no licence</small></dd></div>
+      <div class="fact"><dt>API knowledge base</dt><dd>4,376<small>pages, 12 categories</small></dd></div>
+      <div class="fact"><dt>Settled decisions</dt><dd>8 ADRs<small>+ 13 compat findings</small></dd></div>
+      <div class="fact"><dt>Build routes</dt><dd>2<small>spec compiler · staged scripts</small></dd></div>
+      <div class="fact"><dt>Canonical cases</dt><dd>5<small>4 with a compiled spec</small></dd></div>
+    </dl>
+  </header>
+
+  <nav class="rail" aria-label="Sections">
+    <ol>
+      <li><a href="#shape"><b>01</b><span>The shape of a run</span></a></li>
+      <li><a href="#sessions"><b>02</b><span>Three phase sessions</span></a></li>
+      <li><a href="#spine"><b>03</b><span>The Spine</span></a></li>
+      <li><a href="#routes"><b>04</b><span>Two build routes</span></a></li>
+      <li><a href="#spec"><b>05</b><span>The Design Spec stack</span></a></li>
+      <li><a href="#runtime"><b>06</b><span>Runtime contracts</span></a></li>
+      <li><a href="#solve"><b>07</b><span>Solve, bank, read out</span></a></li>
+      <li><a href="#gates"><b>08</b><span>Gates and refusals</span></a></li>
+      <li><a href="#tiers"><b>09</b><span>Verification tiers</span></a></li>
+      <li><a href="#knowledge"><b>10</b><span>The knowledge layer</span></a></li>
+      <li><a href="#measure"><b>11</b><span>Measurement</span></a></li>
+      <li><a href="#limits"><b>12</b><span>What is not proven</span></a></li>
+      <li><a href="#cli"><b>13</b><span>Command surface</span></a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- ============================================================= 01 -->
+    <section id="shape">
+      <h2><span class="num">§ 01</span>The shape of a run</h2>
+      <p class="deck">
+        One conversation, one Workspace, three sessions, and exactly two places where a human
+        has authority the tool will not take from them.
+      </p>
+
+      <p>
+        The workflow is packaged as an agent skill — <code>hfss-agent</code> — plus a repo of
+        deterministic Python behind it. The skill supplies the doctrine; the Python supplies
+        everything that can be checked without a language model. A run produces a
+        <strong>Workspace</strong> at <code>workspaces/&lt;name&gt;/</code> holding the staged
+        scripts or the design document, the <code>.aedt</code> project file, machine state,
+        the requested plots, and a <code>summary.md</code> carrying the design decisions and a
+        cost run card.
+      </p>
+
+      <p>
+        Three kinds of request are in scope: a <strong>greenfield build</strong> (an antenna,
+        filter, or RF part described in words), a <strong>Re-entry</strong> into an existing
+        AEDT project — including one a human built — to change and re-solve it, and a
+        <strong>solve/plots/results</strong> pass over a model that already exists. Re-entry
+        never opens the original project: it is copied into the Workspace as a plain file
+        operation and all work happens on the copy (ADR 0001).
+      </p>
+
+      <h3>The two human gates</h3>
+      <p>
+        Everything else in the design exists to make these two survive. First, the
+        <strong>Clarification agreement</strong>: nothing is built until the user has confirmed
+        the recipe, every stated assumption, and the QA signals that will judge the result.
+        Second, the <strong>visual Review gate</strong>: the user inspects the built model in
+        the AEDT window — never by reading the generated scripts — and nothing solves until
+        they pass it (ADR 0003). Both caught defects in the pilots that no automated check saw,
+        which is why they were kept when almost everything around them was rewritten.
+      </p>
+    </section>
+
+    <!-- ============================================================= 02 -->
+    <section id="sessions">
+      <h2><span class="num">§ 02</span>Three phase sessions, bound by a ledger</h2>
+      <p class="deck">
+        A conversation used to be one 152-step session re-reading ~260 k tokens per step. It is
+        now three short sessions that hand off through a small file.
+      </p>
+
+      <ol class="stages">
+        <li>
+          <b>Clarification</b> — <code>&lt;name&gt;-clarify</code>. One block: gather the minimum
+          information, name the setup features the user left out, map the request onto a playbook
+          recipe, state every assumption, propose the QA signals, lock the parameters and design
+          variables. For a recipe taken from an academic paper it also cross-checks the paper's
+          equations against its own table and figure readings and prints a
+          <code>dims cross-check</code> verdict — an internally inconsistent paper is not a
+          buildable recipe.
+          <span class="done">the user confirmed the recipe, the assumptions and the QA signals, and <code>state.md</code> is written</span>
+        </li>
+        <li>
+          <b>Build</b> — <code>&lt;name&gt;-build</code>. Walk the Spine on the live desktop by
+          one of the two routes, each stage closing with its verification line and a one-line
+          ledger delta. Ends at the Review gate and read-back sync.
+          <span class="done">validation passes, the user passed the gate, sync printed PASS, the ledger holds the snapshot pointer</span>
+        </li>
+        <li>
+          <b>Solve + QA</b> — <code>&lt;name&gt;-solve</code>. Submit under the detached watchdog,
+          read only machine state while it runs, make the recipe's plots, run Result QA, bank the
+          evidence, deliver the summary and run card.
+          <span class="done">the plots exist in <code>results/</code>, every agreed signal is reported, the run card is appended</span>
+        </li>
+      </ol>
+
+      <p>
+        Each session starts fresh from <code>workspaces/&lt;name&gt;/state.md</code> — the
+        <strong>State ledger</strong> — rather than from the prior conversation (ADR 0007). The
+        ledger records stage progress, locked variables, decisions and pitfalls; machine state
+        lives separately in <code>results/state/*.txt</code> and is never hand-edited. The ledger
+        is the only resume point, so a killed session picks up from it instead of redoing
+        clarification or re-writing scripts.
+      </p>
+
+      <p>
+        The phase is <strong>declared</strong> as the session's first action, and declaring it is
+        what turns the boundary on:
+      </p>
+
+      <div class="terminal">python scripts/session.py --workspace workspaces/&lt;name&gt; --phase clarify
+<span class="c">→ a clarify session cannot launch a desktop; only a solve session may solve</span></div>
+
+      <p>
+        Once declared, the repo's own entry points refuse out-of-phase work with a non-zero exit
+        rather than a warning, and the session carries a call budget (default 60) whose breach is
+        an escalation verdict. This exists because prose did not bind: a measured session read the
+        documented capability gap, quoted it correctly, and then spent 51 minutes and 151,526
+        tokens writing a field solver inside a Clarification block anyway.
+      </p>
+    </section>
+
+    <!-- ============================================================= 03 -->
+    <section id="spine">
+      <h2><span class="num">§ 03</span>The Spine</h2>
+      <p class="deck">
+        The solution-type-agnostic sequence every build walks. Under the compiler it is walked for
+        you; under staged scripts it is one file per stage. The stages and their completion
+        criteria are identical either way.
+      </p>
+
+      <ol class="stages">
+        <li><b>Solution type</b> — set explicitly from the recipe, never left at the default (the default is Terminal, not Modal).<span class="done">the design reports the recipe's type</span></li>
+        <li><b>Design</b> — created in the Workspace project and saved, clearing a stray lock if one exists.<span class="done">the project file exists on disk with the named design</span></li>
+        <li><b>Geometry</b> — every dimension a design variable, units per recipe, delete-then-create per solid.<span class="done">the solids match the recipe in the UI and each dimension is a variable, not a literal</span></li>
+        <li><b>Materials</b> — per recipe, tunables as variables, inline definitions where the library has no entry.<span class="done">each solid reports its recipe material</span></li>
+        <li><b>Excitations &amp; boundaries</b> — port strategy per recipe, assigned by face object and never by id or edge.<span class="done">the ports and boundaries list matches the recipe</span></li>
+        <li><b>Mesh</b> — recipe mesh operations, or adaptive-only for proof stages.<span class="done">the mesh operations list matches the recipe, or is deliberately empty</span></li>
+        <li><b>Setup + sweep</b> — adaptive passes, delta-S, frequency, sweep range and interpolation.<span class="done"><code>existing_analysis_sweeps</code> shows the named setup with its sweep</span></li>
+        <li><b>Validation</b> — <code>validate_simple()</code> must pass; an invalid design is a failed stage.<span class="done">validation returns True</span></li>
+        <li><b>Review gate</b> — the built model presented in the AEDT UI, the user's tweaks read back, and the sync verified mechanically.<span class="done">the user passed the gate and sync verify printed PASS</span></li>
+      </ol>
+      <p>
+        Then the solve session: submit under the watchdog, post-process, Result QA, bank, summary.
+        A stage is done only when its criterion is met <em>and</em> the user has seen that stage's
+        state in the open desktop.
+      </p>
+    </section>
+
+    <!-- ============================================================= 04 -->
+    <section id="routes">
+      <h2><span class="num">§ 04</span>Two build routes</h2>
+      <p class="deck">
+        The Spine does not change between them. What changes is who writes the code that walks it —
+        and that turned out to be the difference between a checkable build and an unbounded one.
+      </p>
+
+      <div class="cards">
+        <div class="card">
+          <h4>Route A — Design Spec <span class="chip pass">preferred</span></h4>
+          <span class="path">workspaces/&lt;name&gt;/design.yaml → hfss_spec/compiler.py</span>
+          <p>
+            One typed YAML document describes the model; a hand-written, deterministic compiler
+            builds it. No language model in that layer, ever. It is idempotent by construction,
+            resolves symbolic face selectors itself, emits the same <code>PASS:</code> verification
+            lines, and has absorbed the pyAEDT defects earlier runs paid for.
+          </p>
+          <p>
+            Measured on this box: it rebuilt the pilot's bow-tie with <strong>zero snapshot
+            differences and zero bounding-box differences</strong>, and built the microstrip and
+            the 10 GHz horn clean on the first attempt with no escape-hatch ops.
+          </p>
+        </div>
+        <div class="card copper">
+          <h4>Route B — staged scripts <span class="chip flat">fallback</span></h4>
+          <span class="path">workspaces/&lt;name&gt;/src/NN_&lt;stage&gt;.py</span>
+          <p>
+            One stage, one script, one run. Used when the structure defeats the schema — and the
+            ledger must say so, because the per-stage escape-hatch rate is a tracked metric rather
+            than a quiet convenience.
+          </p>
+          <p>
+            Everything the free-form route needs to be safe still ships with it: the attach-or-launch
+            preamble, the static gate, delete-then-create idempotency, and the replay-based sync
+            verifier.
+          </p>
+        </div>
+      </div>
+
+      <p>
+        The whole argument for Route A is where errors get caught. Under Route B a malformed
+        dimension costs a desktop launch, a failed stage, a traceback read and a self-correction
+        round; under Route A it is a validator finding in about a second with no licence involved.
+      </p>
+    </section>
+
+    <!-- ============================================================= 05 -->
+    <section id="spec">
+      <h2><span class="num">§ 05</span>The Design Spec stack</h2>
+      <p class="deck">
+        Eight modules in <code>hfss_spec/</code>, all of them importable with no AEDT, no licence
+        and no pyAEDT — which is what makes the build path checkable in milliseconds.
+      </p>
+
+      <h3>Schema v1 — three decisions encoded as types</h3>
+      <p>
+        The schema is Pydantic, and the rules that matter are structural rather than remembered.
+        <strong>No field anywhere accepts a face or edge id</strong> — a port sits on
+        <code>{face_of: Feed, direction: "-y"}</code>, resolved against the live model at build
+        time, and an ambiguous selector is an error unless the spec opts in with
+        <code>pick: largest_area</code> or a <code>nearest:</code> point. <strong>Units are
+        mandatory</strong>: every dimensional value is a literal with a unit
+        (<code>52.64mm</code>, <code>2.4GHz</code>, <code>50ohm</code>) or an expression over
+        declared variables, and a bare number is legal only where the quantity is genuinely
+        dimensionless. <strong>Variables come first</strong>: expressions pass through to AEDT
+        verbatim, so a compiled microstrip reads back <code>sub_W: 'trace_W + 12*h'</code> in the
+        variable table, not an evaluated number.
+      </p>
+
+      <p>Geometry is expressed with fourteen authorable ops on the native HFSS modeler, plus one marker the snapshot reducer emits:</p>
+      <div class="scroller">
+        <table>
+          <caption>Geometry op families, schema v1</caption>
+          <thead><tr><th>Family</th><th>Ops</th></tr></thead>
+          <tbody>
+            <tr><td>Primitives</td><td><code>box</code> <code>sheet</code> <code>cylinder</code> <code>polyline</code></td></tr>
+            <tr><td>Booleans</td><td><code>unite</code> <code>subtract</code> <code>intersect</code></td></tr>
+            <tr><td>Sweeps &amp; lofts</td><td><code>sweep_along_vector</code> <code>sweep_along_path</code> <code>sweep_around_axis</code> <code>connect</code></td></tr>
+            <tr><td>Other</td><td><code>thicken_sheet</code> <code>import_cad</code> <code>escape_hatch</code></td></tr>
+            <tr><td>Reducer only</td><td><code>unknown</code> — a captured body whose construction cannot be established, carrying its bbox rather than a silent wrong guess</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>The offline gates</h3>
+      <div class="cards">
+        <div class="card">
+          <h4>Validator</h4>
+          <span class="path">hfss_spec/validate.py · scripts/validate_spec.py</span>
+          <p>
+            Four check classes past schema conformance: reference resolution (every selector names
+            a declared object, every variable resolves, every material exists), units and dimensions
+            (a frequency is never added to a length, extents are positive, the sweep brackets the
+            target), topological sanity (a boolean's tools exist <em>at the point it runs</em>), and
+            recipe completeness. Every finding carries its path — <code>geometry[3].size[2]</code> —
+            so a diagnosis gets a location instead of a stack trace.
+          </p>
+        </div>
+        <div class="card">
+          <h4>Physics pre-check</h4>
+          <span class="path">hfss_spec/physics.py · scripts/precheck.py</span>
+          <p>
+            Closed-form estimators — rectangular and circular patch resonance, bow-tie resonance,
+            microstrip impedance, pyramidal horn gain and optimum synthesis, waveguide cutoff,
+            guide wavelength — predict the design's target and print the signed disagreement
+            against it. Tolerances are data, in
+            <code>knowledge/playbook/precheck-tolerances.json</code>, one per recipe.
+          </p>
+          <p>
+            It never blocks and never overrides: an <code>INCONSISTENT</code> verdict goes to the
+            user with both numbers to arbitrate, and the choice is recorded in the spec's
+            provenance.
+          </p>
+        </div>
+        <div class="card">
+          <h4>Relational checks</h4>
+          <span class="path">hfss_spec/model_checks.py</span>
+          <p>
+            Properties of the model as a whole, not of one field — added after a review found that
+            all three real defects in six machine-clean specs were relational. A radiation boundary
+            must clear what it bounds by <strong>λ₀/3</strong>; a lumped port sheet must be within
+            <strong>1.5×</strong> the width of the conductor it bridges. Both encode a geometric
+            relation the author cannot satisfy by tuning a number they already control.
+          </p>
+        </div>
+        <div class="card">
+          <h4>Snapshot reducer</h4>
+          <span class="path">hfss_spec/snapshot_to_spec.py · scripts/spec_from_snapshot.py</span>
+          <p>
+            Turns a captured <code>model_snapshot.json</code> back into a <code>design.yaml</code>,
+            so Re-entry gets a spec by reduction rather than archaeology. Exact for variables,
+            materials, boundaries, ports, setup, sweep and solution type; explicitly
+            <em>approximate</em> for geometry, where a bounding box is a consequence of a
+            construction op rather than a restatement of it.
+          </p>
+        </div>
+      </div>
+
+      <p>
+        A worked verdict, from the pilot's bow-tie — the disagreement that survived four solves and
+        roughly twenty hours the old way, surfaced here in microseconds:
+      </p>
+      <div class="terminal">      target                 3.5000 GHz
+      closed-form            3.8782 GHz      delta: +10.81%   tolerance: 8%
+
+<span class="f">FAIL</span>: precheck recipe=bow-tie-patch verdict=INCONSISTENT — arbitrate before building
+<span class="c">the built model measured 3.85 GHz — the estimator was right to +0.7%</span></div>
+
+      <h3>Compiler and acceptance</h3>
+      <p>
+        <code>compile_spec.py</code> runs <code>--dry-run</code> (the full plan, no desktop) then
+        <code>--launch</code>, refusing outright any spec that has not passed validation. Each
+        stage still emits its <code>PASS:</code> line, so the ledger and self-correction contracts
+        are untouched. <code>hfss_spec/acceptance.py</code> then answers the question that matters:
+        does the compiled model match the snapshot the old path produced? It reuses the pilot's
+        hard-won suffix-normalisation rule rather than a second copy of it, and classifies every
+        residual difference as a compiler bug, a schema gap, or a capture gap — because "the diff
+        is not empty" is not a finding.
+      </p>
+    </section>
+
+    <!-- ============================================================= 06 -->
+    <section id="runtime">
+      <h2><span class="num">§ 06</span>Runtime contracts</h2>
+      <p class="deck">
+        The properties that hold on a live desktop regardless of route — each one written against
+        an incident that cost real hours.
+      </p>
+
+      <h3>The verification line</h3>
+      <p>
+        Every stage ends with a single machine-parseable line carrying its assertions, and the
+        self-correction loop reads that line rather than filtered logs:
+      </p>
+      <div class="terminal"><span class="k">PASS</span>: geometry objects=4 variables=11 all_parameterized=True
+<span class="k">PASS</span>: sync replay matches snapshot
+<span class="f">FAIL</span>: sync mismatch — boundaries, variables</div>
+
+      <h3>The port-pinned desktop</h3>
+      <p>
+        The session's desktop records its port and process id to
+        <code>results/state/aedt_port.txt</code> and <code>aedt_process_id.txt</code> on first
+        launch. Every later attach and <em>every</em> teardown reconnects by that recorded port, and
+        a teardown with no pinned port <strong>refuses to act</strong>. That is what makes it
+        impossible for the tool to close or kill the user's own AEDT session — including the
+        second desktop the sync verifier launches, which tears down only its own.
+      </p>
+
+      <h3>Idempotency by delete-then-create</h3>
+      <p>
+        Every stage deletes the objects, boundaries, excitations, mesh operations and sweeps it
+        recreates before creating them, so re-running a stage in place always converges (ADR 0008).
+        This replaced teardown → wipe → replay chains — three of them in one observed build — with
+        a single in-place re-run, and demoted wipe-and-rebuild to an explicit escalation. Under
+        Route A it is a property of the compiler rather than a discipline the model must remember.
+      </p>
+
+      <h3>Read-back sync, verified mechanically</h3>
+      <p>
+        The user's UI tweaks must land back in the record or the scripts stop being a re-runnable
+        one (ADR 0005). <code>capture_state.py</code> snapshots the live model — objects and
+        bounding boxes, materials, boundaries, excitations, setups and sweeps, variables, sorted
+        and rounded — into <code>model_snapshot.json</code>. Then, by route:
+      </p>
+      <ul>
+        <li><strong>Route B:</strong> <code>12_verify_sync.py</code> copies the workspace, replays
+          the amended scripts on a port-pinned second desktop, captures the same shape there and
+          diffs it, printing one PASS/FAIL line. Roughly eight minutes a round.</li>
+        <li><strong>Route A:</strong> the same question is a snapshot diff against the as-built
+          capture via <code>spec_acceptance.py</code> — seconds, no second desktop. Representable
+          differences fold back into <code>design.yaml</code>; anything the schema cannot express
+          gets a loud ledger entry naming it, so the spec is knowingly stale rather than quietly
+          wrong.</li>
+      </ul>
+
+      <h3>Self-correction, with a cap</h3>
+      <p>
+        After each run the agent reads the verification line plus the error surfaces that actually
+        work on this backend (<code>validate_simple()</code>, on-disk logs — the COM message manager
+        is broken over gRPC). Correction is capped at three consecutive failed runs per stage, and
+        escalates early on the identical error twice or on an error that maps to no known cause,
+        attaching the script, the error and the attempted fixes.
+      </p>
+    </section>
+
+    <!-- ============================================================= 07 -->
+    <section id="solve">
+      <h2><span class="num">§ 07</span>Solve, bank, read out</h2>
+      <p class="deck">
+        The solve costs about zero language-model tokens to watch, cannot be declared finished
+        without evidence, and cannot be torn down before its results are safe.
+      </p>
+
+      <h3>The detached watchdog</h3>
+      <p>
+        <code>08_solve</code> cleans stale results, probes for a solve already in flight — results
+        directory age plus live solver processes — and <strong>asks the user before submitting</strong>
+        if one looks live. It submits <code>analyze(blocking=False)</code>, whose <code>True</code>
+        return means submission and not completion, launches
+        <code>poll_solve.py</code> as a detached process, and exits.
+      </p>
+      <p>
+        The watchdog imports nothing from pyAEDT — filesystem and process observation only. Every
+        ~20 s it appends one line naming its <strong>stage</strong> (initial meshing → adaptive
+        meshing → frequency sweep → finalizing → done) plus the evidence for that stage, drawn from
+        the stage-family artifacts and the newest profile's stage ledger. It exits:
+      </p>
+      <div class="scroller">
+        <table>
+          <caption>Watchdog terminal states</caption>
+          <thead><tr><th class="num">Exit</th><th>State</th><th>Evidence required</th></tr></thead>
+          <tbody>
+            <tr><td class="num">0</td><td><span class="chip pass">complete</span></td><td>the profile's <code>Status: Normal Completion</code>, plus settle</td></tr>
+            <tr><td class="num">2</td><td><span class="chip warn">stalled</span></td><td>no growth in the current stage past its window — the stage is named</td></tr>
+            <tr><td class="num">3</td><td><span class="chip fail">aborted</span></td><td>any non-normal profile status, quoted verbatim; or in-flight markers gone with a dead solver</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Terminal states are evidenced, never inferred from a plateau — an earlier settle-only rule
+        declared an engine error complete. No output-count prediction is passed anywhere; the
+        sweep-point guess class is gone. While it runs the agent <em>tails</em> the progress file
+        and does nothing else: no foreground polling, no solve-time estimates.
+      </p>
+
+      <h3>Banking</h3>
+      <p>
+        A solve is not finished until <code>confirm_solve.py</code> has <strong>banked</strong> it —
+        profile status and sweep-point count written to <code>results/state/solved.txt</code>.
+        Teardown of a banked workspace releases with <code>close_projects=False</code>; teardown of
+        an <em>unbanked</em> workspace that shows solve evidence <strong>refuses</strong>, because
+        releasing it would purge the solved results. That incident happened once, on a pilot, and
+        this is the structural answer to it.
+      </p>
+
+      <h3>Readout and Result QA</h3>
+      <p>
+        Result QA checks the signals agreed in Clarification — convergence, ports excited, energy
+        pass, in-band resonance, plausibility against the recipe — flags anomalies, and reports
+        them. Only the user decides whether results are junk. After any anomaly the rule is
+        <strong>resolve once</strong>: read the profile, escalate with the evidence, never
+        re-submit silently (a pilot submitted five solves for a one-solve problem).
+      </p>
+      <p>
+        Retrieval is treated as its own fragile seam. <code>read_results.py</code> is the single
+        home for the call shapes that actually work on pyAEDT 1.3.0 — the ubiquitous
+        <code>data_real</code> fill-state check does not exist on this version, so it reported
+        "unfilled" on perfectly good fetches and discarded them. Scripted readout is capped at
+        one attempt plus one retry on a fresh attach; then the plot goes to the user and the signal
+        is reported as read from the UI. The delivery route is recorded per run.
+      </p>
+    </section>
+
+    <!-- ============================================================= 08 -->
+    <section id="gates">
+      <h2><span class="num">§ 08</span>Gates and refusals</h2>
+      <p class="deck">
+        Nine hard rules, each traceable to a decision record or a measured failure. The ones that
+        matter most are the ones that <em>refuse</em> rather than advise.
+      </p>
+
+      <ol class="rules">
+        <li><span class="n">1</span><div><b>High-level API only.</b> Every call goes through <code>ansys.aedt.core</code>; the raw COM surface is broken over gRPC. Unknown calls are looked up, never guessed. <span class="adr">env-compat #3</span></div></li>
+        <li><span class="n">2</span><div><b>The Review gate is visual.</b> The user reviews the model in the AEDT UI, never the scripts. Nothing solves until they pass it. <span class="adr">ADR 0003</span></div></li>
+        <li><span class="n">3</span><div><b>Read-back sync after every tweak.</b> No gate closes until sync has run and the record reproduces the delivered model. <span class="adr">ADR 0005</span></div></li>
+        <li><span class="n">4</span><div><b>Playbook discipline.</b> Technique is appended only through the Learning loop's ceremony, after explicit user approval. Nothing appends silently. <span class="adr">ADR 0002</span></div></li>
+        <li><span class="n">5</span><div><b>Re-entry copies.</b> The original project is never opened; work happens on a copy. <span class="adr">ADR 0001</span></div></li>
+        <li><span class="n">6</span><div><b>Full parameterization.</b> All geometry is built from design variables, so a user tweak is a variable edit — readable, syncable, re-solvable.</div></li>
+        <li><span class="n">7</span><div><b>Idempotent stages.</b> Delete-then-create; wipe-and-rebuild is an escalation, not a route-around. <span class="adr">ADR 0008</span></div></li>
+        <li><span class="n">8</span><div><b>Never build the missing capability.</b> If a recipe needs synthesis or a solver this repo does not implement, stop and escalate with what is missing and what it would take. A Clarification block locks parameters; it never becomes an implementation project.</div></li>
+        <li><span class="n">9</span><div><b>Solve under the watchdog, bank before teardown.</b> Read machine state only; evidence before claiming; nothing closes the desktop before <code>solved.txt</code> exists. <span class="adr">ADR 0006</span></div></li>
+      </ol>
+
+      <h3>Why some of these are code and not prose</h3>
+      <p>
+        A campaign of parallel test cells measured the honest answer. Six specs passed
+        <code>validate_spec</code>, <code>precheck</code> and <code>compile_spec --dry-run</code>
+        with <strong>zero errors and zero escape hatches — and three of them were wrong</strong>: a
+        false-green rate of 50%. No automated gate could see any of the three. Two were caught by a
+        human reading the spec; one only because the reviewer knew the design convention.
+      </p>
+      <p>
+        The two cheapest of those holes are now closed by computation rather than advice — the λ₀/3
+        clearance rule and the port-geometry ratio in §05 — and the third, a feed network whose
+        elements were mismatched to the impedance they terminate into, is recorded as an open gap
+        rather than papered over. The session boundary and the call budget come from the same
+        campaign: a documented limit that gets read, quoted and ignored is not a limit.
+      </p>
+    </section>
+
+    <!-- ============================================================= 09 -->
+    <section id="tiers">
+      <h2><span class="num">§ 09</span>Verification tiers</h2>
+      <p class="deck">
+        Three rungs, ordered by what they cost. The design principle is that a regression should be
+        caught on the cheapest rung that can see it.
+      </p>
+
+      <div class="ladder">
+        <div class="rung">
+          <span class="tier">Offline gates</span>
+          <span class="cost">~1 s</span>
+          <span class="what">Schema, references, units, dimensions, topology, relational checks, closed-form physics.</span>
+          <span class="lic">no desktop · no licence</span>
+        </div>
+        <div class="rung">
+          <span class="tier">Tier 0</span>
+          <span class="cost">57 s</span>
+          <span class="what">13 suites, 232 tests: runner seams, watchdog stages, readout, run card, static gate, skill markers, KB checks, spec stack, relational checks, session boundary, canonical specs.</span>
+          <span class="lic">no desktop · no licence</span>
+        </div>
+        <div class="rung">
+          <span class="tier">Tier 1</span>
+          <span class="cost">minutes</span>
+          <span class="what">Builds the workspace on the live desktop and captures the snapshot. <em>Refuses</em> any stage numbered 08 or above, so it can never consume solver time by accident.</span>
+          <span class="lic">live desktop · no solve</span>
+        </div>
+        <div class="rung">
+          <span class="tier">Tier 2</span>
+          <span class="cost">hours</span>
+          <span class="what">The full end-to-end run: build, gate, solve, QA, plots, summary.</span>
+          <span class="lic">licence · solver time</span>
+        </div>
+      </div>
+
+      <div class="scroller">
+        <table>
+          <caption>Tier 0 inventory — verified 2026-08-18</caption>
+          <thead><tr><th>Suite</th><th>What it holds</th><th class="num">Size</th><th class="num">Result</th></tr></thead>
+          <tbody>
+            <tr><td>corpus-check</td><td>the real-artifact fixture corpus exists and is readable</td><td class="num">3 cases</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>template-runners</td><td>the workspace runners at their no-AEDT seams</td><td class="num">60</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>watchdog-stages</td><td>stage detection and terminal states against real trees</td><td class="num">20</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>readout</td><td>the result reader, including the fill-state regression</td><td class="num">17</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>run-card</td><td>the measurement harness and its wall-time boundaries</td><td class="num">27</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>static-gate</td><td><code>py_compile</code> + import over the template <code>src/</code></td><td class="num">gate</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>skill-markers</td><td>the skill text still says what the code does</td><td class="num">96 checks</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>kb-checks</td><td>corpus integrity, stub-free, one entry per page</td><td class="num">35 checks</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>skill-install</td><td>the installed skill copy is in sync with the source</td><td class="num">check</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>design-spec</td><td>units, expressions, schema, validator, reducer, compiler call sequences</td><td class="num">81</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>model-checks</td><td>clearance and port-geometry relational rules</td><td class="num">10</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>session</td><td>the phase boundary and the call budget</td><td class="num">17</td><td class="num"><span class="chip pass">ok</span></td></tr>
+            <tr><td>canonical-specs</td><td>every case spec validates and pre-checks</td><td class="num">4 specs</td><td class="num"><span class="chip pass">ok</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Fixture fidelity</h3>
+      <p>
+        Tier 0's ground truth is <strong>captured off this machine, never written from memory</strong>,
+        and that rule is itself enforced: a corpus presence check fails loudly rather than letting the
+        real-artifact tests turn quietly into no-ops. It exists because two production bugs passed 72
+        green tests — a profile fixture written with unescaped quotes where AEDT writes escaped ones,
+        and artifact families written as files where the real tree has directories. A synthetic
+        fixture is valid only alongside a real one it provably matches.
+      </p>
+    </section>
+
+    <!-- ============================================================= 10 -->
+    <section id="knowledge">
+      <h2><span class="num">§ 10</span>The knowledge layer</h2>
+      <p class="deck">
+        Two stores with a deliberate split: the knowledge base teaches <em>how to call the API</em>,
+        the playbook teaches <em>how to design the simulation correctly</em>.
+      </p>
+
+      <h3>The scraped pyAEDT knowledge base</h3>
+      <p>
+        4,376 markdown pages under <code>scraping/pyaedt_ai_context/</code>, with a matching
+        4,376-entry RAG corpus, a provenance file recording every crawl, and a verifier that checks
+        integrity on every Tier 0 run. It is scraped from the pyAEDT stable docs, which document the
+        pinned client line — so the KB is correct for the library by construction, and residual
+        backend gaps go in the compat entry instead (ADR 0004).
+      </p>
+      <div class="scroller">
+        <table>
+          <caption>KB coverage by category</caption>
+          <thead><tr><th>Category</th><th class="num">Pages</th><th>Category</th><th class="num">Pages</th></tr></thead>
+          <tbody>
+            <tr><td>geometry_modeler</td><td class="num">1,148</td><td>desktop_app</td><td class="num">189</td></tr>
+            <tr><td>reports</td><td class="num">695</td><td>advanced_visualization</td><td class="num">128</td></tr>
+            <tr><td>postprocessing</td><td class="num">591</td><td>generic_utils</td><td class="num">122</td></tr>
+            <tr><td>hfss</td><td class="num">553</td><td>materials</td><td class="num">112</td></tr>
+            <tr><td>boundaries_and_ports</td><td class="num">421</td><td>plots</td><td class="num">93</td></tr>
+            <tr><td>setup_and_mesh</td><td class="num">322</td><td>general_api</td><td class="num">1</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Reading it is disciplined rather than open-ended. <code>spine-api.md</code> is the
+        first-class reference — the 36-call spine set distilled to signature, one-line semantics and
+        links to the relevant compat gotcha, regenerated automatically after every crawl. Only calls
+        it does not cover go to the full KB, through a read-only lookup subagent, and discovery uses
+        <code>rg -l</code> rather than recursive listings.
+      </p>
+
+      <h3>The playbook</h3>
+      <div class="cards">
+        <div class="card">
+          <h4>Environment compat</h4>
+          <span class="path">knowledge/playbook/environment-compat.md</span>
+          <p>
+            The compat authority for this machine: 13 probed findings with verdicts and
+            route-arounds — what works, what is partially broken, what is present but unusable.
+            Standing prerequisites (VPN reachability for the licence server, AEDT 2024 R1
+            launchable) are preconditions the tool blocks on rather than works around.
+          </p>
+        </div>
+        <div class="card">
+          <h4>Canonical cases</h4>
+          <span class="path">knowledge/cases/</span>
+          <p>
+            Five worked cases — patch 2.4 GHz, bow-tie 3.5 GHz, 50 Ω microstrip, 10 GHz pyramidal
+            horn, coupled-line filter 2.4 GHz — four with a compiled <code>design.yaml</code> to
+            start from, plus five captured snapshots of real models used to shape the schema.
+          </p>
+          <p>
+            The fifth is deliberately spec-less: coupled-line even/odd-mode synthesis is not
+            implemented here, and that gap is the standing example behind hard rule 8.
+          </p>
+        </div>
+        <div class="card">
+          <h4>Reference papers</h4>
+          <span class="path">knowledge/reference-papers/</span>
+          <p>
+            The user drops PDFs — papers, book chapters, port and HFSS primers — and an analysis
+            skill turns them into notes read before Clarification. They are <em>context</em>: only
+            an approved Learning-loop proposal can turn a paper into playbook technique.
+          </p>
+        </div>
+        <div class="card">
+          <h4>The Learning loop</h4>
+          <span class="path">ADR 0002</span>
+          <p>
+            Three triggers earn an amendment proposal: a user tweak that generalizes to the recipe
+            class, a backend-compat discovery, or a QA anomaly whose resolution generalizes. The
+            order is fixed — fix the current model first, <em>then</em> propose, and append only
+            after approval. Project-specific values stay in the summary.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= 11 -->
+    <section id="measure">
+      <h2><span class="num">§ 11</span>Measurement</h2>
+      <p class="deck">
+        The tool measures itself, and the metric is cost per <em>completed</em> simulation. A run
+        that burns tokens and delivers no readable result scores as infinite, not as somewhat worse.
+      </p>
+
+      <p>
+        <code>scripts/run_card.py</code> reads the session database read-only and emits the run card
+        appended to every <code>summary.md</code>: billed tokens, step count, raw wall time, and
+        <strong>active wall</strong> — Clarification start to the user-gated solve submission, so
+        solver physics and idle gaps do not flatter the number. A missing boundary is reported as
+        unmeasurable, never guessed.
+      </p>
+
+      <div class="scroller">
+        <table>
+          <caption>Run history, scored honestly</caption>
+          <thead><tr><th>Run</th><th>Date</th><th>Route</th><th class="num">Billed</th><th class="num">Steps</th><th class="num">Wall</th><th>Completed</th></tr></thead>
+          <tbody>
+            <tr><td><code>silent-engine</code></td><td>08-03</td><td>free-form scripts</td><td class="num">398,130</td><td class="num">424</td><td class="num">~1.6 h</td><td><span class="chip pass">yes</span></td></tr>
+            <tr><td><code>shiny-canyon</code></td><td>08-06</td><td>free-form + meta-work</td><td class="num">1,579,333</td><td class="num">1,392</td><td class="num">25 h</td><td><span class="chip fail">no</span></td></tr>
+            <tr><td><code>kind-rocket</code></td><td>08-15</td><td>staged scripts (B)</td><td class="num">346,993</td><td class="num">477</td><td class="num">41 min</td><td><span class="chip pass">yes</span></td></tr>
+            <tr><td><code>swift-otter</code></td><td>08-16</td><td>staged scripts, replayed</td><td class="num">123,448</td><td class="num">312</td><td class="num">23 min</td><td><span class="chip fail">no</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <code>silent-engine</code> is the baseline and predates the subagent tier, so its figure is
+        the whole run; <code>kind-rocket</code> is 269,378 main loop plus 77,615 subagent, and the
+        totals are what get compared. <code>shiny-canyon</code> was launched through a meta-skill
+        carrying ticket text and review instructions, so a real share of its 1.58 M was never HFSS
+        work — it is a bad baseline for anything, and it is in the table because deleting
+        inconvenient runs is how a tool starts lying to itself.
+      </p>
+      <p>
+        The standing acceptance threshold is <strong>≤ 80,000 billed and ≤ 60 steps</strong> per
+        completed simulation. Nothing has come close on steps; the best honest run is 477. That gap
+        is the case for the deterministic orchestrator in §12.
+      </p>
+    </section>
+
+    <!-- ============================================================= 12 -->
+    <section id="limits">
+      <h2><span class="num">§ 12</span>What is not proven</h2>
+      <p class="deck">
+        Stated plainly, because a capability report that only lists capabilities is a sales document.
+      </p>
+
+      <div class="limits">
+        <h3>No language model has ever authored a <code>design.yaml</code></h3>
+        <p>
+          Every spec in the repo was hand-written or reduced from a snapshot. The compiler is proven
+          on hardware; the <em>authoring</em> step in front of it is not, and it is where the
+          remaining risk concentrates. Relatedly, no full run has yet gone through Route A end to
+          end — the compiler has never been driven by an agent in a real pilot.
+        </p>
+
+        <h3>The false-green rate is 50%, measured</h3>
+        <p>
+          Three of six machine-clean specs were wrong. Two of those three holes are now closed by
+          computed checks; the third — a feed network mismatched to the impedance it terminates
+          into — is not implemented. A spec passing every gate means the mechanical properties hold,
+          not that the design is right. The human gates are load-bearing, not ceremonial.
+        </p>
+
+        <h3>The phase boundary has one known hole</h3>
+        <p>
+          It covers every expensive action that goes through this repo's own tooling — launching a
+          desktop, compiling onto one, solving. It cannot stop an arbitrary <code>python -c</code>
+          in a shell call, which is exactly how the measured 51-minute field-solver detour was
+          written. Closing that needs per-phase tool gating in the harness, and it is recorded as
+          open work rather than claimed.
+        </p>
+
+        <h3>Not implemented, by decision</h3>
+        <p>
+          Coupled-line even/odd-mode synthesis (hard rule 8's standing example). Explicit mesh
+          operations in schema v1 — adaptive-only. Geometry received rather than designed, which
+          takes <code>import_cad</code> and accepts that imported bodies carry no construction
+          history and cannot be parameterized. RCS/SBR+ is present in the client but not usable on
+          this backend, so an RCS pivot routes around it.
+        </p>
+
+        <h3>The next structural piece</h3>
+        <p>
+          A deterministic orchestrator: a Python state machine that walks the Spine and calls a
+          model at exactly three seams — <em>clarify</em> (request → spec draft plus questions),
+          <em>diagnose</em> (failure evidence → spec patch or escalation), and <em>narrate</em>
+          (QA signals → summary prose), each with structured output against the schema so a
+          malformed response is a decoding retry rather than a failed AEDT run. The session
+          boundary and the call budget are its first two pieces and are landed; the rest is not.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================= 13 -->
+    <section id="cli">
+      <h2><span class="num">§ 13</span>Command surface</h2>
+      <p class="deck">
+        Everything above is reachable from the shell. The ones that need no licence are marked.
+      </p>
+
+      <div class="scroller">
+        <table>
+          <caption>Repo entry points</caption>
+          <thead><tr><th>Command</th><th>Does</th><th class="num">Needs AEDT</th></tr></thead>
+          <tbody>
+            <tr><td class="cmd">session.py --phase &lt;p&gt;</td><td>declare the phase and turn the boundary on; with no phase, report it</td><td class="num">no</td></tr>
+            <tr><td class="cmd">tier0.py</td><td>every check that needs no desktop — 13 suites, ~57 s</td><td class="num">no</td></tr>
+            <tr><td class="cmd">validate_spec.py</td><td>schema, references, units, topology, recipe completeness, relational rules</td><td class="num">no</td></tr>
+            <tr><td class="cmd">precheck.py</td><td>closed-form physics verdict against the spec's target</td><td class="num">no</td></tr>
+            <tr><td class="cmd">compile_spec.py --dry-run</td><td>the full build plan, no desktop touched</td><td class="num">no</td></tr>
+            <tr><td class="cmd">compile_spec.py --launch</td><td>build the spec on the live desktop</td><td class="num">yes</td></tr>
+            <tr><td class="cmd">tier1.py --workspace</td><td>build a workspace live; refuses stage 08 and above</td><td class="num">yes</td></tr>
+            <tr><td class="cmd">spec_acceptance.py</td><td>diff as-built against post-tweak snapshots, classified</td><td class="num">no</td></tr>
+            <tr><td class="cmd">spec_from_snapshot.py</td><td>reduce a captured model back to a <code>design.yaml</code></td><td class="num">no</td></tr>
+            <tr><td class="cmd">validate_cases.py</td><td>validate and pre-check every canonical case</td><td class="num">no</td></tr>
+            <tr><td class="cmd">run_card.py --summary</td><td>append the cost run card to a <code>summary.md</code></td><td class="num">no</td></tr>
+            <tr><td class="cmd">capture_fixtures.py</td><td>refresh the real-artifact fixture corpus from live workspaces</td><td class="num">no</td></tr>
+            <tr><td class="cmd">install_skill.py --check</td><td>verify the installed skill copy matches source</td><td class="num">no</td></tr>
+            <tr><td class="cmd">src/capture_state.py</td><td>snapshot the live model to <code>model_snapshot.json</code></td><td class="num">yes</td></tr>
+            <tr><td class="cmd">src/08_solve.py</td><td>submit the solve and launch the detached watchdog</td><td class="num">yes</td></tr>
+            <tr><td class="cmd">src/confirm_solve.py</td><td>bank the solve evidence before teardown</td><td class="num">yes</td></tr>
+            <tr><td class="cmd">src/12_verify_sync.py</td><td>replay the amended scripts on a port-pinned second desktop and diff</td><td class="num">yes</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      <p>
+        <strong>Sources.</strong> Every number here is read from the repository at <code>main</code>
+        on 2026-08-18: <code>skill/hfss-agent/SKILL.md</code> and its two references,
+        <code>CONTEXT.md</code>, <code>docs/adr/0001–0008</code>, <code>hfss_spec/</code>,
+        <code>scripts/</code>, <code>knowledge/</code>, and the campaign findings under
+        <code>.scratch/</code>. The Tier 0 result, suite sizes and KB counts were produced by
+        running the suites, not quoted from documentation.
+      </p>
+    </footer>
+
+  </main>
+</div>

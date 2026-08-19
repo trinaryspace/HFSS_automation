@@ -86,6 +86,239 @@ def patch_resonance(patch_l: float, patch_w: float, h: float, er: float) -> floa
     return C0 / (2.0 * (patch_l + 2.0 * dl) * math.sqrt(ereff))
 
 
+def microstrip_dispersion(er: float, h: float, w: float,
+                          frequency: float) -> float:
+    """Frequency-dependent effective permittivity, Kirschning & Jansen (1982).
+
+        ereff(f) = er - (er - ereff(0)) / (1 + P(f))
+
+    with P(f) the published P1..P4 fit. `effective_permittivity` above is the
+    **quasi-static** value, i.e. the f -> 0 limit; the true ereff rises towards
+    er as frequency climbs, because the field concentrates into the substrate.
+
+    **This is a bias, not noise, and it has one sign.** Synthesising a patch
+    from the static ereff always lands the resonance LOW, because the built
+    patch is electrically longer than the static model thought. Measured
+    2026-08-18 on the 2x2 array: both designs resonated at 5.6 GHz against a
+    5.8 GHz target (-3.4%), identically, which is the signature of a systematic
+    element-level bias rather than a feed defect. On that stack (RO4350B,
+    er 3.48, h 0.762 mm, W 17.27 mm) this correction predicts -1.16% on its
+    own; on the thicker, higher-er FR4 stack the same tool has shipped
+    (er 4.4, h 1.6 mm) it predicts -2.9%.
+
+    The bias was invisible to every gate because `patch_resonance` and the
+    synthesis that produced the length used the *same* static ereff, so the
+    pre-check confirmed its own error to four decimal places.
+
+    Ref: M. Kirschning and R. H. Jansen, "Accurate model for effective
+    dielectric constant of microstrip with validity up to millimetre-wave
+    frequencies," Electronics Letters 18(6), 1982, pp. 272-273.
+    """
+    if frequency is None or frequency <= 0:
+        return effective_permittivity(er, h, w)
+    e0 = effective_permittivity(er, h, w)
+    u = w / h
+    fn = frequency / 1e9 * h * 1e3            # GHz-mm, the paper's normalisation
+    p1 = (0.27488 + u * (0.6315 + 0.525 / (1.0 + 0.0157 * fn) ** 20)
+          - 0.065683 * math.exp(-8.7513 * u))
+    p2 = 0.33622 * (1.0 - math.exp(-0.03442 * er))
+    p3 = 0.0363 * math.exp(-4.6 * u) * (1.0 - math.exp(-(fn / 38.7) ** 4.97))
+    p4 = 1.0 + 2.751 * (1.0 - math.exp(-(er / 15.916) ** 8))
+    pf = p1 * p2 * ((0.1844 + p3 * p4) * fn) ** 1.5763
+    return er - (er - e0) / (1.0 + pf)
+
+
+def patch_resonance_dispersive(patch_l: float, patch_w: float, h: float,
+                               er: float) -> float:
+    """`patch_resonance` with the dispersion correction, in Hz.
+
+    ereff depends on frequency and frequency depends on ereff, so this is a
+    fixed point; it converges in a handful of iterations because the correction
+    is a few percent. Falls back to the last iterate if it ever fails to
+    settle, so a pathological stack degrades rather than raising.
+    """
+    f = patch_resonance(patch_l, patch_w, h, er)        # static, as the seed
+    for _ in range(40):
+        ereff = microstrip_dispersion(er, h, patch_w, f)
+        dl = fringing_extension(ereff, h, patch_w)
+        nxt = C0 / (2.0 * (patch_l + 2.0 * dl) * math.sqrt(ereff))
+        if abs(nxt - f) < 1e-3:
+            return nxt
+        f = nxt
+    return f
+
+
+def synthesize_rectangular_patch(frequency: float, er: float, h: float,
+                                 dispersive: bool = True) -> dict:
+    """Balanis 14-6/14-1/14-2/14-7 forward: (f0, er, h) -> the patch.
+
+    Returns `{"width", "length", "ereff", "delta_l", "resonance"}` in SI, where
+    `resonance` is the synthesised patch fed back through the *same* physics as
+    a closure check.
+
+    This exists as much for wall-clock as for correctness. Every array run so
+    far has re-derived these four relations by hand in conversation, at real
+    token and real minute cost, and hand-arithmetic is where the shipped
+    defects have come from. A function is also the only place a correction like
+    dispersion can be applied once and inherited everywhere.
+
+    With `dispersive=True` the length is solved so the patch resonates at `f0`
+    under the Kirschning-Jansen ereff - which is what the solver will see.
+    """
+    if frequency <= 0 or h <= 0 or er <= 1.0:
+        raise ValueError("frequency, substrate height and er must be positive")
+    width = C0 / (2.0 * frequency) * math.sqrt(2.0 / (er + 1.0))   # 14-6
+    ereff = (microstrip_dispersion(er, h, width, frequency) if dispersive
+             else effective_permittivity(er, h, width))            # 14-1
+    delta_l = fringing_extension(ereff, h, width)                  # 14-2
+    length = C0 / (2.0 * frequency * math.sqrt(ereff)) - 2.0 * delta_l   # 14-7
+    check = (patch_resonance_dispersive(length, width, h, er) if dispersive
+             else patch_resonance(length, width, h, er))
+    return {"width": width, "length": length, "ereff": ereff,
+            "delta_l": delta_l, "resonance": check}
+
+
+def _bessel_j0(x: float) -> float:
+    """J0(x) to ~1e-8, Abramowitz & Stegun 9.4.1 / 9.4.3. Stdlib only."""
+    ax = abs(x)
+    if ax < 3.0:
+        y = (x / 3.0) ** 2
+        return (1.0 - 2.2499997 * y + 1.2656208 * y ** 2 - 0.3163866 * y ** 3
+                + 0.0444479 * y ** 4 - 0.0039444 * y ** 5 + 0.00021 * y ** 6)
+    y = 3.0 / ax
+    f0 = (0.79788456 - 0.00000077 * y - 0.0055274 * y ** 2
+          - 0.00009512 * y ** 3 + 0.00137237 * y ** 4
+          - 0.00072805 * y ** 5 + 0.00014476 * y ** 6)
+    theta = (ax - 0.78539816 - 0.04166397 * y - 0.00003954 * y ** 2
+             + 0.00262573 * y ** 3 - 0.00054125 * y ** 4
+             - 0.00029333 * y ** 5 + 0.00013558 * y ** 6)
+    return f0 * math.cos(theta) / math.sqrt(ax)
+
+
+def _slot_integral(w: float, wavelength: float,
+                   patch_l: Optional[float] = None) -> float:
+    """The shared radiation integral behind Balanis 14-12 and 14-18a.
+
+        I = INT_0^pi [sin(kW/2 cos t)/cos t]^2 * K(t) * sin^3 t dt
+
+    with K = 1 for the self term (G1) and K = J0(kL sin t) for the mutual term
+    (G12). One integrand, so the two conductances cannot drift apart.
+
+    Simpson over 2000 panels; the integrand is smooth and the removable
+    singularity at t = pi/2 is handled by the limit sin(kW/2 cos t)/cos t ->
+    kW/2.
+    """
+    k = 2.0 * math.pi / wavelength
+    n = 2000
+    step = math.pi / n
+
+    def f(t: float) -> float:
+        c = math.cos(t)
+        ratio = (k * w / 2.0) if abs(c) < 1e-12 else math.sin(k * w / 2.0 * c) / c
+        kernel = 1.0 if patch_l is None else _bessel_j0(k * patch_l * math.sin(t))
+        return ratio ** 2 * kernel * math.sin(t) ** 3
+
+    total = f(0.0) + f(math.pi)
+    for i in range(1, n):
+        total += (4.0 if i % 2 else 2.0) * f(i * step)
+    return total * step / 3.0
+
+
+def slot_conductance(w: float, wavelength: float,
+                     exact: bool = True) -> float:
+    """Balanis 14-12: the radiating-slot conductance G1, in siemens.
+
+    Exact (the default) is the integral form, G1 = I1 / (120 pi^2). The
+    closed-form approximations
+
+        G1 = (1/90)(W/lambda0)^2      W << lambda0
+        G1 = (1/120)(W/lambda0)       W >> lambda0
+
+    are available as `exact=False` and are what a hand calculation usually
+    reaches for - but they are only asymptotes. On Balanis Example 14.1 the
+    approximation gives 1.737e-3 S against the integral's 1.57e-3 S, an 11%
+    error that propagates straight into the edge resistance and the inset
+    depth. That is a large enough bias to matter for a match, so the accurate
+    form is the default and the approximation is opt-in.
+
+    Worked example (Balanis Example 14.1, RT/duroid 5880 at 10 GHz,
+    W 1.186 cm, lambda0 3 cm): 1.57e-3 S.
+    """
+    if w <= 0 or wavelength <= 0:
+        raise ValueError("width and wavelength must be positive")
+    if not exact:
+        ratio = w / wavelength
+        return ratio ** 2 / 90.0 if ratio < 1.0 else ratio / 120.0
+    return _slot_integral(w, wavelength) / (120.0 * math.pi ** 2)
+
+
+def mutual_conductance(w: float, patch_l: float, wavelength: float) -> float:
+    """Balanis 14-18a: G12 between the two radiating slots, in siemens.
+
+        G12 = 1/(120 pi^2) INT_0^pi [sin(kW/2 cos t)/cos t]^2 J0(kL sin t) sin^3 t dt
+
+    Worked example (Balanis Example 14.1): 6.1683e-4 S.
+
+    This matters because the edge resistance is 1/(2(G1 + G12)) for the odd
+    field distribution, and dropping G12 biases the inset depth by ~20%.
+    """
+    if w <= 0 or patch_l <= 0 or wavelength <= 0:
+        raise ValueError("width, length and wavelength must be positive")
+    return _slot_integral(w, wavelength, patch_l) / (120.0 * math.pi ** 2)
+
+
+def patch_edge_resistance(w: float, patch_l: float, wavelength: float,
+                          odd_mode: bool = True) -> float:
+    """Balanis 14-17: the patch's input resistance at the radiating edge, ohms.
+
+        Rin(y0 = 0) = 1 / (2 * (G1 +/- G12))
+
+    plus for the odd (antisymmetric) resonant voltage distribution of the
+    dominant mode, which is the usual case. Worked example (Balanis Example
+    14.1): 228.3508 ohm.
+    """
+    g1 = slot_conductance(w, wavelength)
+    g12 = mutual_conductance(w, patch_l, wavelength)
+    denom = 2.0 * (g1 + g12 if odd_mode else g1 - g12)
+    if denom <= 0:
+        raise ValueError("degenerate conductance sum")
+    return 1.0 / denom
+
+
+def inset_depth(target_impedance: float, edge_resistance: float,
+                patch_l: float) -> float:
+    """Balanis 14-20a inverted: how far in to cut the feed, in metres.
+
+        Rin(y0) = Rin(0) * cos^2(pi * y0 / L)
+        =>  y0 = (L/pi) * arccos(sqrt(Rin_target / Rin(0)))
+
+    Worked example (Balanis Example 14.1): 228.3508 ohm edge, 50 ohm target,
+    L 0.906 cm -> y0 = 0.3126 cm.
+
+    **The tool had no way to compute this at all.** `inset` appeared only in
+    comments, so every run tuned the depth by hand or by solve. That is the
+    expensive way to find a number that is one arccos away, and it is why the
+    2x2 array's inset was carried as "the match tuner, expected to move +/-2 mm
+    in the build".
+
+    Raises when the target exceeds the edge resistance: no inset can raise the
+    impedance above its edge value, and silently clamping would hand back a
+    depth that does not match.
+    """
+    if edge_resistance <= 0 or patch_l <= 0:
+        raise ValueError("edge resistance and patch length must be positive")
+    if target_impedance <= 0:
+        raise ValueError("target impedance must be positive")
+    if target_impedance > edge_resistance:
+        raise ValueError(
+            f"target {target_impedance:.1f} ohm exceeds the edge resistance "
+            f"{edge_resistance:.1f} ohm; an inset only lowers the impedance "
+            f"- feed at the edge, or use a quarter-wave transformer"
+        )
+    return patch_l / math.pi * math.acos(
+        math.sqrt(target_impedance / edge_resistance))
+
+
 def circular_patch_effective_radius(a: float, h: float, er: float) -> float:
     """Balanis 14-66: the fringing-corrected radius of a circular patch, metres.
 
@@ -472,19 +705,36 @@ def _permittivity(spec: DesignSpec, scope: dict[str, Value]) -> float:
 
 
 def _patch(spec, scope, target, tolerance, note) -> Prediction:
+    """Rectangular patch resonance, predicted **with dispersion**.
+
+    Changed 2026-08-19. It used to predict from the quasi-static ereff, which
+    is the same ereff the synthesis used, so the check confirmed its own
+    assumption and reported a perfect zero disagreement on a patch that would
+    resonate 1-3% low. The 2x2 run measured exactly that: 5.6 GHz against 5.8,
+    identically in two independent designs, on a spec whose precheck was clean.
+    A pre-check that shares the synthesis's blind spot is worse than none,
+    because it converts an open question into a false green.
+
+    Both numbers are reported. The static one is what the length was probably
+    synthesised from; the dispersive one is what the solver will find.
+    """
     length = _var(scope, "patch_L", "PatchL", "L")
     width = _var(scope, "patch_W", "PatchW", "W")
     h = _var(scope, "h", "SubH", "sub_h")
     er = _permittivity(spec, scope)
-    ereff = effective_permittivity(er, h, width)
-    dl = fringing_extension(ereff, h, width)
-    predicted = patch_resonance(length, width, h, er)
+    static = patch_resonance(length, width, h, er)
+    predicted = patch_resonance_dispersive(length, width, h, er)
+    ereff_s = effective_permittivity(er, h, width)
+    ereff_f = microstrip_dispersion(er, h, width, predicted)
+    dl = fringing_extension(ereff_f, h, width)
     return Prediction(
         "resonant_frequency", target, predicted, "GHz", tolerance,
         [("patch length (14-7)", _mm(length)),
          ("patch width (14-6)", _mm(width)),
-         ("ereff (14-1)", f"{ereff:.4f}"),
-         ("fringing dL (14-2)", _mm(dl))],
+         ("ereff static (14-1)", f"{ereff_s:.4f}"),
+         ("ereff at f0 (Kirschning-Jansen)", f"{ereff_f:.4f}"),
+         ("fringing dL (14-2)", _mm(dl)),
+         ("static prediction (no dispersion)", f"{static / 1e9:.4f} GHz")],
         note,
     )
 

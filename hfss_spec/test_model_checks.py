@@ -182,6 +182,213 @@ class TestFlushFaces(unittest.TestCase):
         self.assertEqual(flagged, [])
 
 
+def array_text(offset_mm, notch_all=True):
+    """A two-element strip array whose second transformer can be nudged off.
+
+    `offset_mm` is the sliver between `Xfmr` and `Arm`: 0 means they touch,
+    0.58285 reproduces the exact open circuit shipped on 2026-08-18.
+    `notch_all` cuts a notch from both patches or from only the first, which
+    reproduces the missing-notches defect from the same run.
+    """
+    second_cut = ("""
+  - op: subtract
+    name: P2
+    tools: [N2]
+""" if notch_all else "")
+    return f"""
+spec_version: 1
+name: array-probe
+recipe: inset-fed-rectangular-patch
+solution_type: Modal
+provenance:
+  source: "test fixture for hfss_spec/test_model_checks.py"
+  canonical_reading: closed-form
+target: {{quantity: resonant_frequency, value: 5.8GHz, tolerance_pct: 5}}
+variables:
+  f0: 5.8GHz
+  Off: {offset_mm}mm
+materials:
+  metal: {{library: pec}}
+  sub: {{permittivity: 3.48}}
+  air: {{library: air}}
+geometry:
+  - op: box
+    name: Substrate
+    material: sub
+    origin: ["-40mm", "-30mm", "0mm"]
+    size: ["80mm", "60mm", "0.762mm"]
+  - op: sheet
+    name: Ground
+    material: metal
+    plane: xy
+    origin: ["-40mm", "-30mm", "0mm"]
+    size: ["80mm", "60mm"]
+  # The feed chain: InLine -> Xfmr -> Bus -> {{P1, P2}}. `Off` is the sliver
+  # between InLine and Xfmr, and it is the only joint that can be broken.
+  - op: sheet
+    name: Arm
+    material: metal
+    plane: xy
+    origin: ["-20mm", "-1mm", "0.762mm"]
+    size: ["10mm", "2mm"]
+  - op: sheet
+    name: Xfmr
+    material: metal
+    plane: xy
+    origin: ["-10mm + Off", "-1.5mm", "0.762mm"]
+    size: ["8mm", "3mm"]
+  - op: sheet
+    name: Bus
+    material: metal
+    plane: xy
+    origin: ["-2mm + Off", "-14mm", "0.762mm"]
+    size: ["2mm", "28mm"]
+  - op: sheet
+    name: P1
+    material: metal
+    plane: xy
+    origin: ["0mm + Off", "-1mm", "0.762mm"]
+    size: ["17mm", "14mm"]
+  - op: sheet
+    name: P2
+    material: metal
+    plane: xy
+    origin: ["0mm + Off", "-15mm", "0.762mm"]
+    size: ["17mm", "14mm"]
+  - op: sheet
+    name: N1
+    plane: xy
+    origin: ["5mm + Off", "0mm", "0.762mm"]
+    size: ["1mm", "2mm"]
+  - op: sheet
+    name: N2
+    plane: xy
+    origin: ["5mm + Off", "-14mm", "0.762mm"]
+    size: ["1mm", "2mm"]
+  - op: subtract
+    name: P1
+    tools: [N1]{second_cut}
+  # A DEDICATED port sheet. The port must not sit on `Arm` itself: an object
+  # named by `{{object: ...}}` is treated as an excitation surface and excluded
+  # from the conductor graph, which would hide the very break under test.
+  - op: sheet
+    name: PortSheet
+    plane: yz
+    origin: ["-20mm", "-1mm", "0mm"]
+    size: ["2mm", "0.762mm"]
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-60mm", "-50mm", "-20mm"]
+    size: ["120mm", "100mm", "40mm"]
+excitations:
+  - name: "1"
+    type: lumped_port
+    impedance: 50ohm
+    "on": {{object: PortSheet}}
+    integration_line:
+      from: {{point: ["-20mm", "0mm", "0mm"]}}
+      to: {{point: ["-20mm", "0mm", "0.762mm"]}}
+boundaries:
+  - name: Rad
+    type: radiation
+    "on": {{outer_faces: AirBox}}
+setup:
+  name: Setup1
+  solution_frequency: f0
+  sweep: {{name: Sweep1, type: interpolating, start: 5.0GHz, stop: 6.6GHz, count: 101}}
+qa_signals: [convergence]
+"""
+
+
+def array_warnings(**kwargs):
+    findings = validate(load_spec_text(array_text(**kwargs))).findings
+    return [f for f in findings if f.path == "geometry"]
+
+
+class TestConductorConnectivity(unittest.TestCase):
+    """R1 — the check that would have caught the defect this tool shipped."""
+
+    def test_the_shipped_open_circuit_is_caught(self):
+        found = [f for f in array_warnings(offset_mm=0.58285)
+                 if "not connected" in f.message]
+        self.assertTrue(found, "the 0.58285 mm open circuit was not reported")
+        self.assertIn("0.58285", found[0].message)
+
+    def test_touching_metal_is_clean(self):
+        found = [f for f in array_warnings(offset_mm=0.0)
+                 if "not connected" in f.message]
+        self.assertEqual(found, [], [f.message for f in found])
+
+    def test_the_ground_plane_is_never_an_island(self):
+        """A microstrip ground is separate on purpose, on every planar design.
+
+        Before layering, this fired on every correct spec in the repo, which is
+        the way to make a check ignored.
+        """
+        for offset in (0.0, 0.58285):
+            found = [f for f in array_warnings(offset_mm=offset)
+                     if "Ground" in f.message]
+            self.assertEqual(found, [], "ground plane reported as disconnected")
+
+    def test_the_gap_is_in_the_message(self):
+        """The number is what separates a bug from a deliberate coupling gap."""
+        found = [f for f in array_warnings(offset_mm=0.58285)
+                 if "not connected" in f.message]
+        self.assertRegex(found[0].message, r"closest approach [\d.]+ mm")
+
+    def test_it_is_a_warning_not_an_error(self):
+        result = validate(load_spec_text(array_text(offset_mm=0.58285)))
+        self.assertTrue(result.ok, "connectivity must not block a build")
+
+
+class TestElementSymmetry(unittest.TestCase):
+    """R2 — notches missing from three patches of four, caught by eye."""
+
+    def test_uneven_cuts_across_identical_elements_are_caught(self):
+        found = [f for f in array_warnings(offset_mm=0.0, notch_all=False)
+                 if "boolean operations" in f.message]
+        self.assertTrue(found, "uneven notching was not reported")
+        self.assertIn("P1=1", found[0].message)
+        self.assertIn("P2=0", found[0].message)
+
+    def test_evenly_built_elements_are_clean(self):
+        found = [f for f in array_warnings(offset_mm=0.0, notch_all=True)
+                 if "boolean operations" in f.message]
+        self.assertEqual(found, [], [f.message for f in found])
+
+    def test_differently_sized_objects_are_not_compared(self):
+        """Grouping is by extent: the substrate and a patch are not siblings."""
+        found = [f for f in array_warnings(offset_mm=0.0, notch_all=True)
+                 if "identically sized" in f.message]
+        self.assertEqual(found, [])
+
+
+class TestCanonicalCasesStayQuiet(unittest.TestCase):
+    """The false-positive guard that matters most: the shipped cases.
+
+    Both new checks warn rather than block, but a warning on a correct design
+    still costs attention and teaches people to skim. These four specs are the
+    repo's own reference models, one of which has been built and solved.
+    """
+
+    def test_no_new_geometry_warnings_on_the_canonical_specs(self):
+        import pathlib
+        cases = (pathlib.Path(__file__).resolve().parent.parent
+                 / "knowledge" / "cases")
+        checked = 0
+        for design in sorted(cases.glob("*/design.yaml")):
+            findings = validate(load_spec_text(design.read_text(
+                encoding="utf-8"))).findings
+            noisy = [f.message for f in findings
+                     if f.path == "geometry"
+                     and ("not connected" in f.message
+                          or "boolean operations" in f.message)]
+            self.assertEqual(noisy, [], f"{design.parent.name}: {noisy}")
+            checked += 1
+        self.assertGreaterEqual(checked, 4)
+
+
 class TestSeverity(unittest.TestCase):
     def test_both_are_warnings_never_errors(self):
         """A heuristic must not block a design. Blocking a correct model on a

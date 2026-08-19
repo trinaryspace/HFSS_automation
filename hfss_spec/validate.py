@@ -443,6 +443,15 @@ def _check_model_relations(spec: DesignSpec, findings: list[Finding],
         findings.append(Finding(path, WARNING, message, hint=hint))
     for path, message, hint in model_checks.port_geometry(spec, scope):
         findings.append(Finding(path, WARNING, message, hint=hint))
+    # Added 2026-08-19 after the 2x2 post-mortem. Both are warnings for the
+    # same reason as the two above: each has a legitimate exception (deliberate
+    # isolation; a genuinely asymmetric array), and blocking a correct design on
+    # a heuristic is the one failure mode worse than missing a defect. Between
+    # them they cover two of the four defects that campaign found by eye.
+    for path, message, hint in model_checks.conductor_connectivity(spec, scope):
+        findings.append(Finding(path, WARNING, message, hint=hint))
+    for path, message, hint in model_checks.element_symmetry(spec, scope):
+        findings.append(Finding(path, WARNING, message, hint=hint))
     # The feed-network walk is an ERROR, unlike the other two. It is not a rule
     # of thumb: the designer has declared what the elements present, and either
     # the arithmetic closes or the network is mismatched. S7 shipped a 2:1

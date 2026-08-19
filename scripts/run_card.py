@@ -84,7 +84,7 @@ PILOT = {
 }
 
 REFERENCE_SQL = """
-SELECT s.slug, s.time_created, s.time_updated,
+SELECT s.id, s.slug, s.time_created, s.time_updated,
        s.tokens_input, s.tokens_output, s.tokens_reasoning,
        s.tokens_cache_read, s.tokens_cache_write,
        s.tokens_input + s.tokens_output AS billed,
@@ -312,16 +312,70 @@ def load_card(con, slug=None, latest=False, worktree=None):
     if slug is not None:
         where.append("s.slug = ?")
         args.append(slug)
-        sql_tail = " ORDER BY s.time_created DESC LIMIT 1"
     else:
-        sql_tail = " ORDER BY s.time_created DESC LIMIT 1"
-    sql = REFERENCE_SQL + " WHERE " + " AND ".join(where) + sql_tail
+        # Defect D1, documented 2026-08-15 and still live on 2026-08-18.
+        #
+        # `--latest` meant "the newest session", and the command that runs it is
+        # the `runcard` SUBAGENT, whose own session is by definition newer than
+        # the run it was asked to card. So the card described the subagent. On
+        # the 2x2 array run the delivered summary reported 29,419 billed / 26
+        # parts / 20 seconds for a run that cost roughly 2,220,000 billed and
+        # 1,225 parts — an understatement of about 74x, in the most expensive
+        # run in the project's history, on the one number the whole phase-2 bet
+        # is measured by.
+        #
+        # A subagent session carries `parent_id`; a run does not. Restricting to
+        # `parent_id IS NULL` makes `--latest` mean "the newest run", which is
+        # what every caller already believed it meant.
+        where.append("s.parent_id IS NULL")
+    sql = REFERENCE_SQL + " WHERE " + " AND ".join(where) + \
+        " ORDER BY s.time_created DESC LIMIT 1"
     row = con.execute(sql, args).fetchone()
     if row is None:
         return None
     card = dict(row)
     card["duration_ms"] = card["time_updated"] - card["time_created"]
+    card.update(subtree_totals(con, card["id"]))
     return card
+
+
+def subtree_totals(con, session_id):
+    """Roll a run's subagents into the run's own numbers.
+
+    The second half of D1. Even pointed at the right session, a card that
+    counted only that session's rows still understated the run, because the
+    work is deliberately spread over subagents — `kb-lookup`, `runcard`, and
+    whatever the build spawned. "What did this run cost" has to mean the whole
+    tree or the headline metric (billed per completed simulation) is measuring
+    a fraction of the bill.
+
+    Both numbers are kept: `billed` and `parts` become the tree totals, and
+    `billed_own`/`parts_own`/`subagents` record the split, so a run whose cost
+    is mostly in its children is visible as such rather than merely large.
+    """
+    rows = con.execute(
+        """
+        WITH RECURSIVE tree(id) AS (
+            SELECT ? UNION ALL
+            SELECT s.id FROM session s JOIN tree t ON s.parent_id = t.id
+        )
+        SELECT s.id,
+               s.tokens_input + s.tokens_output AS billed,
+               (SELECT count(*) FROM part p WHERE p.session_id = s.id) AS parts
+        FROM session s JOIN tree t ON s.id = t.id
+        """,
+        (session_id,),
+    ).fetchall()
+    billed = sum((r["billed"] or 0) for r in rows)
+    parts = sum((r["parts"] or 0) for r in rows)
+    own = next((r for r in rows if r["id"] == session_id), None)
+    return {
+        "billed": billed,
+        "parts": parts,
+        "billed_own": (own["billed"] if own else 0) or 0,
+        "parts_own": (own["parts"] if own else 0) or 0,
+        "subagents": max(0, len(rows) - 1),
+    }
 
 
 def _iso(epoch_ms):
@@ -362,6 +416,9 @@ def _metric_pairs(card, wall=None, outcome=None):
         ("tokens_cache_write", card["tokens_cache_write"]),
         ("billed", card["billed"]),
         ("parts", card["parts"]),
+        ("subagents", card.get("subagents", 0)),
+        ("billed_own_session", card.get("billed_own", card["billed"])),
+        ("parts_own_session", card.get("parts_own", card["parts"])),
         ("store_bytes", card["storesize"]),
         ("outcome", outcome.label),
         ("escape_hatch_scripts", outcome.escape_hatch_label),

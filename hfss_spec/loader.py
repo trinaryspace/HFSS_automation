@@ -29,8 +29,7 @@ def _read(path) -> dict:
     path = Path(path)
     text = path.read_text(encoding="utf-8")
     if path.suffix.lower() in (".yaml", ".yml"):
-        import yaml
-        data = _unbool_keys(yaml.safe_load(text))
+        data = _unbool_keys(parse_yaml(text))
     else:
         data = json.loads(text)
     if not isinstance(data, dict):
@@ -39,12 +38,68 @@ def _read(path) -> dict:
     return data
 
 
-# YAML 1.1 reads a bare `on:` key as the boolean True (likewise `off`, `yes`,
-# `no`). The selector field is spelled `on:` throughout the design — it is the
-# natural English and it is what `phase-2-detail.md` specifies — so an
-# unquoted spec would otherwise fail with "Keys should be strings, got True",
-# which tells the author nothing. Mapping the booleans back costs nothing and
-# is unambiguous: no spec field is spelled `True`.
+# YAML 1.1 resolves a bare `on`, `off`, `yes`, `no`, `y` or `n` to a boolean.
+# That is the wrong dialect for this file format, in two ways.
+#
+# 1. The selector field is spelled `on:` throughout the design — natural
+#    English, and what `phase-2-detail.md` specifies — so an unquoted spec used
+#    to arrive with `True` for a key and fail with "Keys should be strings, got
+#    True", which tells the author nothing.
+#
+# 2. Worse, and found 2026-08-19: **it silently renames and can silently merge
+#    design variables.** A variable declared `Off:` came back as `off`, so every
+#    expression referring to `Off` failed with `unknown name 'Off'` pointing at
+#    the geometry rather than at the declaration. And because `On` and `Yes`
+#    both resolve to True, declaring both left **one variable holding the
+#    other's value** with nothing reported. `N` is the case that matters most:
+#    an array spec that writes `N: 4` for its element count is not exotic, and
+#    `n` is false in YAML 1.1.
+#
+# The fix is to read the file as YAML 1.2 core, where only `true` and `false`
+# are booleans, so a key means what it says. `on:` then arrives as the string
+# "on" and the selector still works unquoted. Values are unaffected in
+# practice: pydantic still coerces "yes"/"on" to True for the handful of
+# genuinely boolean fields (`cover`, `close`, `keep_tools`).
+_YAML_12_BOOLS = "tTfF"
+
+
+def _yaml_loader():
+    """A SafeLoader that resolves only `true`/`false` as booleans."""
+    import yaml
+
+    class SpecLoader(yaml.SafeLoader):
+        pass
+
+    # Copy the resolver table, then drop bool for every first-character bucket
+    # except the ones `true`/`false` can start with, and narrow those two.
+    SpecLoader.yaml_implicit_resolvers = {
+        key: [(tag, regex) for tag, regex in mappings
+              if tag != "tag:yaml.org,2002:bool" or key in _YAML_12_BOOLS]
+        for key, mappings in yaml.SafeLoader.yaml_implicit_resolvers.items()
+    }
+    import re
+    strict = re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$")
+    for key in _YAML_12_BOOLS:
+        SpecLoader.yaml_implicit_resolvers[key] = [
+            (tag, strict if tag == "tag:yaml.org,2002:bool" else regex)
+            for tag, regex in SpecLoader.yaml_implicit_resolvers.get(key, [])
+        ]
+    return SpecLoader
+
+
+def parse_yaml(text: str):
+    """Parse spec YAML under the 1.2 core boolean rules. The only entry point.
+
+    Every reader of a spec goes through here so a spec cannot mean one thing to
+    the validator and another to the compiler.
+    """
+    import yaml
+    return yaml.load(text, Loader=_yaml_loader())
+
+
+# Retained as a safety net for specs that arrive as a dict from somewhere other
+# than `parse_yaml` — a JSON file, the reducer, a test. With the 1.2 loader in
+# place it is normally a no-op.
 _BOOL_KEYS = {True: "on", False: "off"}
 
 
@@ -77,8 +132,7 @@ def load_spec_text(text: str) -> DesignSpec:
     reason a bare `on:` key works at all, and a test that skipped it would be
     exercising a spec shape no real file can produce.
     """
-    import yaml
-    data = _unbool_keys(yaml.safe_load(text))
+    data = _unbool_keys(parse_yaml(text))
     if not isinstance(data, dict):
         raise SpecLoadError(Report([Finding(
             "<text>", ERROR, "a spec must be a mapping at the top level")]))

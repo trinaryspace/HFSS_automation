@@ -852,10 +852,125 @@ class TestHornSynthesis(unittest.TestCase):
 
 class TestPrecheck(unittest.TestCase):
     def test_patch_spec_is_consistent(self):
+        """Consistent, but no longer tautologically so.
+
+        This used to assert |delta| < 1%, which the spec could not fail: its
+        length was synthesised from the quasi-static ereff and the check
+        predicted from the quasi-static ereff, so the two agreed to five
+        decimal places by construction. `Precheck.text()` already calls a
+        near-zero disagreement suspicious for exactly this reason.
+
+        With dispersion in the prediction the same spec reports about -1.3%:
+        a patch synthesised statically for 2.4 GHz resonates a little below it.
+        That is a real number about a real bias, and it is still comfortably
+        inside the recipe's 5% tolerance, so the verdict is unchanged.
+        """
         from hfss_spec import physics
         result = physics.check(load_spec(PATCH_SPEC))
         self.assertEqual(result.verdict, "consistent", result.text())
-        self.assertLess(abs(result.prediction.delta_pct), 1.0)
+        self.assertLess(abs(result.prediction.delta_pct), 5.0)
+        # Signed, and on the low side: the bias has one direction.
+        self.assertLess(result.prediction.delta_pct, 0.0, result.text())
+        self.assertGreater(abs(result.prediction.delta_pct), 0.5, result.text())
+
+
+class TestMicrostripPhysics(unittest.TestCase):
+    """Balanis Example 14.1 end to end, plus the dispersion bias.
+
+    Example 14.1/14.2 is a published worked example with every intermediate
+    printed: RT/duroid 5880 (er 2.2), h 0.1588 cm, f0 10 GHz, giving
+    W 1.186 cm, L 0.906 cm, G1 1.57e-3 S, G12 6.1683e-4 S,
+    Rin(0) 228.3508 ohm and, for a 50 ohm feed, y0 0.3126 cm. Every one of
+    those is asserted here, so the inset synthesis is checked against a source
+    outside this repo rather than against itself.
+    """
+
+    W = 1.186e-2
+    L = 0.906e-2
+    LAMBDA0 = 3.0e-2
+
+    def test_slot_conductance_matches_balanis(self):
+        from hfss_spec import physics
+        self.assertAlmostEqual(
+            physics.slot_conductance(self.W, self.LAMBDA0), 1.57e-3, delta=5e-6)
+
+    def test_the_approximation_is_the_one_that_is_off(self):
+        """(1/90)(W/lambda)^2 is an asymptote, not the answer: 11% high here."""
+        from hfss_spec import physics
+        approx = physics.slot_conductance(self.W, self.LAMBDA0, exact=False)
+        exact = physics.slot_conductance(self.W, self.LAMBDA0)
+        self.assertGreater(approx / exact, 1.09)
+
+    def test_mutual_conductance_matches_balanis(self):
+        from hfss_spec import physics
+        self.assertAlmostEqual(
+            physics.mutual_conductance(self.W, self.L, self.LAMBDA0),
+            6.1683e-4, delta=1e-7)
+
+    def test_edge_resistance_matches_balanis(self):
+        from hfss_spec import physics
+        self.assertAlmostEqual(
+            physics.patch_edge_resistance(self.W, self.L, self.LAMBDA0),
+            228.3508, delta=0.05)
+
+    def test_inset_depth_matches_balanis(self):
+        from hfss_spec import physics
+        rin = physics.patch_edge_resistance(self.W, self.L, self.LAMBDA0)
+        y0 = physics.inset_depth(50.0, rin, self.L)
+        self.assertAlmostEqual(y0, 0.3126e-2, delta=1e-6)
+
+    def test_inset_cannot_raise_impedance(self):
+        """An inset only moves inward, so it only lowers Rin. Say so loudly."""
+        from hfss_spec import physics
+        with self.assertRaises(ValueError):
+            physics.inset_depth(300.0, 228.35, self.L)
+
+    def test_synthesis_reproduces_the_balanis_dimensions(self):
+        from hfss_spec import physics
+        got = physics.synthesize_rectangular_patch(
+            10e9, 2.2, 0.1588e-2, dispersive=False)
+        self.assertAlmostEqual(got["width"], self.W, delta=2e-5)
+        self.assertAlmostEqual(got["length"], self.L, delta=2e-5)
+
+    def test_synthesis_closes_on_its_own_target(self):
+        """Dispersive synthesis must land on f0 when checked dispersively."""
+        from hfss_spec import physics
+        for f0, er, h in ((5.8e9, 3.48, 0.762e-3),
+                          (2.4e9, 4.4, 1.6e-3),
+                          (10e9, 2.2, 1.588e-3)):
+            got = physics.synthesize_rectangular_patch(f0, er, h)
+            self.assertAlmostEqual(got["resonance"] / f0, 1.0, delta=1e-4)
+
+    def test_dispersion_is_a_one_sided_bias(self):
+        """ereff(f) >= ereff(0), so a statically-synthesised patch lands low.
+
+        Quantified on the two stacks this tool has actually shipped. The 2x2
+        run measured -3.4% on the RO4350B stack; this accounts for -1.1% of it
+        and is the part that is a code defect rather than a modelling choice.
+        """
+        from hfss_spec import physics
+        for f0, er, h, floor, ceiling in (
+                (5.8e9, 3.48, 0.762e-3, 0.8, 1.5),      # the 2x2 array stack
+                (5.8e9, 4.4, 1.6e-3, 2.4, 3.4)):        # FR4 at the same f0
+            got = physics.synthesize_rectangular_patch(
+                f0, er, h, dispersive=False)
+            real = physics.patch_resonance_dispersive(
+                got["length"], got["width"], h, er)
+            shortfall = (1.0 - real / f0) * 100.0
+            self.assertGreater(shortfall, floor)
+            self.assertLess(shortfall, ceiling)
+
+    def test_static_path_is_untouched(self):
+        """patch-2400's documented intermediates must not move."""
+        from hfss_spec import physics
+        ereff = physics.effective_permittivity(4.4, 1.6e-3, 38.0100e-3)
+        self.assertAlmostEqual(ereff, 4.0857, places=4)
+        self.assertAlmostEqual(
+            physics.fringing_extension(ereff, 1.6e-3, 38.0100e-3),
+            0.7388e-3, delta=5e-7)
+        self.assertAlmostEqual(
+            physics.patch_resonance(29.4216e-3, 38.0100e-3, 1.6e-3, 4.4) / 1e9,
+            2.4, places=4)
 
     def test_the_pilot_bowtie_is_flagged_against_its_own_target(self):
         """The Astuti failure class, caught in microseconds.

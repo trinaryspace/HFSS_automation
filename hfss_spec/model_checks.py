@@ -144,6 +144,34 @@ def _selector_object(selector) -> Optional[str]:
     return None
 
 
+def port_sheets(spec) -> set[str]:
+    """Names of objects that exist **only** to carry a port.
+
+    The distinction matters and getting it wrong is a false negative. A port
+    written `{object: PortSheet}` names a dedicated excitation surface: it is
+    not part of the radiating structure and is routinely drawn touching the
+    boundary on purpose, so the clearance measurement must ignore it. A port
+    written `{face_of: Substrate}` names a **real body** that merely happens to
+    host the port face - the substrate is very much part of the model, and
+    excluding it would measure the airbox against everything except the largest
+    thing inside it.
+
+    The first version of the clearance check called `_selector_object` on every
+    excitation and excluded whatever came back, which silently swallowed
+    `face_of` hosts. On patch-2400 that was harmless because the ground plane
+    shares the substrate's footprint and set the same bound; on a design whose
+    port sits on the face of its biggest body it would report a clearance the
+    model does not have. Found 2026-08-19 while building the offline preview.
+    """
+    names: set[str] = set()
+    for exc in (getattr(spec, "excitations", []) or []):
+        selector = getattr(exc, "on", None)
+        direct = getattr(selector, "object", None)
+        if direct:
+            names.add(direct)
+    return names
+
+
 def _integration_axis(excitation, scope) -> Optional[int]:
     """Which axis the integration line runs along (0/1/2), or None.
 
@@ -214,10 +242,7 @@ def radiation_clearance(spec, scope) -> list[tuple[str, str, str]]:
         # airbox face is the standard pattern. Counting them as "the model"
         # made a correctly padded spec look under-padded (X0a's port sheet
         # rises 13.6 mm, which ate 13.6 mm of an otherwise exact lambda0/3).
-        excited = {
-            _selector_object(getattr(e, "on", None))
-            for e in (getattr(spec, "excitations", []) or [])
-        }
+        excited = port_sheets(spec)
         inner = [b for name, b in boxes.items()
                  if name != host and name not in excited]
         if not inner:
@@ -323,6 +348,273 @@ def port_geometry(spec, scope) -> list[tuple[str, str, str]]:
             f"({width / conductor:.1f}x)",
             "a port much wider than the conductor it bridges reports an "
             "impedance that is not the antenna's; size it to the conductor",
+        ))
+    return out
+
+
+# Conductors within this distance of each other count as touching. 1 nm: well
+# below any meaningful manufacturing feature, well above float noise in a
+# millimetre-scale model expressed in metres.
+TOUCH_TOL = 1e-9
+
+# Bodies whose extents agree to this fraction are treated as repetitions of the
+# same element. 0.1% absorbs the rounding in a hand-written spec without
+# merging genuinely different sizes.
+REPEAT_TOL = 1e-3
+
+
+def _conductor_bodies(spec, scope) -> dict[str, list[tuple[float, float]]]:
+    """Bounded conductor objects, by name.
+
+    Uses the same broad name test the preview uses: better to include a
+    borderline material and report one extra component than to drop a real
+    conductor and miss a break.
+    """
+    metals = ("pec", "copper", "gold", "silver", "aluminum", "aluminium",
+              "brass", "tin", "nickel", "perfect conductor")
+    defined = getattr(spec, "materials", {}) or {}
+    out: dict[str, list[tuple[float, float]]] = {}
+    for op in getattr(spec, "geometry", []) or []:
+        if op.op not in _BOUNDED_OPS or not op.material:
+            continue
+        name = op.material.strip()
+        lowered = name.lower()
+        entry = defined.get(name)
+        library = getattr(entry, "library", None)
+        if library:
+            lowered = library.lower()
+        if not any(metal in lowered for metal in metals):
+            continue
+        bbox = bounding_box(op, scope)
+        if bbox is not None:
+            out[op.name] = bbox
+    return out
+
+
+def box_gap(a, b) -> float:
+    """Euclidean separation between two axis-aligned boxes, metres. 0 = touching."""
+    total = 0.0
+    for i in range(3):
+        (a0, a1), (b0, b1) = a[i], b[i]
+        gap = max(0.0, b0 - a1, a0 - b1)
+        total += gap * gap
+    return math.sqrt(total)
+
+
+def conductor_connectivity(spec, scope) -> list[tuple[str, str, str]]:
+    """`(path, message, hint)` for conductors that form disconnected islands.
+
+    **The check that would have caught the defect this tool actually shipped.**
+    The 2026-08-18 2x2 array carried two quarter-wave transformers offset from
+    their arms by 0.58285 mm - exactly (xfmr_W - feed50_W)/2, because each sheet
+    had been offset by half of *its own* width instead of a shared centreline.
+    Both junctions were open air. The design passed `validate_spec`, `precheck`,
+    the feed-network impedance walk, `compile_spec --dry-run`, snapshot
+    verification and `validate_simple`, because every one of those asks about
+    numbers and none of them asks whether the metal touches.
+
+    The measurement is a union-find over conductor bounding boxes: two bodies
+    are joined when their boxes touch, and any component that is not the
+    largest is reported with the smallest gap between it and the rest.
+
+    **A warning, not an error, and the gap is the whole message.** Deliberately
+    isolated metal is a real design: a parasitic director, an aperture-coupled
+    patch, the coupled sections of an edge-coupled filter. Those separations are
+    design quantities and read as such. A 0.58 mm sliver between a transformer
+    and the arm it is supposed to feed does not - and printing the number is
+    what lets a person tell the two apart in one glance, which an error that
+    blocks a legitimate design never would.
+    """
+    everything = _conductor_bodies(spec, scope)
+    for sheet in port_sheets(spec):
+        everything.pop(sheet, None)      # a port surface is not fed metal
+    if len(everything) < 2:
+        return []
+
+    # Connectivity is a claim about the WHOLE conductor set, so it can only be
+    # made when the whole set is visible. A polyline or a lofted body has no
+    # offline bounding box, and a conductor that is invisible to this pass
+    # cannot be found as anybody's neighbour — the metal it joins then looks
+    # like an island. That is what happened on `bowtie-3500`, a case that has
+    # been built and solved here: its bow-tie arms are polylines, so its feed
+    # line appeared disconnected from a patch that was right there.
+    #
+    # Say so and stop, rather than reporting islands that are artefacts of what
+    # could not be measured. A check that is loudly inapplicable is useful; one
+    # that is confidently wrong about a shipped design is how gates get ignored.
+    unbounded = [op.name for op in (getattr(spec, "geometry", []) or [])
+                 if op.material and op.op not in _BOUNDED_OPS
+                 and op.op not in ("subtract", "intersect", "unite")]
+    if unbounded:
+        return [(
+            "geometry",
+            "connectivity not checked: %d conductor(s) have no offline "
+            "bounding box (%s)" % (len(unbounded), ", ".join(
+                sorted(set(unbounded))[:6])),
+            "polylines, lofts and swept bodies are built by the compiler, not "
+            "resolvable from the spec, so the conductor graph is incomplete "
+            "and any island it found could be an artefact; check these "
+            "junctions at the Review gate instead",
+        )]
+
+    out: list[tuple[str, str, str]] = []
+    for layer in _metal_layers(everything):
+        bodies = {n: everything[n] for n in layer}
+        if len(bodies) < 2:
+            continue
+        names = list(bodies)
+        parent = {n: n for n in names}
+
+        def find(x: str) -> str:
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                if box_gap(bodies[a], bodies[b]) <= TOUCH_TOL:
+                    ra, rb = find(a), find(b)
+                    if ra != rb:
+                        parent[ra] = rb
+
+        groups: dict[str, list[str]] = {}
+        for n in names:
+            groups.setdefault(find(n), []).append(n)
+        if len(groups) < 2:
+            continue
+
+        components = sorted(groups.values(), key=len, reverse=True)
+        mainland, islands = components[0], components[1:]
+
+        for island in islands:
+            nearest, gap = None, float("inf")
+            for a in island:
+                for b in mainland:
+                    d = box_gap(bodies[a], bodies[b])
+                    if d < gap:
+                        nearest, gap = (a, b), d
+            members = ", ".join(sorted(island)[:6])
+            extra = "" if len(island) <= 6 else f" (+{len(island) - 6} more)"
+            near = (f"; closest approach {gap * 1e3:.5f} mm between "
+                    f"{nearest[0]!r} and {nearest[1]!r}" if nearest else "")
+            out.append((
+                "geometry",
+                f"{len(island)} conductor(s) in the same metal layer are not "
+                f"connected to the rest of it: {members}{extra}{near}",
+                "if these are meant to be fed, the metal does not touch and the "
+                "structure is open-circuit; if the isolation is deliberate "
+                "(parasitic element, coupled line, aperture feed) the gap above "
+                "is the design value - check it is the one you intended",
+            ))
+    return out
+
+
+def _metal_layers(bodies: dict) -> list[list[str]]:
+    """Partition conductors into metal layers before asking about connectivity.
+
+    Connectivity is a question **within** a layer. A microstrip ground plane is
+    supposed to be electrically separate from the trace above it — that is what
+    the substrate is for — so a global connected-components pass reports it as
+    an island on every planar design ever built, and a check that cries wolf on
+    every correct spec is a check people learn to skip.
+
+    A layer is a set of conductors whose extents **overlap on the stacking
+    axis**. Overlap, not degeneracy: the first version keyed on zero-thickness
+    sheets and so had nothing to work with on `bowtie-3500`, whose metal is
+    0.1 mm thick boxes — it fell back to one global group and reported the feed
+    line as an island above its own ground plane. Overlap handles both, and it
+    handles them for the same reason a person would: metal at the same height
+    is one layer.
+
+    The stacking axis is whichever axis stratifies the conductors most (yields
+    the most disjoint groups); ties go to z, which is the usual substrate
+    normal. Anything spanning two levels — a via, a probe, a shorting pin —
+    overlaps both and joins them, which is exactly what it does electrically.
+    """
+    names = list(bodies)
+
+    def cluster(axis: int) -> list[list[str]]:
+        ordered = sorted(names, key=lambda n: bodies[n][axis][0])
+        groups: list[list[str]] = []
+        reach = None
+        for n in ordered:
+            lo, hi = bodies[n][axis]
+            if reach is None or lo > reach + TOUCH_TOL:
+                groups.append([n])
+                reach = hi
+            else:
+                groups[-1].append(n)
+                reach = max(reach, hi)
+        return groups
+
+    best = [names]
+    for axis in (2, 0, 1):               # z first: ties favour the usual normal
+        grouped = cluster(axis)
+        if len(grouped) > len(best):
+            best = grouped
+    return best
+
+
+def element_symmetry(spec, scope) -> list[tuple[str, str, str]]:
+    """`(path, message, hint)` when repeated elements are not built alike.
+
+    In an array the N elements are the same element N times. When one of them
+    carries a different number of boolean operations, one of them has been
+    edited and the others have not.
+
+    Measured 2026-08-18: a 2x2 patch array was built with all eight inset
+    notches subtracted from patch `P1` and none from `P2`, `P3` or `P4`. It
+    validated clean and the maintainer caught it by eye at the Review gate.
+    Every element had identical dimensions and only the cut counts differed,
+    which is exactly what this compares.
+
+    Grouping is by extent, not by name, so it does not depend on a naming
+    convention the spec author may not follow.
+    """
+    cuts: dict[str, int] = {}
+    for op in getattr(spec, "geometry", []) or []:
+        if op.op in ("subtract", "intersect"):
+            cuts[op.name] = cuts.get(op.name, 0) + len(op.tools or [])
+
+    # Only subtraction tools are skipped. A unite member is still present in
+    # the finished model - it has merely stopped being its own object - and
+    # skipping those made this check silent on the very array it was written
+    # for, whose patches are united with their feed stubs.
+    consumed: set[str] = set()
+    for op in getattr(spec, "geometry", []) or []:
+        if op.op in ("subtract", "intersect") and not op.keep_tools:
+            consumed.update(op.tools or [])
+
+    shapes: dict[tuple, list[str]] = {}
+    for op in getattr(spec, "geometry", []) or []:
+        if op.op not in _BOUNDED_OPS or op.name in consumed:
+            continue
+        bbox = bounding_box(op, scope)
+        if bbox is None:
+            continue
+        extent = tuple(round((hi - lo) / REPEAT_TOL) for lo, hi in bbox)
+        if not any(extent):
+            continue
+        shapes.setdefault(extent, []).append(op.name)
+
+    out: list[tuple[str, str, str]] = []
+    for extent, members in sorted(shapes.items()):
+        if len(members) < 2:
+            continue
+        counts = {name: cuts.get(name, 0) for name in members}
+        if len(set(counts.values())) < 2:
+            continue
+        dims = " x ".join(f"{v * REPEAT_TOL * 1e3:.3f}" for v in extent)
+        detail = ", ".join(f"{n}={counts[n]}" for n in sorted(members))
+        out.append((
+            "geometry",
+            f"{len(members)} identically sized objects ({dims} mm) carry "
+            f"different numbers of boolean operations: {detail}",
+            "repeated elements in an array should be built alike; a differing "
+            "count usually means one element was edited and its copies were "
+            "not (measured 2026-08-18: 8 inset notches cut from one patch of "
+            "four, caught by eye at the Review gate)",
         ))
     return out
 

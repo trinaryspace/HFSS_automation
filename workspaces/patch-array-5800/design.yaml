@@ -1,0 +1,298 @@
+# patch-array-5800 as a Design Spec — 2x2 corporate-fed microstrip patch array.
+#
+# The fed array the run must falsify. Element section identical to
+# design_elements.yaml (the stage-1 extraction model); this design adds the
+# corporate network S7 fixed (all-50-ohm lines, three lambda_g/4 sections at
+# 35.3553 ohm) and replaces the four lumped ports with one wave port at the
+# board edge.
+#
+# feed_network.element_impedance is declared 50ohm / source: isolated ON
+# PURPOSE — that warning IS the run's question. After the stage-1 extraction
+# the spec is revised: element_impedance <- Z_act (measured), source <-
+# active_measured, and every line width / transformer impedance in the
+# chain re-synthesised to close on the measured value (Hammerstad on this
+# stack; the walk is a hard gate).
+spec_version: 1
+name: patch-array-5800
+recipe: corporate-patch-array
+solution_type: Modal            # explicit, never the default (env-compat #11)
+
+provenance:
+  source: "Balanis ch.14 (14-1/14-2/14-6/14-7) element + Hammerstad synthesis feed lines, recomputed for 5.8 GHz on RO4350B 0.762 mm"
+  canonical_reading: closed-form
+  notes: >-
+    Not paper-sourced, so no Table/Figure arbitration. Element resonance
+    closes at 5.8000 GHz by construction (verified in Clarification
+    2026-08-18). Feed history: as-authored version terminated four 100 ohm
+    lines into insets computed for 50 ohm (2:1 mismatch on every element,
+    past three green gates); corrected to the all-50 ohm + three-lambda/4@
+    35.3553 chain below. Never simulated — this run is its falsification.
+
+target:
+  quantity: resonant_frequency
+  value: 5.8GHz
+  tolerance_pct: 5
+
+variables:
+  f0: 5.8GHz
+  er: 3.48
+  tand: 0.0037
+  h: 0.762mm
+  cu_t: 0.035mm
+  patch_W: 17.2679mm            # Balanis 14-6 (locked)
+  patch_L: 13.6238mm            # Balanis 14-7 with 14-2 fringing (locked)
+  S: 25.8442mm                  # lambda0/2 at 5.8 GHz (locked)
+  feed50_W: 1.7427mm            # Hammerstad, 50 ohm on this stack (element
+                                # lines; re-denominated after Z_act lands)
+  xfmr_W: 2.9084mm              # Hammerstad, 35.3553 ohm; eeff 2.8491
+                                # (junction transformers; re-derived after
+                                # Z_act lands)
+  q_x: 7.6556mm                 # lambda_g/4 on the 35.3553 ohm line at 5.8 GHz
+  inset_d: 2.0mm                # match tuner (start; tune against Z_act)
+  inset_g: 1.0mm                # inset slot width (gap arm<->patch metal)
+  sub_W: 70mm
+  sub_L: 70mm
+  air_pad: 17.2295mm            # lambda0/3 at f0
+  port_w: 8mm                   # wave port width, ~4.6 * feed50_W
+
+materials:
+  ro4350b:
+    permittivity: 3.48
+    loss_tangent: 0.0037
+  metal:
+    library: pec
+  air:
+    library: air
+
+geometry:
+  - op: box
+    name: Substrate
+    material: ro4350b
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L, h]
+
+  # REVIEW CHANGE 2026-08-18 (user): 1 oz copper = cu_t = 0.035 mm as a real
+  # box below the substrate. PEC material kept (skin depth << cu_t at 5.8 GHz;
+  # noted in summary).
+  - op: box
+    name: GroundPlane
+    material: metal
+    origin: ["-sub_W/2", "-sub_L/2", "-cu_t"]
+    size: [sub_W, sub_L, cu_t]
+
+  # The four elements at (+/-S/2, +/-S/2). P1 bottom-left, P2 top-left,
+  # P3 top-right, P4 bottom-right.
+  # REVIEW CHANGE 2026-08-18 (user): patches are 1 oz copper BOXES on top of
+  # the substrate: z in [h, h + cu_t]; the feed strips below stay sheets at
+  # z = h (patch bottom plane) so the feed-impedance walk keeps working.
+  - op: box
+    name: P1
+    material: metal
+    origin: ["-S/2 - patch_W/2", "-S/2 - patch_L/2", h]
+    size: [patch_W, patch_L, cu_t]
+  - op: box
+    name: P2
+    material: metal
+    origin: ["-S/2 - patch_W/2", "S/2 - patch_L/2", h]
+    size: [patch_W, patch_L, cu_t]
+  - op: box
+    name: P3
+    material: metal
+    origin: ["S/2 - patch_W/2", "S/2 - patch_L/2", h]
+    size: [patch_W, patch_L, cu_t]
+  - op: box
+    name: P4
+    material: metal
+    origin: ["S/2 - patch_W/2", "-S/2 - patch_L/2", h]
+    size: [patch_W, patch_L, cu_t]
+
+  # Corporate feed network as ONE 1 oz copper layer (REVIEW CHANGE
+  # 2026-08-18, user: the feed must be copper like the patches — "once you
+  # make it 3d the unite option will work"). All strips are BOXES in
+  # z in [h, h + cu_t]; the walk reads their in-plane extents (feed_check
+  # fix 2026-08-18: three-extent bboxes -> the thickness is not a width).
+  # Input line up x=0 to T1 at (0,0); 50 ohm arms run to x = +/-(S/2 - q_x);
+  # 35.36 ohm lambda/4 sections run to the column T2 junctions at
+  # (+/-S/2, 0); 50 ohm element lines drop +-y into the insets, ending at
+  # the notch bottom (junction with the patch).
+  - op: box
+    name: InLine
+    material: metal
+    origin: ["-feed50_W/2", "-sub_L/2", h]
+    size: [feed50_W, "sub_L/2 - q_x", cu_t]
+  # Stage-1 transformer, on the trunk: sees 25 ohm at T1 (two 50 ohm arms in
+  # parallel) and presents 50 ohm to the input line.
+  - op: box
+    name: Xfmr1
+    material: metal
+    origin: ["-xfmr_W/2", "-q_x", h]
+    size: [xfmr_W, q_x, cu_t]
+  # 50 ohm arms, T1 outward in +-x, stopping short of the stage-2 sections.
+  - op: box
+    name: ArmL
+    material: metal
+    origin: ["-(S/2 - q_x) - feed50_W/2", "-feed50_W/2", h]
+    size: ["S/2 - q_x", feed50_W, cu_t]
+  - op: box
+    name: ArmR
+    material: metal
+    origin: ["feed50_W/2", "-feed50_W/2", h]
+    size: ["S/2 - q_x", feed50_W, cu_t]
+  # Stage-2 transformers, one per arm: each sees 25 ohm at its T2 column
+  # junction (two 50 ohm element lines in parallel) and presents 50 ohm to
+  # the arm.
+  # REVIEW FIX 2026-08-18 (gate #1, user): the T2 transformers were centered
+  # on the junction (origin -S/2 -/+ xfmr_W/2), so each poked (xfmr_W -
+  # feed50_W)/2 = 0.58285 mm past the element-line footprint on its outer
+  # side and left a 0.58285 mm air gap before the arm — the feed was
+  # electrically open at both T2 junctions. Correct T: the transformer runs
+  # from the element-line centreline (|x| = S/2) to the arm's inner end,
+  # overlapping the element lines and the arm by feed50_W/2 each side.
+  - op: box
+    name: Xfmr2L
+    material: metal
+    origin: ["-S/2", "-xfmr_W/2", h]
+    size: [q_x, xfmr_W, cu_t]
+  - op: box
+    name: Xfmr2R
+    material: metal
+    origin: ["S/2 - q_x", "-xfmr_W/2", h]
+    size: [q_x, xfmr_W, cu_t]
+  - op: box
+    name: UpL
+    material: metal
+    origin: ["-S/2 - feed50_W/2", "0mm", h]
+    size: [feed50_W, "S/2 - patch_L/2 + inset_d", cu_t]
+  - op: box
+    name: DownL
+    material: metal
+    origin: ["-S/2 - feed50_W/2", "-(S/2 - patch_L/2 + inset_d)", h]
+    size: [feed50_W, "S/2 - patch_L/2 + inset_d", cu_t]
+  - op: box
+    name: UpR
+    material: metal
+    origin: ["S/2 - feed50_W/2", "0mm", h]
+    size: [feed50_W, "S/2 - patch_L/2 + inset_d", cu_t]
+  - op: box
+    name: DownR
+    material: metal
+    origin: ["S/2 - feed50_W/2", "-(S/2 - patch_L/2 + inset_d)", h]
+    size: [feed50_W, "S/2 - patch_L/2 + inset_d", cu_t]
+
+  # One conductor: the united body keeps the first operand's name (P1).
+  - op: unite
+    name: P1
+    with: [P2, P3, P4, InLine, Xfmr1, ArmL, Xfmr2L, ArmR, Xfmr2R,
+           UpL, DownL, UpR, DownR]
+
+  # The 8 inset notches: two per element, flanking its feed arm, cut from the
+  # element's feed edge (facing its T2) to depth inset_d. Cut, not drawn,
+  # exactly like patch-2400. REVIEW CHANGE: through-cuts of the patch copper
+  # as thin boxes, z in [h, h + cu_t] (xy footprints unchanged — they flank
+  # the feed strips, which occupy x in +/-(feed50_W/2) only, so no overlap).
+  - op: box
+    name: N1L
+    origin: ["-S/2 - feed50_W/2 - inset_g", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N1R
+    origin: ["-S/2 + feed50_W/2", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N2L
+    origin: ["-S/2 - feed50_W/2 - inset_g", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N2R
+    origin: ["-S/2 + feed50_W/2", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N3L
+    origin: ["S/2 - feed50_W/2 - inset_g", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N3R
+    origin: ["S/2 + feed50_W/2", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N4L
+    origin: ["S/2 - feed50_W/2 - inset_g", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N4R
+    origin: ["S/2 + feed50_W/2", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d, cu_t]
+
+  # REVIEW 2026-08-18 (gate #3, user): one subtract on the UNITED conductor
+  # with all eight notch tools — correct BECAUSE the box+box union now works:
+  # P2/P3/P4 are consumed into P1, so per-patch subtracts (the elements-
+  # design pattern) would blank against ghosts (observed: GrpcApiError
+  # Subtract). The four notches per element all cut through the one body.
+  - op: subtract
+    name: P1
+    tools: [N1L, N1R, N2L, N2R, N3L, N3R, N4L, N4R]
+    keep_tools: false
+
+  # Wave port at the input edge: xz sheet from the GROUND COPPER BOTTOM to
+  # the airbox lid, centered on the 50 ohm line (microstrip-50r pattern;
+  # airbox -y face is flush with this plane so the port terminates the
+  # radiation boundary). REVIEW CHANGE: z origin -cu_t, size +cu_t.
+  - op: sheet
+    name: PortSheet
+    plane: xz
+    origin: ["-port_w/2", "-sub_L/2", "-cu_t"]
+    size: [port_w, "h + 2*cu_t + air_pad"]
+
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2 - air_pad", "-sub_L/2", "-air_pad - cu_t"]
+    size: ["sub_W + 2*air_pad", "sub_L + air_pad", "h + 2*cu_t + 2*air_pad"]
+
+excitations:
+  - name: Port1
+    type: wave_port
+    "on":
+      object: PortSheet
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad
+    type: radiation
+    "on":
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 15
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: discrete
+    start: 5.0GHz
+    stop: 6.5GHz
+    count: 151
+
+qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass, gain_plausible]
+
+# The impedance chain, stated so it can be checked (hfss_spec/feed_check.py).
+# element_impedance 50ohm / source isolated is the CURRENT declaration —
+# deliberate: it is what stage 1 of this run exists to replace. After the
+# extraction the numbers here and in the geometry become the measured Z_act.
+feed_network:
+  element_impedance: 50ohm      # each patch, inset-matched (isolated value)
+  element_impedance_source: isolated
+  port_impedance: 50ohm
+  tolerance_pct: 5.0            # 5% mismatch is the walk's error bound
+  chain:
+    - {line: UpL}               # 50 ohm element line
+    - {junction: 2}             # UpL || DownL -> 25 ohm at T2
+    - {quarter_wave: Xfmr2L}    # 35.36 ohm lambda/4 -> 50 ohm
+    - {line: ArmL}              # 50 ohm arm
+    - {junction: 2}             # ArmL || ArmR -> 25 ohm at T1
+    - {quarter_wave: Xfmr1}     # 35.36 ohm lambda/4 -> 50 ohm
+    - {line: InLine}            # 50 ohm input

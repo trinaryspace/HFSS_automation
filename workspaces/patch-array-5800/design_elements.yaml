@@ -1,0 +1,272 @@
+# elements-5800 as a Design Spec — the stage-1 characterisation model.
+#
+# Four inset-fed rectangular patches at S = lambda0/2 on the same RO4350B
+# board as the fed array (patch-array-5800), with an individual lumped port
+# at each intended feed point (the notch mouth, y = +/-(S/2 - patch_L/2)).
+# No corporate feed, no transformers. Purpose: extract the 4x4 S-matrix and
+# compute the ACTIVE element impedance (gamma_act,i = sum_j S_ij * a_j / a_i,
+# uniform broadside drive) — the feed network of the fed array must be
+# synthesised against that number, not against the isolated 50 ohm value.
+#
+# Every geometry number matches the fed design's element section exactly so
+# the two solve environments differ only in the feed network / ports:
+# substrate 70x70, lambda0/3 airbox flush on the -y side (mirrors the fed
+# design's port-side flush box), insets inset_d = 2.0 mm, inset_g = 1.0 mm.
+spec_version: 1
+name: elements-5800
+recipe: corporate-patch-array
+solution_type: Modal            # explicit, never the default (env-compat #11)
+
+provenance:
+  source: "Balanis ch.14 element synthesis (14-1/14-2/14-6/14-7), recomputed for 5.8 GHz on RO4350B 0.762 mm; element dims locked by the user (17.2679 x 13.6238 mm, do not re-synthesise)"
+  canonical_reading: closed-form
+  notes: >-
+    Element closed form closes at exactly 5.8000 GHz (verified 2026-08-18 in
+    Clarification via hfss_spec.physics.patch_resonance). Not paper-sourced,
+    so no Table/Figure arbitration. This design exists to answer one number:
+    the active impedance at the notch mouth. Port plane = the mouth, which
+    is the fed design's real feed plane (its element line runs from the T2
+    junction to the notch bottom; the mouth is where free line ends and the
+    patch ridge begins).
+
+target:
+  quantity: resonant_frequency
+  value: 5.8GHz
+  tolerance_pct: 5
+
+variables:
+  f0: 5.8GHz
+  er: 3.48
+  tand: 0.0037
+  h: 0.762mm
+  cu_t: 0.035mm
+  patch_W: 17.2679mm            # Balanis 14-6 (locked)
+  patch_L: 13.6238mm            # Balanis 14-7 with 14-2 fringing (locked)
+  S: 25.8442mm                  # lambda0/2 at 5.8 GHz (locked)
+  feed50_W: 1.7427mm            # Hammerstad 50 ohm on this stack = the line
+                                # footprint between the inset slots; the mouth
+                                # port spans this width (locked by fed design)
+  inset_d: 2.0mm                # match tuner, must equal the fed design's
+  inset_g: 1.0mm                # inset slot width, must equal the fed design's
+  sub_W: 70mm
+  sub_L: 70mm
+  air_pad: 17.2295mm            # lambda0/3 at f0 (board +-x/z, and +y)
+
+materials:
+  ro4350b:
+    permittivity: 3.48
+    loss_tangent: 0.0037
+  metal:
+    library: pec
+  air:
+    library: air
+
+geometry:
+  - op: box
+    name: Substrate
+    material: ro4350b
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L, h]
+
+  # REVIEW CHANGE 2026-08-18 (user): 1 oz copper = cu_t = 0.035 mm as a real
+  # box below the substrate. PEC material kept (skin depth ~0.85 um << cu_t at
+  # 5.8 GHz, so an ideal PEC layer is the same EM result; noted in summary).
+  - op: box
+    name: GroundPlane
+    material: metal
+    origin: ["-sub_W/2", "-sub_L/2", "-cu_t"]
+    size: [sub_W, sub_L, cu_t]
+
+  # The four elements at (+/-S/2, +/-S/2). P1 bottom-left, P2 top-left,
+  # P3 top-right, P4 bottom-right. Each feed edge faces the array centre.
+  # REVIEW CHANGE 2026-08-18 (user): patches are 1 oz copper BOXES on top of
+  # the substrate: z in [h, h + cu_t], cu_t = 0.035 mm.
+  - op: box
+    name: P1
+    material: metal
+    origin: ["-S/2 - patch_W/2", "-S/2 - patch_L/2", h]
+    size: [patch_W, patch_L, cu_t]
+  - op: box
+    name: P2
+    material: metal
+    origin: ["-S/2 - patch_W/2", "S/2 - patch_L/2", h]
+    size: [patch_W, patch_L, cu_t]
+  - op: box
+    name: P3
+    material: metal
+    origin: ["S/2 - patch_W/2", "S/2 - patch_L/2", h]
+    size: [patch_W, patch_L, cu_t]
+  - op: box
+    name: P4
+    material: metal
+    origin: ["S/2 - patch_W/2", "-S/2 - patch_L/2", h]
+    size: [patch_W, patch_L, cu_t]
+
+  # The 8 inset notches: two per element, flanking its feed arm, cut from the
+  # element's feed edge to depth inset_d. REVIEW CHANGE: through-cuts of the
+  # patch copper as thin boxes, z in [h, h + cu_t] (the port sheet below them
+  # still spans the dielectric gap z in [0, h], ground top to patch bottom).
+  - op: box
+    name: N1L
+    origin: ["-S/2 - feed50_W/2 - inset_g", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N1R
+    origin: ["-S/2 + feed50_W/2", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N2L
+    origin: ["-S/2 - feed50_W/2 - inset_g", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N2R
+    origin: ["-S/2 + feed50_W/2", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N3L
+    origin: ["S/2 - feed50_W/2 - inset_g", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N3R
+    origin: ["S/2 + feed50_W/2", "S/2 - patch_L/2", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N4L
+    origin: ["S/2 - feed50_W/2 - inset_g", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d, cu_t]
+  - op: box
+    name: N4R
+    origin: ["S/2 + feed50_W/2", "-S/2 + patch_L/2 - inset_d", h]
+    size: [inset_g, inset_d, cu_t]
+
+  # REVIEW FIX 2026-08-18 (gate #1, user): the single subtract only blanked
+  # P1 — with four separate patch sheets each patch must be cut by its own
+  # two notch sheets (in S7 the patches were one united conductor, so one
+  # subtract sufficed there).
+  - op: subtract
+    name: P1
+    tools: [N1L, N1R]
+    keep_tools: false
+  - op: subtract
+    name: P2
+    tools: [N2L, N2R]
+    keep_tools: false
+  - op: subtract
+    name: P3
+    tools: [N3L, N3R]
+    keep_tools: false
+  - op: subtract
+    name: P4
+    tools: [N4L, N4R]
+    keep_tools: false
+
+  # The four lumped-port sheets: vertical planes standing across each notch
+  # mouth — xz (constant y = feed edge), spanning the feedline footprint
+  # width (feed50_W) in x from the ground plane (z = 0) up to the patch
+  # plane (z = h). REVIEW FIX 2026-08-18 (gate #1, user): was yz at the
+  # notch's side edge, i.e. not across the mouth at all; rotated to xz.
+  # REVIEW FIX: sheets material-assigned (metal = pec), per user.
+  - op: sheet
+    name: P1Port
+    material: metal
+    plane: xz
+    origin: ["-S/2 - feed50_W/2", "-S/2 + patch_L/2", "0mm"]
+    size: [feed50_W, h]
+  - op: sheet
+    name: P2Port
+    material: metal
+    plane: xz
+    origin: ["-S/2 - feed50_W/2", "S/2 - patch_L/2", "0mm"]
+    size: [feed50_W, h]
+  - op: sheet
+    name: P3Port
+    material: metal
+    plane: xz
+    origin: ["S/2 - feed50_W/2", "S/2 - patch_L/2", "0mm"]
+    size: [feed50_W, h]
+  - op: sheet
+    name: P4Port
+    material: metal
+    plane: xz
+    origin: ["S/2 - feed50_W/2", "-S/2 + patch_L/2", "0mm"]
+    size: [feed50_W, h]
+
+  # Airbox: identical to the fed design's (flush on the -y side so the two
+  # designs share the same element environment; the fed array puts its wave
+  # port there, this design radiates that face only). REVIEW CHANGE: z range
+  # grown by cu_t below and above for the copper boxes.
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2 - air_pad", "-sub_L/2", "-air_pad - cu_t"]
+    size: ["sub_W + 2*air_pad", "sub_L + air_pad", "h + 2*cu_t + 2*air_pad"]
+
+excitations:
+  - name: P1
+    type: lumped_port
+    # Sheet name + explicit integration line — the compiler's working shape
+    # for lumped ports on 1.3.0 (env-compat #7, patch-2400 run).
+    "on":
+      object: P1Port
+    integration_line:
+      from:
+        edge_mid: [P1Port, "-z", "min_x"]
+      to:
+        edge_mid: [P1Port, "+z", "min_x"]
+    impedance: 50ohm
+  - name: P2
+    type: lumped_port
+    "on":
+      object: P2Port
+    integration_line:
+      from:
+        edge_mid: [P2Port, "-z", "min_x"]
+      to:
+        edge_mid: [P2Port, "+z", "min_x"]
+    impedance: 50ohm
+  - name: P3
+    type: lumped_port
+    "on":
+      object: P3Port
+    integration_line:
+      from:
+        edge_mid: [P3Port, "-z", "min_x"]
+      to:
+        edge_mid: [P3Port, "+z", "min_x"]
+    impedance: 50ohm
+  - name: P4
+    type: lumped_port
+    "on":
+      object: P4Port
+    integration_line:
+      from:
+        edge_mid: [P4Port, "-z", "min_x"]
+      to:
+        edge_mid: [P4Port, "+z", "min_x"]
+    impedance: 50ohm
+
+boundaries:
+  - name: Rad
+    type: radiation
+    "on":
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 15
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: discrete
+    start: 5.0GHz
+    stop: 6.5GHz
+    count: 151
+
+# QA: the element resonance (Sii dip at 5.8 +- 5%) and the Z_act extraction
+# itself. No feed_network block: there is no junction to walk — the four-port
+# S-matrix is the output, not a matched chain.
+qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]

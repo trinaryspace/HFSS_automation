@@ -1,0 +1,29 @@
+{
+  "artifact_entries": 112,
+  "case": "baseline-engine-error",
+  "profiles": {
+    "DV86_S83_V106.profile": {
+      "stages": [
+        [
+          "Initial Meshing",
+          "00:00:03",
+          0
+        ],
+        [
+          "Adaptive Meshing",
+          "00:00:19",
+          6
+        ],
+        [
+          "Frequency Sweep",
+          "00:02:14",
+          0
+        ]
+      ],
+      "status": "Engine Detected Error",
+      "stop": "08/03/2026 01:20:11"
+    }
+  },
+  "source_results_root": "workspaces/bowtie-3500/bowtie_3500.aedtresults",
+  "total_files": 1142
+}

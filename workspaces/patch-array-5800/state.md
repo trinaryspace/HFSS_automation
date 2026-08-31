@@ -33,7 +33,12 @@ Machine state lives in `results/state/*.txt` — never hand-edited.
 ## Session 3 — Solve + QA
 
 **Live state block** (refreshed per decision):
-- pin — aedt_port=64554 | watchdog pid = relaunched per solve
+- pin — aedt_port=57850, pid 25840 | watchdog pid = relaunched per solve
+  (this block read 64554 until 2026-08-31: the desktop was recycled mid-run when
+  its gRPC channel degraded and the block was never refreshed afterwards. The
+  machine state in `results/state/aedt_port.txt` was right the whole time and is
+  the authority; the ledger's live block is hand-written and can go stale, which
+  is exactly what it did here.)
 - solve status — solve #1a COMPLETE + BANKED but SUPERSEDED (flat-PEC-geometry record: status=Normal Completion, sweep_points=150, banked_at=1787089477); solve #1b = re-solve on the copper-box ElementsOnly (user-approved model-state change)
 - solved marker — present (1a record); re-bank after 1b
 - next action — RUN FINISHED: solve #2 banked (Normal Completion, 14 adp, 150 pts, 19:07:16); readouts UI-arbitrated (route recorded in readouts.txt — scripted surface systematically gRPC-broken: GetVariables/GetPropValue); summary.md + run card (slug hidden-falcon, runs 2) written; outcome.txt/completions.txt=2 recorded. User verdict (verbatim): resonance 5.6 GHz ~7 dB BOTH designs = "not outright failure, its just a tuning issue that can be corrected with a human hand" (element-level shift: Balanis fringing/er on this stack; feed NOT falsified as a defeat; lambda/4 for 5.8 operating at 5.6 + active/isolated question open). Pending: broadside gain + element balance UI reads (desktop stays alive, banked); learning-loop proposals pending user approval (summary.md Learning-loop notes 1-3).

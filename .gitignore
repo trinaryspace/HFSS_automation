@@ -12,6 +12,11 @@ workspaces/*/*.aedt.auto
 workspaces/*/*.aedtresults/
 workspaces/*/results/
 workspaces/*/*.lock
+# pyAEDT's per-project sidecar, written beside the .aedt it belongs to. It
+# matched no rule above, so a sidecar would have been committed the moment one
+# had content; every workspace's is empty today, which is the only reason
+# nothing has leaked.
+workspaces/*/*.pyaedt/
 
 # Stray artifacts from AEDT scripting runs
 batch.log

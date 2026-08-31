@@ -95,7 +95,21 @@ noise** and the rollup must say so rather than rank cells.
 
 | date | wave | cells launched | notes |
 |---|---|---|---|
-| | | | |
+| 2026-08-18 | **B (first cell)** | `S7SIM` - the 2x2 corporate-feed array, `TASK-verify-2x2-feed.md` | **The first hardware run of the campaign.** Workspace `workspaces/patch-array-5800`, slug `hidden-falcon`. Candidate C1-generalized chosen. Three solves banked Normal Completion (`#1a` flat-PEC elements 2 adaptive passes; `#1b` 1-oz-copper elements 10 passes 150 pts; `#2` fed array 14 passes 150 pts). Feed **not** falsified as a defect: no -9..-10 dB in-band signature. Resonance **5.6 GHz in BOTH designs**, dip ~7 dB. User verdict: "not outright failure, its just a tuning issue that can be corrected with a human hand." Stage-1 Z_act extraction parked (readout, below). Broadside gain and element balance never read - still outstanding. |
+
+Two findings from that cell outlive the cell and are filed separately:
+
+- **The first non-circular check of `hfss_spec/physics.py`.** `precheck`
+  predicted 5.8000 GHz offline for the locked element dimensions; the solver put
+  both designs at 5.6 GHz. That is a **+3.57%** estimator error (repo
+  `delta_pct` convention, solve as target; -3.45% with the prediction as
+  denominator) measured against a solve rather than against the module itself -
+  the thing section 8 of `RECOMMENDATIONS.md` says the campaign did not have.
+  n=1, attribution open. Written up in `estimator-calibration.md`.
+- **Six learning-loop proposals, none applied**, queued for one-pass approval in
+  `knowledge/playbook/pending-amendments.md` per ADR 0002. One of them (2c, the
+  readout claim) is held back as probably wrong; the experiment that settles it
+  is `TASK-readout-channel-vs-systematic.md`.
 
 ---
 
@@ -108,3 +122,6 @@ Record it here the moment it happens; it is unrecoverable afterwards.
 | date | what | which cells affected |
 |---|---|---|
 | 2026-08-16 | another repo (`datasheet_analyzer`) running pytest suites in its own worktrees during planning | none — planning only, no cells live |
+| 2026-08-18 | **gRPC channel degraded mid-session, twice.** `GetVariables` + `Subtract` failed on the long-lived channel during the build; cured by recycling the desktop. Later `create_report` (`GetVariables`) and `get_solution_data` (`GetPropValue`) both failed at readout on the replacement channel and were **not** cured, because the retry reattached by pinned port to the same process. Confounds every scripted readout number from this cell; the QA signals that exist were read from the UI. | S7SIM |
+| 2026-08-18 | **Two `ws_common.DESIGN` misroutes** - the fed spec compiled over `ElementsOnly` once, and a second misroute on the same constant. Both recovered idempotently, nothing lost, but they cost two rebuilds of wall time on the cell that was being timed. | S7SIM |
+| 2026-08-31 | **The S7SIM desktop is still running - 13 days.** pid 25840, port 57850, started 2026-08-18 18:51:56, verified alive by `Get-Process` on 2026-08-31; holds the banked project and a licence seat. It is the only `ansysedt.exe` on the box (the W0-3 pids 25460 / 25380 are gone). **Deliberately not killed**: it is arm 1 of `TASK-readout-channel-vs-systematic.md` and the last place the run's two outstanding UI reads can be taken. Any cell launched before that task runs will contend with it for a seat. | any future cell; S7SIM's outstanding reads |

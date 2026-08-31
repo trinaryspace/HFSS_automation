@@ -63,6 +63,48 @@ about **boundaries** rather than length.
 aesthetic; it is *what a session of each type may and may not do*, enforced by
 the runner. Ship that boundary first, with the three seams following.
 
+## `narrate(qa_signals, spec)` is substantively blocked on the readout (2026-08-31)
+
+The third seam takes `qa_signals` as an input. On this machine, today, there is
+no reliable way to produce that input in code.
+
+The 2026-08-18 hardware run (`workspaces/patch-array-5800`) solved three times,
+banked all three, and then could not read a single number out:
+
+- `results/state/outcome.txt`: `create_report` raised
+  `GrpcApiError: Failed to execute gRPC AEDT command: GetVariables`
+- `results/state/readouts.txt`: `get_solution_data` raised
+  `GrpcApiError: Failed to execute gRPC AEDT command: GetPropValue`
+
+Every QA signal that run reports came from a human reading the AEDT UI and
+typing the number into the conversation - resonance, dip depth, the verdict.
+Two of the agreed signals (broadside gain, element balance) were never read at
+all and are still outstanding 13 days later.
+
+**An orchestrator that cannot read QA signals has nothing to narrate.** This is
+not a polish item on the seam; it is the seam's only argument. `narrate` under
+a broken readout degrades to transcribing what a human already read and judged,
+which is the conversation the ticket exists to replace. The same applies, more
+weakly, to `diagnose(failure_evidence, spec)` whenever the failure evidence is
+a result rather than a build error.
+
+This does **not** block the session-boundary work, which is where the ticket's
+measured value is and which shipped without touching a readout. It blocks
+`narrate` specifically, and it changes the sequencing: the readout has to be
+trustworthy before the third seam is worth building, not after.
+
+What settles it: `.scratch/hfss-agent-parallel-tests/TASK-readout-channel-vs-systematic.md`,
+a two-arm experiment on whether the failure is channel degradation over a
+long-lived session or genuinely systematic on this pyAEDT/AEDT pairing. The run
+concluded "systematic" from two failures that are both the transport error
+class, on a channel the same run had already seen degrade and recover once; the
+conclusion is queued but held back in
+`knowledge/playbook/pending-amendments.md` (item 2c) rather than approved. If
+the experiment says "channel", `narrate` is unblocked by a fresh-process readout
+policy and the seam can be scoped normally. If it says "systematic", `narrate`
+needs a different input surface than pyAEDT, and that is a design question this
+ticket has not asked yet.
+
 - [x] **Session boundaries enforced: Clarification cannot reach a licence or a
       solver; Build cannot solve; a breach exits non-zero** — `hfss_spec/session.py`,
       17 tier-0 tests, wired into `compile_spec` (`--launch` and `compile_model`).
@@ -84,6 +126,10 @@ the runner. Ship that boundary first, with the three seams following.
 - [ ] An undeclared session is currently unguarded (deliberate, so the guard
       could land without breaking existing workspaces). Decide when to flip that
       default to "declare or refuse".
+- [ ] **A readout that produces `qa_signals` in code** - the precondition for
+      `narrate`, and today unmet: the 2026-08-18 hardware run banked three solves
+      and read zero numbers scripted (see the section above). Settled by
+      `TASK-readout-channel-vs-systematic.md`, not by work in this ticket.
 - [ ] Exactly three LLM call sites; a test asserts no others exist
 - [ ] All three use structured output against the exported JSON Schema
 - [ ] Ledger remains the sole resume point; a killed run resumes without redoing clarification

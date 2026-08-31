@@ -27,6 +27,43 @@ checks block, and put a boundary around what a session is allowed to attempt.
 | Does the agent tune to satisfy gates? | **Yes** | X0a ran `precheck` 3× to reach −0.00% |
 | Is the readout broken? | **Was our reader** | fixed, tested, landed in env-compat #6 |
 
+## Status of these recommendations, checked 2026-08-31
+
+Checked against the code and `git log`, not against memory or commit subjects.
+Two of them did **not** land in the form written here, and both differences
+matter.
+
+| § | recommendation | status | evidence |
+|---|---|---|---|
+| 1 | λ₀/3 as the schema **default** | **NOT LANDED** | No clearance default in `hfss_spec/schema.py` or `loader.py`; `air_pad` appears there only in docstrings and tests. Commit `9ed76b4` "airboxes to lambda/3 across the board" edited **two cell specs** (`S1`, `X0b`) by hand and touched no code. What exists is the §3 *check*, not the default. |
+| 2 | `no-estimator` as its own verdict | **LANDED** | `Precheck.text()` in `hfss_spec/physics.py`: `head = "UNCHECKED"` with the tail "no estimator for this recipe; nothing was verified". Commit `ad7e4da`, 2026-08-17. |
+| 3 | two **blocking** validator rules | **PARTIAL — they are warnings** | `_check_model_relations` in `hfss_spec/validate.py` appends `radiation_clearance` and `port_geometry` as `WARNING`, deliberately, with a docstring giving the reason. Only `feed_check.walk` emits `ERROR`. Commit `ad7e4da`. |
+| — | (a third gate, not recommended here) | landed, blocking | The feed-network walk: `hfss_spec/feed_check.py`, commits `b98c9a7` / `e797189` / `b45680d` (2026-08-18) and `2d9a6d0` (2026-08-31). It is an ERROR because the designer declared what the elements present and the arithmetic either closes or it does not. |
+| 4 | scope stop-rule as a hard rule | **LANDED** | `skill/hfss-agent/SKILL.md` hard rule 8, "Never build the missing capability", with S11 written in as the measurement. |
+| 5 | per-session budget cap | **LANDED** | `hfss_spec/session.py`: `DEFAULT_CALL_BUDGET = 60`, `note_call`, `over_budget`, `budget_verdict`. Commit `ad7e4da`. Honest limit: it binds whoever calls `note_call`. |
+| 6 | ticket 14, first item | **LANDED** | `hfss_spec/session.py` + wired into `scripts/compile_spec.py` (`require_phase("launch_desktop")`, `require_phase("compile_model")`); tier-0 suite `session`. Commit `8a223d3`, 2026-08-18. Partial by construction, and ticket 14 says so. |
+| 7 | Wave B on hardware | **first cell run** | `S7SIM`, 2026-08-18, `workspaces/patch-array-5800` — three solves banked. See `campaign-log.md`. |
+| 8 | break the pre-check's circularity | **first datapoint exists** | The §7 run produced one: predicted 5.8000 GHz, solved 5.6 GHz, +3.57%. `estimator-calibration.md`. The `abs(delta) < 0.005` suspicion NOTE also landed, in `Prediction.text()`. |
+| 9 | cheap missing estimators | **partly** | `circular_patch_resonance` is registered in `precheck-tolerances.json` and implemented in `physics.py`; dipole λ/2 and monopole λ/4 are not. |
+
+**§1 is the one to re-read.** This document argued the default *because* a
+check is weaker: "A default costs the agent nothing and **prevents** the defect
+rather than detecting it." A detector landed and the preventer did not, so the
+five-of-six defect rate is still reachable by any new spec — it will now be
+warned about, in a warning that §"What I got wrong" already predicts will be
+read and ignored.
+
+**§3 landed in the form this document itself called insufficient.** The
+recommendation survives, in its own words, "only for gates that **block** or
+that encode a relation the agent cannot tune". Both rules encode such a
+relation, and both were shipped as warnings anyway. The reasoning in
+`validate.py` is honest and may well be right — an ERROR on a heuristic blocks
+legitimate designs, "the one failure mode worse than missing a defect" — but it
+is the opposite call from the one made here, and nobody recorded the reversal
+until now. Whether a warning binds is an empirical question this campaign
+already has an answer to (S11 read a note and ignored it), and no cell has run
+against the warnings yet.
+
 ## Do now — small, certain, high yield
 
 These are cheap and each is justified by a measured defect. In order.

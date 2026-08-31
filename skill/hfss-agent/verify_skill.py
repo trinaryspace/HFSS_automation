@@ -58,6 +58,14 @@ CONTRACT_MARKERS = {
                              "never pass a predicted output count"],
     "resolve-once": ["escalate", "never re-submit"],
     "readout one shot": ["one shot", "never iterate readout shapes"],
+    # The retry has to be a fresh PROCESS. patch-array-5800 read "one retry on
+    # a fresh attach" literally, `attach()` reconnects by the pinned port, and
+    # the run recorded a hypothesis it had never tested as a pairing verdict.
+    # The route tokens are how a later session tells the three outcomes apart.
+    "readout retries a fresh process": ["fresh process", "recycle_desktop",
+                                        "ReadoutSession", "readouts.txt",
+                                        "live-channel", "fresh-process",
+                                        "both-failed", "untested"],
     # Phase 2: the Build session has two routes and the skill has to say so,
     # or the compiler exists and no run ever uses it.
     "build routes": ["Route A", "Route B", "design.yaml", "escape hatch",

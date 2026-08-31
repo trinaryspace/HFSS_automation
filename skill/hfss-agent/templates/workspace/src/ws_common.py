@@ -17,6 +17,19 @@ attach). A pinned desktop that answers nothing is a stale pin: it is
 cleared — never attached against, never probed onto — and a fresh desktop
 is launched and re-pinned.
 
+Recycle discipline (patch-array-5800 retrospective): the bounded connect
+answers one question only — *is anything listening on the pin* — and a
+desktop whose gRPC channel has degraded still answers it. So `attach()`
+alone can never test the channel-lifetime hypothesis: it reconnects to the
+same sick process and the retry proves nothing. `recycle_desktop()` is the
+escalation for that case — it releases the pinned desktop, reaps the
+pinned process, and launches and re-pins a NEW one, so a "retry on a fresh
+attach" can be made to mean a fresh PROCESS. It obeys the same safety
+contract as teardown (it releases only through `Desktop(port=<pinned>)`
+and kills only the recorded `aedt_process_id`, so it can never close or
+kill a desktop this workspace did not launch) and it always releases with
+`close_projects=False`, so recycling can never purge solved results.
+
 Fill PROJECT and DESIGN when the workspace is created (the template can't
 know them). Keep all other script paths derived from this module.
 """
@@ -161,6 +174,112 @@ def _session_port():
         return 0
 
 
+REAP_TIMEOUT = 30.0  # seconds to wait for the pinned process to actually die
+_REAP_POLL = 1.0     # seconds between kill attempts; 0 in tests, never in a run
+
+
+def _reap_pinned_process(pid, timeout=None):
+    """Kill the recorded pinned process and report whether it is gone.
+
+    The ONE reap: teardown and `recycle_desktop` both end the same pinned
+    process, and two implementations of "is it dead yet" would disagree
+    eventually and disagree silently. `pid` is the recorded
+    `aedt_process_id` and nothing else — a pid this workspace did not
+    launch is never passed here.
+
+    Returns True when no process by that id remains. A missing or unparsable
+    pid is "nothing to reap", which is True, not a crash: `int(None)` raises
+    TypeError, and an uncaught TypeError here once killed teardown before it
+    reached `os._exit(0)` — the only reason a gRPC teardown does not hang.
+    """
+    if not pid or str(pid) == "0":
+        return True
+
+    import time
+
+    import psutil
+
+    deadline = time.time() + (REAP_TIMEOUT if timeout is None else timeout)
+    while True:
+        try:
+            psutil.Process(int(pid)).status()
+        except (psutil.NoSuchProcess, ValueError, TypeError):
+            return True
+        if time.time() >= deadline:
+            return False
+        try:
+            psutil.Process(int(pid)).kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError, TypeError):
+            pass
+        time.sleep(_REAP_POLL)
+
+
+def recycle_desktop():
+    """Release, reap and RELAUNCH the pinned desktop. Returns `(hfss, note)`.
+
+    Why this exists (patch-array-5800, 2026-08-18): that run recorded two
+    `GrpcApiError`s on `GetVariables` and `GetPropValue` — generic desktop
+    calls, i.e. the TRANSPORT failure class — and concluded that scripted
+    readouts are systematically impossible on this pyAEDT↔AEDT pairing. The
+    same ledger records that EARLIER IN THE SAME RUN the identical error
+    class on the same channel was cured by recycling the desktop. The
+    conclusion was therefore drawn from an untested hypothesis: SKILL.md's
+    "one retry on a fresh attach" went through `attach()`, `attach()`
+    reconnects by the pinned port, and the bounded connect only clears the
+    pin when the desktop is *dead* — a degraded-but-still-answering desktop
+    passes it. The retry reconnected to the same sick process every time.
+
+    A fresh PROCESS is the only thing that separates "this channel has
+    degraded" from "this API cannot work on this pairing", so that is what
+    this returns. Order matters: release, then reap, then launch — the old
+    process must let go of the project lock before the new one opens it.
+
+    Safety contract, unchanged from teardown: release is issued only
+    through `Desktop(port=<pinned>)` and the kill only against the recorded
+    `aedt_process_id`, so this can never close or kill a desktop this
+    workspace did not launch. With no pin recorded there is nothing this
+    workspace owns: it releases nothing, kills nothing, and simply launches
+    and pins a fresh desktop.
+
+    The release is ALWAYS `close_projects=False`. A recycle happens on the
+    readout path, which is after the solve — closing projects there would
+    purge exactly the results being read. That is also why the
+    bank-before-teardown guard is not consulted here: there is no verdict
+    under which this call can destroy solved results.
+
+    `note` is a sentence, not a bool, and it is meant to be written into
+    `results/state/readouts.txt` alongside the verdict it justifies.
+    """
+    os.makedirs(STATE, exist_ok=True)
+    pid = read_state("aedt_process_id")
+    port = _session_port()
+    steps = []
+    if port:
+        try:
+            d = Desktop(version=AEDT_VERSION, new_desktop=False, port=port)
+            d.release_desktop(close_projects=False, close_on_exit=True)
+            steps.append("released the pinned desktop on port %d (close_projects=False)" % port)
+        except Exception as e:  # noqa: BLE001 - a degraded channel is the reason we are here
+            steps.append("release on port %d raised %s (expected on a degraded channel) - "
+                         "continuing to the reap" % (port, type(e).__name__))
+    else:
+        steps.append("no pinned port recorded - nothing released")
+    if pid and pid != "0":
+        gone = _reap_pinned_process(pid)
+        steps.append("pinned pid %s %s" % (pid, "reaped" if gone else
+                                           "STILL ALIVE after the reap window"))
+    else:
+        steps.append("no pinned process id recorded - nothing killed")
+    write_state("aedt_port", "0")
+    write_state("aedt_process_id", "0")
+    hfss = attach(launch=True)
+    steps.append("fresh desktop launched and pinned at port %s (pid %s)"
+                 % (read_state("aedt_port"), read_state("aedt_process_id")))
+    note = "recycled desktop: " + "; ".join(steps)
+    print(note, flush=True)
+    return hfss, note
+
+
 def exit_keep_alive():
     """End a staged script leaving the pinned desktop (and project) alive."""
     import sys
@@ -227,9 +346,6 @@ def teardown():
     tears down exactly as today (`close_projects=True`).
     """
     import sys
-    import time
-
-    import psutil
 
     pid = read_state("aedt_process_id")
     port = _session_port()
@@ -264,30 +380,16 @@ def teardown():
         d.release_desktop(close_projects=close_projects, close_on_exit=True)
     except Exception as e:  # noqa: BLE001 - best effort
         print("release exception:", type(e).__name__, str(e)[:200], flush=True)
-    if pid and pid != "0":
-        deadline = time.time() + 30
-        while time.time() < deadline:
-            try:
-                p = psutil.Process(int(pid))
-            except (psutil.NoSuchProcess, ValueError):
-                break
-            try:
-                p.kill()
-            except psutil.AccessDenied:
-                pass
-            time.sleep(1)
-    # `pid` is None when no process id was ever recorded. `int(None)` raises
-    # TypeError, which is not caught below, so the function used to die here
-    # WITHOUT reaching os._exit(0) — and os._exit is the only reason gRPC
-    # teardown does not hang. A missing pid is "nothing to reap", not a crash.
+    # `_reap_pinned_process` owns the "is it dead yet" loop for teardown and
+    # for `recycle_desktop` alike, and it answers True for a missing pid —
+    # `pid` is None when no process id was ever recorded, and the `int(None)`
+    # TypeError that used to escape here killed teardown WITHOUT reaching
+    # `os._exit(0)`, the only reason a gRPC teardown does not hang.
+    gone = _reap_pinned_process(pid)
     print("teardown: server process gone =", end=" ", flush=True)
     if not pid or pid == "0":
         print("True (no server process was recorded)", flush=True)
     else:
-        try:
-            psutil.Process(int(pid)).status()
-            print("False", flush=True)
-        except (psutil.NoSuchProcess, ValueError, TypeError):
-            print("True", flush=True)
+        print(str(gone), flush=True)
     sys.stdout.flush()
     os._exit(0)

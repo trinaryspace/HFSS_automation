@@ -9,10 +9,12 @@ in-flight test + banking), and the guarded teardown decision
 stale-pin attach route (bounded connect: a dead pinned desktop fails fast
 as `stale pin — re-pinning`, never a hanging attach — the timeout path is
 simulated at the socket seam with the AEDT entry points stood in by
-fakes). No AEDT, no license, no desktop: every module under test imports
-nothing beyond the standard library, except ws_common which imports pyAEDT
-classes but never launches or attaches (the static gate's own
-import-check doctrine).
+fakes), and the recycle route (release + reap + relaunch of the pinned
+desktop: the escalation that makes a readout retry mean a fresh PROCESS,
+with psutil stood in so no real process is ever signalled). No AEDT, no
+license, no desktop: every module under test imports nothing beyond the
+standard library, except ws_common which imports pyAEDT classes but never
+launches or attaches (the static gate's own import-check doctrine).
 
 Run:  python -m unittest src.test_template_runners -v
    or: python src/test_template_runners.py
@@ -972,6 +974,184 @@ class TestStalePin(unittest.TestCase):
         with mock.patch.object(self.common.socket, "socket") as sock:
             self.assertFalse(self.common._pin_probe(0))
             sock.assert_not_called()
+
+
+class FakePsutil:
+    """Exactly the psutil surface `_reap_pinned_process` touches.
+
+    Injected through `sys.modules` so the reap loop runs for real — the
+    decision, the kill order, and the deadline — without a real process
+    ever being signalled.
+    """
+
+    class NoSuchProcess(Exception):
+        pass
+
+    class AccessDenied(Exception):
+        pass
+
+    def __init__(self, alive=(), unkillable=False):
+        self.alive = {int(p) for p in alive}
+        self.unkillable = unkillable
+        self.killed = []
+
+    def Process(self, pid):  # noqa: N802 - mirrors psutil's own spelling
+        pid = int(pid)
+        if pid not in self.alive:
+            raise self.NoSuchProcess(pid)
+        outer = self
+
+        class _Proc:
+            def status(self):
+                return "running"
+
+            def kill(self):
+                outer.killed.append(pid)
+                if outer.unkillable:
+                    raise outer.AccessDenied(pid)
+                outer.alive.discard(pid)
+
+        return _Proc()
+
+
+class TestRecycleDesktop(unittest.TestCase):
+    """The readout escalation: release, reap, relaunch, re-pin.
+
+    `attach()` cannot test the channel-lifetime hypothesis — it reconnects
+    by the pinned port and the bounded connect clears the pin only for a
+    desktop that is *dead*, so a degraded one is reattached to. These tests
+    pin the behaviour that separates the two: a recycle must end the pinned
+    PROCESS and pin the new one, must never close projects (the recycle
+    happens after the solve, and closing would purge the results being
+    read), and must never touch anything this workspace did not launch.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.common = load("ws_common")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self._state = os.path.join(self.tmp, "results", "state")
+        os.makedirs(self._state)
+        self.launched = []
+        self.desktops = []
+        self.released = []
+        self.release_raises = None
+        self._orig = (self.common.STATE, self.common.Hfss, self.common.Desktop,
+                      self.common._REAP_POLL)
+        self.common.STATE = self._state
+        self.common._REAP_POLL = 0        # the reap's decision, without its wall time
+        self.addCleanup(self._restore)
+
+        class FakeDesktop:
+            port = 0
+            aedt_process_id = 0
+
+        outer = self
+
+        class LaunchedHfss:
+            def __init__(self):
+                fd = FakeDesktop()
+                fd.port = 61234
+                fd.aedt_process_id = 4242
+                self.desktop_class = fd
+
+        def fake_hfss(**kw):
+            outer.launched.append(kw)
+            return LaunchedHfss()
+
+        def fake_desktop(**kw):
+            outer.desktops.append(kw)
+            if outer.release_raises:
+                raise outer.release_raises
+            d = FakeDesktop()
+            d.release_desktop = lambda **rk: outer.released.append(rk)
+            return d
+
+        self.common.Hfss = fake_hfss
+        self.common.Desktop = fake_desktop
+
+    def _restore(self):
+        (self.common.STATE, self.common.Hfss, self.common.Desktop,
+         self.common._REAP_POLL) = self._orig
+
+    def _pin(self, port, pid):
+        with open(os.path.join(self._state, "aedt_port.txt"), "w") as f:
+            f.write(str(port))
+        with open(os.path.join(self._state, "aedt_process_id.txt"), "w") as f:
+            f.write(str(pid))
+
+    def _recycle(self, psutil_fake):
+        with mock.patch.dict(sys.modules, {"psutil": psutil_fake}):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                hfss, note = self.common.recycle_desktop()
+        return hfss, note, out.getvalue()
+
+    def test_pinned_desktop_is_released_reaped_and_replaced(self):
+        self._pin(60123, 9999)
+        ps = FakePsutil(alive=[9999])
+        hfss, note, printed = self._recycle(ps)
+        self.assertEqual(self.desktops[0].get("port"), 60123)   # released by the pin only
+        self.assertEqual(ps.killed, [9999])                     # reaped by the pin only
+        self.assertEqual(len(self.launched), 1)
+        self.assertTrue(self.launched[0].get("new_desktop"))
+        self.assertEqual(self.common.read_state("aedt_port"), "61234")
+        self.assertEqual(self.common.read_state("aedt_process_id"), "4242")
+        self.assertIn("reaped", note)
+        self.assertIn("61234", note)
+        self.assertIn(note, printed)
+        self.assertIsNotNone(hfss)
+
+    def test_release_is_never_close_projects_true(self):
+        """A recycle runs after the solve. `close_projects=True` here would
+        purge exactly the results the readout is being retried for."""
+        self._pin(60123, 9999)
+        self._recycle(FakePsutil(alive=[9999]))
+        self.assertEqual(len(self.released), 1)
+        self.assertIs(self.released[0]["close_projects"], False)
+
+    def test_without_a_pin_nothing_is_closed_or_killed(self):
+        """The safety contract: no pin means this workspace owns no desktop,
+        so a recycle launches its own and touches nothing else."""
+        ps = FakePsutil(alive=[9999])
+        _, note, _ = self._recycle(ps)
+        self.assertEqual(self.desktops, [])       # no Desktop(port=...) ever constructed
+        self.assertEqual(self.released, [])
+        self.assertEqual(ps.killed, [])
+        self.assertEqual(len(self.launched), 1)
+        self.assertIn("nothing released", note)
+        self.assertIn("nothing killed", note)
+        self.assertEqual(self.common.read_state("aedt_port"), "61234")
+
+    def test_a_degraded_channel_refusing_the_release_still_gets_recycled(self):
+        """The reason to recycle is a broken channel, so the release failing
+        is the expected case, not a reason to abandon the escalation."""
+        self._pin(60123, 9999)
+        self.release_raises = RuntimeError("GrpcApiError: release failed")
+        ps = FakePsutil(alive=[9999])
+        _, note, _ = self._recycle(ps)
+        self.assertIn("RuntimeError", note)
+        self.assertEqual(ps.killed, [9999])       # the reap still ran
+        self.assertEqual(len(self.launched), 1)   # and the fresh desktop still came up
+        self.assertEqual(self.common.read_state("aedt_port"), "61234")
+
+    def test_a_surviving_process_is_reported_not_hidden(self):
+        self._pin(60123, 9999)
+        ps = FakePsutil(alive=[9999], unkillable=True)
+        with mock.patch.dict(sys.modules, {"psutil": ps}):
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.common._REAP_POLL = 0.01
+                gone = self.common._reap_pinned_process(9999, timeout=0.03)
+        self.assertFalse(gone)
+        self.assertTrue(ps.killed)
+
+    def test_missing_pid_is_nothing_to_reap_not_a_crash(self):
+        """`int(None)` raising here once killed teardown before `os._exit(0)`,
+        which is the only reason a gRPC teardown does not hang."""
+        self.assertTrue(self.common._reap_pinned_process(None))
+        self.assertTrue(self.common._reap_pinned_process("0"))
 
 
 if __name__ == "__main__":

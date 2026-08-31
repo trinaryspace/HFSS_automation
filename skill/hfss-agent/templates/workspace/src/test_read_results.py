@@ -5,10 +5,22 @@ attribute pyAEDT 1.3.0 does not have — reports "unfilled" on every good fetch,
 so a working readout is discarded before anyone sees it. It survived two pilots
 because nothing tested it offline. These fakes mimic the accessor surface of
 1.3.0 exactly, so the regression cannot come back quietly.
+
+The second bug locked down here is a reasoning failure rather than a call-shape
+one, and it cost a whole run's results (patch-array-5800): two `GrpcApiError`s
+on generic desktop calls were written up as "scripted readouts fail
+systematically over this pairing" although the retry had reconnected to the
+same degraded desktop process, and the same run's ledger recorded that
+recycling the desktop had already cured that error class once. `ReadoutSession`
+must escalate to a genuinely fresh process and must label the three outcomes
+apart; a fake recycler stands in for the launch, so the whole decision is
+testable with no AEDT.
 """
 
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -158,6 +170,173 @@ class TestReadExpression(unittest.TestCase):
         for hfss in cases:
             _, _, note = read_results.read_expression(hfss, "dB(S(1,1))")
             self.assertTrue(note and len(note) > 20, note)
+
+
+class FakeRecycler:
+    """Stands in for `ws_common.recycle_desktop`: returns `(hfss, note)`.
+
+    A recycle is a process launch on the live box; here it is a counter and a
+    replacement fake, which is all the escalation logic can observe anyway.
+    """
+
+    def __init__(self, replacement, raises=None):
+        self.replacement = replacement
+        self.raises = raises
+        self.calls = 0
+
+    def __call__(self):
+        self.calls += 1
+        if self.raises:
+            raise self.raises
+        return self.replacement, "recycled desktop: fresh desktop pinned at port 61234"
+
+
+def healthy_hfss():
+    return FakeHfss(SWEEPS, FakePost(FakeSolution(sweep=FREQS, values=FILLED)))
+
+
+def sick_hfss():
+    """A desktop whose channel raises the run's actual error class."""
+    return FakeHfss(SWEEPS, FakePost(raises=RuntimeError(
+        "GrpcApiError: GetVariables failed")))
+
+
+class TestReadoutSessionRoutes(unittest.TestCase):
+    """The three outcomes must be distinguishable, because the run that could
+    not distinguish them wrote an untested hypothesis into the playbook."""
+
+    def test_live_read_never_escalates(self):
+        recycler = FakeRecycler(healthy_hfss())
+        session = read_results.ReadoutSession(healthy_hfss(), recycle=recycler)
+        out = session.read("dB(S(1,1))")
+        self.assertEqual(out.y, FILLED)
+        self.assertEqual(out.route, read_results.ROUTE_LIVE)
+        self.assertEqual(recycler.calls, 0)
+        self.assertFalse(session.escalated)
+
+    def test_fresh_process_success_is_the_confirmed_verdict(self):
+        """The hypothesis the 2026-08-18 run assumed false, actually tested."""
+        fresh = healthy_hfss()
+        recycler = FakeRecycler(fresh)
+        session = read_results.ReadoutSession(sick_hfss(), recycle=recycler)
+        out = session.read("dB(S(1,1))")
+        self.assertEqual(out.y, FILLED)
+        self.assertEqual(out.route, read_results.ROUTE_FRESH)
+        self.assertEqual(recycler.calls, 1)
+        self.assertIs(session.hfss, fresh)          # later signals use the fresh one
+        self.assertIn("GetVariables", out.note)     # what the live channel did
+        self.assertIn("fresh process:", out.note)   # and what the fresh one did
+        self.assertIn("CONFIRMED", read_results.verdict_line("s11", out))
+
+    def test_failure_on_both_is_the_only_systematic_verdict(self):
+        recycler = FakeRecycler(sick_hfss())
+        session = read_results.ReadoutSession(sick_hfss(), recycle=recycler)
+        out = session.read("dB(S(1,1))")
+        self.assertEqual(out.y, [])
+        self.assertEqual(out.route, read_results.ROUTE_BOTH_FAILED)
+        self.assertEqual(recycler.calls, 1)
+        self.assertIn("SYSTEMATIC", read_results.verdict_line("s11", out))
+
+    def test_no_recycler_is_untested_and_never_reads_as_systematic(self):
+        """The defect verbatim: no fresh process ran, so nothing was proved."""
+        session = read_results.ReadoutSession(sick_hfss())
+        out = session.read("dB(S(1,1))")
+        self.assertEqual(out.route, read_results.ROUTE_UNTESTED)
+        line = read_results.verdict_line("s11", out)
+        self.assertIn("UNTESTED", line)
+        self.assertNotIn("SYSTEMATIC", line)
+
+    def test_a_raising_recycle_is_untested_not_systematic(self):
+        recycler = FakeRecycler(None, raises=RuntimeError("launch refused"))
+        session = read_results.ReadoutSession(sick_hfss(), recycle=recycler)
+        out = session.read("dB(S(1,1))")
+        self.assertEqual(out.route, read_results.ROUTE_UNTESTED)
+        self.assertIn("launch refused", out.note)
+        self.assertNotIn("SYSTEMATIC", read_results.verdict_line("s11", out))
+
+
+class TestReadoutSessionBudget(unittest.TestCase):
+    """One escalation per run, spent once, never a loop."""
+
+    def test_three_failing_signals_launch_exactly_one_desktop(self):
+        recycler = FakeRecycler(sick_hfss())
+        session = read_results.ReadoutSession(sick_hfss(), recycle=recycler)
+        routes = [session.read(e).route for e in ("dB(S(1,1))", "dB(S(2,1))", "GainTotal")]
+        self.assertEqual(recycler.calls, 1)
+        self.assertEqual(routes, [read_results.ROUTE_BOTH_FAILED] * 3)
+
+    def test_a_failed_escalation_is_still_spent(self):
+        recycler = FakeRecycler(None, raises=RuntimeError("launch refused"))
+        session = read_results.ReadoutSession(sick_hfss(), recycle=recycler)
+        session.read("dB(S(1,1))")
+        session.read("dB(S(2,1))")
+        self.assertEqual(recycler.calls, 1)
+        self.assertTrue(session.escalated)
+
+    def test_signals_after_a_FAILED_escalation_stay_untested(self):
+        """The budget being spent is not the same fact as a fresh process
+        existing. Reporting `both-failed` here would claim a fresh process
+        failed when none ever came up — the untested-hypothesis-as-finding
+        move this whole class exists to prevent, and it was a live bug in
+        the first cut of `read`."""
+        recycler = FakeRecycler(None, raises=RuntimeError("launch refused"))
+        session = read_results.ReadoutSession(sick_hfss(), recycle=recycler)
+        session.read("dB(S(1,1))")
+        second = session.read("dB(S(2,1))")
+        self.assertFalse(session.on_fresh_process)
+        self.assertEqual(second.route, read_results.ROUTE_UNTESTED)
+        self.assertNotIn("SYSTEMATIC", read_results.verdict_line("s21", second))
+        self.assertIn("launch refused", second.note)
+
+    def test_a_live_read_after_a_failed_escalation_is_still_the_live_channel(self):
+        """No fresh process came up, so a later success is the live channel's
+        — labelling it `fresh-process` would invent a desktop."""
+        recycler = FakeRecycler(None, raises=RuntimeError("launch refused"))
+        session = read_results.ReadoutSession(sick_hfss(), recycle=recycler)
+        session.read("dB(S(1,1))")
+        session.hfss = healthy_hfss()          # the channel recovered on its own
+        out = session.read("dB(S(2,1))")
+        self.assertEqual(out.route, read_results.ROUTE_LIVE)
+
+    def test_signals_after_a_successful_escalation_say_which_desktop_read_them(self):
+        recycler = FakeRecycler(healthy_hfss())
+        session = read_results.ReadoutSession(sick_hfss(), recycle=recycler)
+        session.read("dB(S(1,1))")
+        second = session.read("dB(S(2,1))")
+        self.assertEqual(second.route, read_results.ROUTE_FRESH)
+        self.assertIn("already spent", second.note)
+        self.assertEqual(recycler.calls, 1)
+
+
+class TestVerdictRecord(unittest.TestCase):
+    """What lands in `results/state/readouts.txt` is the evidence a later
+    session reasons from, so its shape is part of the contract."""
+
+    def test_every_route_has_a_verdict_and_the_tokens_are_distinct(self):
+        routes = (read_results.ROUTE_LIVE, read_results.ROUTE_FRESH,
+                  read_results.ROUTE_BOTH_FAILED, read_results.ROUTE_UNTESTED)
+        self.assertEqual(len(set(routes)), 4)
+        self.assertEqual(set(read_results.VERDICTS), set(routes))
+        for route in routes:
+            self.assertTrue(len(read_results.VERDICTS[route]) > 20, route)
+
+    def test_line_carries_signal_route_verdict_and_trail(self):
+        out = read_results.Readout(FREQS, FILLED, read_results.ROUTE_LIVE, "read 3 points")
+        line = read_results.verdict_line("s11", out)
+        self.assertTrue(line.startswith("s11: route=live-channel "))
+        self.assertIn("| read 3 points", line)
+
+    def test_written_file_is_greppable_by_route(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        recycler = FakeRecycler(healthy_hfss())
+        session = read_results.ReadoutSession(sick_hfss(), recycle=recycler)
+        line = read_results.verdict_line("s11", session.read("dB(S(1,1))"))
+        path = read_results.write_readouts(tmp, [line])
+        with open(path, encoding="utf-8") as f:
+            written = f.read()
+        self.assertIn("route=" + read_results.ROUTE_FRESH, written)
+        self.assertTrue(written.endswith("\n"))
 
 
 class TestRouteAround(unittest.TestCase):

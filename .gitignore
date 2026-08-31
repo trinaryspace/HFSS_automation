@@ -22,3 +22,18 @@ scraping/*.log
 # Claude Code skill install: a LINK to skill/hfss-agent, recreated by
 # `python scripts/install_skill.py`. Never a second copy of the tree.
 .claude/skills/
+
+# Claude Code worktrees: `.claude/worktrees/<name>/` is a full second checkout
+# of this repo (~70 MB each), created per parallel agent run. Their commits
+# already live in the shared object store via their own branches, so the
+# checkout itself is disposable and must never be committed into the tree.
+.claude/worktrees/
+
+# Dropped at the repo root by the opencode desktop app: its own package
+# manifest (`@opencode-ai/desktop` 1.18.11), nothing to do with this project —
+# this repo is pure Python and has no npm surface. Root-anchored on purpose: a
+# bare `package.json` would silently swallow a real one at any depth, and a
+# silently-ignored source file is a worse failure than a stray tool artifact.
+# If this repo ever does grow an npm surface, delete this line rather than
+# working around it with `git add -f`.
+/package.json

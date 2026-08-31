@@ -94,6 +94,29 @@ def spec_with(lines, chain, element_z, include_feed=True):
     return "".join(parts)
 
 
+def spec_with_box(lines, chain, element_z, thickness="0.035mm", include_feed=True):
+    """Like spec_with, but every line is a 1 oz copper BOX (z in [h, h+t]).
+
+    2026-08-18: the fed array was rebuilt with the whole top conductor as a
+    copper layer; the walk must read the two in-plane extents of a 3D strip,
+    never the metal thickness (0.035 mm / 0.762 mm = 0.046 sits outside
+    Hammerstad's range and would break every legitimate box-built feed).
+    """
+    parts = [HEAD]
+    for name, (z, length) in lines.items():
+        w = width_for(z)
+        parts.append("  - op: box\n    name: %s\n    material: metal\n"
+                     "    origin: [\"0mm\", \"0mm\", \"0.762mm\"]\n"
+                     "    size: [\"%.6fmm\", \"%.6fmm\", %s]\n"
+                     % (name, w * 1e3, length * 1e3, thickness))
+    parts.append(TAIL)
+    if include_feed:
+        parts.append("feed_network:\n  element_impedance: %s\n  chain:\n" % element_z)
+        for stage in chain:
+            parts.append("    - {%s}\n" % stage)
+    return "".join(parts)
+
+
 def feed_errors(text):
     report = validate(load_spec_text(text))
     return [f.message for f in report.errors if f.path.startswith("feed_network")]
@@ -171,6 +194,47 @@ class TestCatchesS7(unittest.TestCase):
         chain = ["line: Elem", "line: Trunk"]
         errors = feed_errors(spec_with(lines, chain, "100ohm"))
         self.assertTrue(any("does not close" in e for e in errors))
+
+
+class TestBoxBuiltFeeds(unittest.TestCase):
+    """The whole top conductor as a 1 oz copper layer (2026-08-18 rebuild).
+
+    The strips are 0.035 mm boxes, so their bbox has three positive extents.
+    The walk must read the in-plane width — the thickness is not a width,
+    and W/h = 0.046 would otherwise be silently outside Hammerstad's range.
+    Same algebra, same verdicts: legitimate chains close, S7's defect is
+    still caught.
+    """
+
+    def test_fifty_ohm_box_strips_close_the_same_chain(self):
+        x = 50 / math.sqrt(2)
+        lines = {"Elem": (50, LONG), "X2": (x, quarter_for(x)),
+                 "Arm": (50, LONG), "X1": (x, quarter_for(x)),
+                 "Trunk": (50, LONG)}
+        chain = ["line: Elem", "junction: 2", "quarter_wave: X2",
+                 "line: Arm", "junction: 2", "quarter_wave: X1", "line: Trunk"]
+        self.assertEqual(feed_errors(spec_with_box(lines, chain, "50ohm")), [])
+
+    def test_box_strips_still_catch_the_s7_defect(self):
+        lines = {"Elem": (100, LONG), "Arm": (100, LONG), "Trunk": (50, LONG)}
+        chain = ["line: Elem", "junction: 2", "line: Arm",
+                 "junction: 2", "line: Trunk"]
+        errors = feed_errors(spec_with_box(lines, chain, "50ohm"))
+        self.assertTrue(errors)
+        self.assertIn("2.00:1", errors[0])
+
+    def test_thickness_is_never_read_as_the_width(self):
+        """A 0.035 mm strip could never close a chain on its own merits; if the
+        walk ever regresses to smallest-extent, this chain breaks loudly."""
+        x = 50 / math.sqrt(2)
+        lines = {"Elem": (50, LONG), "X2": (x, quarter_for(x)),
+                 "Arm": (50, LONG), "X1": (x, quarter_for(x)),
+                 "Trunk": (50, LONG)}
+        chain = ["line: Elem", "junction: 2", "quarter_wave: X2",
+                 "line: Arm", "junction: 2", "quarter_wave: X1", "line: Trunk"]
+        text = spec_with_box(lines, chain, "50ohm")
+        self.assertIn("0.035mm", text)
+        self.assertEqual(feed_errors(text), [])
 
 
 class TestHonestLimits(unittest.TestCase):

@@ -66,15 +66,26 @@ def _num(raw, scope, dimension) -> Optional[float]:
 
 
 def _strip_extents(op, scope) -> Optional[tuple[float, float]]:
-    """(width, length) of a strip: the narrower and wider in-plane extents."""
+    """(width, length) of a strip: the narrower and wider in-plane extents.
+
+    A 2D sheet has two positive extents. A 3D strip - a copper box, e.g. the
+    fed array rebuilt with the whole conductor 1 oz copper (0.035 mm) on
+    2026-08-18 - has three, and the smallest is the metal thickness: reading
+    it as the width would put W/h = 0.046 outside Hammerstad's range and
+    break every legitimate box-built feed. For three extents the two largest
+    are the in-plane width and length; that is exact for copper-layer
+    modeling, where the thickness is always the smallest extent.
+    """
     from .model_checks import bounding_box
     bbox = bounding_box(op, scope)
     if bbox is None:
         return None
     extents = sorted(hi - lo for lo, hi in bbox if hi - lo > 0)
-    if len(extents) < 2:
-        return None
-    return extents[0], extents[-1]
+    if len(extents) == 2:
+        return extents[0], extents[1]
+    if len(extents) == 3:
+        return extents[1], extents[2]
+    return None
 
 
 def _impedance_of(width, h, er):

@@ -1,0 +1,16 @@
+diff --git a/knowledge/playbook/precheck-tolerances.json b/knowledge/playbook/precheck-tolerances.json
+index ad91b62..54a4750 100644
+--- a/knowledge/playbook/precheck-tolerances.json
++++ b/knowledge/playbook/precheck-tolerances.json
+@@ -17,6 +17,11 @@
+       "estimator": "patch_resonance",
+       "note": "Balanis 14-1/14-2/14-7 are good to a few percent on a thin substrate; FR4's own permittivity tolerance dominates the error."
+     },
++    "corporate-patch-array": {
++      "tolerance_pct": 5.0,
++      "estimator": "patch_resonance",
++      "note": "Element resonance only (Balanis 14-1/14-2/14-6/14-7 on the unit element). The corporate feed, its 70.7-ohm transformers and the array factor are not closed-form-checked: S11 depth and broadside gain are solve-time QA signals. Registered with the patch-array-5800 Clarification (2026-08-16)."
++    },
+     "bow-tie-patch": {
+       "tolerance_pct": 8.0,
+       "estimator": "bowtie_resonance",

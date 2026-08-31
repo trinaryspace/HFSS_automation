@@ -47,6 +47,18 @@ tolerance the `inset-fed-rectangular-patch` entry carries.
   `patch_resonance(13.6238, 17.2679, 0.762, 3.48) = 5.8000 GHz` exact
   (recomputed 2026-08-31 from `hfss_spec.physics`: 5.799999 GHz,
   ereff 3.242632, dL 0.364125 mm).
+- **This amendment was already written once, and never committed.** On
+  2026-08-31 an uncommitted edit to `precheck-tolerances.json` was found in the
+  `cell-S7` worktree, dated to the S7 authoring cell (2026-08-16), registering
+  exactly this entry at `tolerance_pct: 5.0`. It is preserved verbatim as
+  `.scratch/hfss-agent-parallel-tests/S7-corporate-patch-array-estimator.patch`
+  and was **not** applied. Two things follow. First, the proposal is older than
+  the run that re-proposed it, so it has now been arrived at independently
+  twice - which is a point in favour of the entry existing at all. Second, it
+  was written before any hardware existed to check it against, and it chose 5.0
+  by copying the neighbouring `inset-fed-rectangular-patch` entry. That is the
+  number the measurement below calls into question, so the patch should be
+  treated as the draft it is, not as prior approval.
 
 **Why this is NOT ready to approve as written.** The hardware solved at
 **5.6 GHz** in both designs. Against that measurement the estimator is out by

@@ -46,7 +46,14 @@ Six or more independently launched AEDT processes were exercised. Across them:
   `odesign.GetVariables()` (all 17 variables), `odesign.GetVariableValue()`,
   `variable_manager.independent_variables`, `oproject.GetVariables()`,
   `post.all_report_names`.
-- **Not garbage collection.** Reproduced with `gc.disable()`.
+- ~~**Not garbage collection.** Reproduced with `gc.disable()`.~~
+  **CORRECTED, same day.** This was overstated and is withdrawn. `gc.disable()`
+  turns off the *cyclic* collector only; CPython still deallocates by reference
+  count, and `Desktop.__del__` (desktop.py:2164) calls
+  `__release_and_close_desktop(self.close_on_exit, self.close_on_exit)`. So an
+  object-lifetime teardown was never ruled out by that test. It is in fact the
+  leading candidate for the post-construction teardown - see "Two mechanisms"
+  below.
 - **Not the anonymous `Desktop()` in `ws_common.attach`.** Reproduced while
   holding an explicit `Desktop` reference. (That anonymous construction is
   still worth tidying; it is simply not this bug.)
@@ -86,6 +93,54 @@ through the design's own variables — so a simpler project clears it and this
 the project, not the process") was the right instinct, and the trace gets there
 without needing the extra run.
 
+## Two mechanisms, not one (source read 2026-09-01, offline)
+
+The two teardowns log *different* messages, and the difference names the caller.
+
+**A — the report path.** Logs "Desktop has been released", and the traced call
+is `release_desktop(close_projects=False, close_on_exit=False)`. That exact
+`(False, False)` signature appears in one place in the codebase:
+`application/design.py:332`, inside `Design.__exit__`, which fires when
+`self._desktop_class._connected_app_instances <= 0` and
+`_initialized_from_design`. So this is very likely context-manager / instance-
+count bookkeeping, not a deliberate release. **Not yet confirmed** - confirming
+means instrumenting `Design.__exit__`, which needs a live session.
+
+**B — the post-construction teardown.** Logs "Desktop has been released **and
+closed**", which is only reachable when `close_aedt_app` is true.
+`Desktop.__del__` calls `__release_and_close_desktop(self.close_on_exit,
+self.close_on_exit)` - both arguments the same flag - so a `__del__` on a
+Desktop with `close_on_exit=True` produces exactly that line. `probe_who`
+independently printed `Desktop.__del__ FIRED`. This is an object-lifetime
+teardown and, per the correction above, `gc.disable()` never excluded it.
+**Not yet confirmed** - confirming means identifying whose reference drops,
+which needs a live session.
+
+## Why 2024.1 specifically may be the unlucky version
+
+`application/variables.py`, `_get_prop_generic`:
+
+```python
+if evaluated and self._app._aedt_version <= "2024.2":   # pragma: no cover
+    return var_obj.GetPropEvaluatedValue("EvaluatedValue")
+elif evaluated and self._app._aedt_version >= "2024.2":
+    return var_obj.GetPropEvaluatedValue()
+```
+
+That is a **string** comparison of version numbers, and `"2024.1" <= "2024.2"`
+is true, so this box takes the first branch - the one upstream marked
+`# pragma: no cover`, i.e. the branch their own test suite never exercises. It
+calls `GetPropEvaluatedValue` **with an argument** where the other branch passes
+none.
+
+This sharpens the per-project reading rather than replacing it. Reaching this
+code at all requires a design with variables to iterate; taking the uncovered
+branch requires 2024.1. Both conditions hold here. A design with no variables
+would never arrive, which is consistent with environment-compat #6's working
+readout on 2026-08-07. **Not yet confirmed** - it is a source reading, not a
+measurement, and the exact failure inside that call was never observed because
+`numeric_value` swallows exceptions (`except Exception: return self._value`).
+
 ## Route-arounds tried, all failed
 
 - `get_solution_data(variations=<built from raw GetVariableValue>)` — got
@@ -121,12 +176,39 @@ process either", and environment-compat #6 records the same call working on the
 same pairing. The token is fine; the sentence attached to it asserts more than
 two failures can support and should say so in narrower words.
 
-## Honest limits
+## Honest limits — what is measured, and what is still inference
 
-- Arm 1 was never reproduced, so the *original* 2026-08-18 failure is
-  attributed by inference (same error class, same project, same call path), not
-  by measurement.
-- The teardown was traced on one path conclusively; the post-construction
-  teardown was observed but not traced to its caller.
-- One project, one design, one expression. A second project would confirm the
-  per-project reading, and is now the cheapest remaining question.
+**Measured, and safe to rely on:**
+
+- the readout fails reproducibly on freshly launched processes (6+ of them);
+- it is not session age, not a missing API, not the licence, not attach-vs-launch;
+- `release_desktop` is called from inside the read, with the stack path above;
+- many gRPC calls succeed on the same session, so the transport carries traffic;
+- the reported `GrpcApiError` command name is downstream of the teardown.
+
+**Not established:**
+
+- **Why** either teardown fires. Mechanisms A and B above are named candidates
+  read out of the source, not confirmed by instrumentation.
+- Whether `Design.__exit__` is genuinely the caller in mechanism A.
+- Whose reference drops in mechanism B.
+- Whether the uncovered `"2024.1" <= "2024.2"` branch is implicated at all.
+- Whether the trigger is per-project. Reconciling with environment-compat #6
+  requires it, but that is an argument, not a measurement.
+- Arm 1 was never reproduced, so the *original* 2026-08-18 failure is attributed
+  by inference (same error class, same project, same call path).
+
+**The three tests that would close it**, cheapest first:
+
+1. **Read the same expression from a simple project** (e.g. a case with few or
+   no variables) on a fresh process. Settles per-project vs universal in one
+   run, and it is the single most informative thing left. Needs a licence.
+2. **Instrument `Design.__exit__` and `Desktop.__del__` together** with stack
+   traces, on this project. Distinguishes A from B and names the caller. Needs
+   a licence.
+3. **Force the other branch** by faking `_aedt_version` to `"2025.1"` so
+   `GetPropEvaluatedValue()` is called with no argument, and see whether the
+   read survives. Directly tests the uncovered-branch reading, and would hand
+   over a one-line monkeypatch as the route-around if it works. Needs a licence.
+
+None of the three needs a solve - only an open project and a seat.

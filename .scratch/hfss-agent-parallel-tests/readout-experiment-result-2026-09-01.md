@@ -176,6 +176,110 @@ process either", and environment-compat #6 records the same call working on the
 same pairing. The token is fine; the sentence attached to it asserts more than
 two failures can support and should say so in narrower words.
 
+---
+
+# ROUND 2, same day — the three tests were run, and the cause is now found
+
+All three tests listed at the end of round 1 were run. **Two of the three
+hypotheses in round 1 are refuted by measurement, and the actual root cause is
+lower than any of them.**
+
+## Test 1 — a different, simpler project: FAILS TOO
+
+`patch-2400-2` / design `Patch2400`: 10 variables against the array's 17, its
+own solved sweep `Setup1 : Sweep_TZ5L6X`, Normal Completion, 200 points. Same
+failure, same teardown.
+
+**The per-project reading is refuted.** It is not the array's 17 variables, and
+"a simpler project clears it" was wrong. (Note also that
+`workspaces/patch-2400/` has an *empty* results directory and a mismatched
+`patch_2400.aedtresults`; the usable control is `patch-2400-2`.)
+
+## Test 3 — force the covered version branch: NO EFFECT
+
+`_aedt_version` is a read-only property, so it was overridden at class level to
+`"2025.1"`, sending `_get_prop_generic` down `GetPropEvaluatedValue()` (no
+argument) instead of the `# pragma: no cover` branch. **The read failed
+identically.** The uncovered-branch reading is refuted as a cause. It remains a
+genuine latent bug in pyAEDT - a string comparison of version numbers - but it
+is not this one.
+
+## Test 2 — instrument both teardowns: neither candidate was right
+
+With every teardown path logged to one stream and sequence-numbered:
+
+    [02] CONSTRUCTED design=Patch2400        <- healthy
+    [03] existing reports: []                <- healthy
+    [05] release_desktop(False,False) <- general_methods.py line 259, in wrapper
+    [06] create_report FAILED ... GetVariables
+    [10] Desktop.__del__                     <- ONLY at process exit
+
+`Desktop.__del__` is **not** the mid-run teardown; it fires at interpreter
+shutdown like any destructor. `Design.__exit__` never fired at all. Mechanisms A
+and B from round 1 are both wrong.
+
+## What actually happens
+
+**Layer 1 - the real fault.** `nominal_variation` iterates every design variable
+calling `evaluated_value` -> `_get_prop_evaluated_val` -> `_get_prop_generic` ->
+`app.GetObjType()`. Inside that, a **ctypes callback in pyAEDT's gRPC plugin
+raises**:
+
+    Exception ignored on calling ctypes callback function:
+      AEDT.GetAedtObjId
+      internal/grpc_plugin_dll_class.py:454   if isinstance(obj, AedtObjWrapper):
+    SystemError: <built-in function isinstance> returned a result with an exception set
+
+`isinstance` itself failing means the interpreter already has an exception set
+when the callback returns - a broken ctypes callback boundary, below pyAEDT's
+Python layer entirely. Object resolution then fails, and the report layer
+reports `Solution Data failed to load. Check solution, context or expression.`
+followed by `No Data Available. Check inputs`, and returns **`False`**.
+
+That "Solution Data failed to load" is **verbatim the 2026-08-02 symptom** in
+environment-compat #6. The 2026-08-17 amendment concluded the flakiness was
+"mostly our own reader" (the `data_real` bug). That was true of the *reader*,
+and it left this underneath, unfixed and unnoticed.
+
+**Layer 2 - the amplifier that hid layer 1.** `general_methods.py:222`:
+
+```python
+def raise_exception_or_return_false(e):
+    if not settings.enable_error_handler:
+        if settings.release_on_exception:
+            for v in list(_desktop_sessions.values())[:]:
+                v.release_desktop(close_projects=v.close_on_exit, close_on_exit=v.close_on_exit)
+        raise e
+```
+
+`settings.release_on_exception` defaults **on**, so *any* exception through a
+wrapped method makes pyAEDT release **every** desktop session. One stumble
+becomes total session death, and every later call raises
+`GrpcApiError: Failed to execute gRPC AEDT command: <whatever came next>`.
+That is why the command name kept changing between identical runs, why it
+looked like a transport fault, and why recycling the desktop appeared to "cure"
+it - a fresh session works until the next exception. It also explains the
+"released **and closed**" variant: same line, when `close_on_exit` is True.
+
+## The mitigation that works, and the fix that does not exist yet
+
+**`settings.release_on_exception = False` - verified.** With it set, the session
+survived **three consecutive failed read attempts** and still answered
+`design_name` afterwards. Before, one failure killed everything. This does not
+make the readout work; it stops one error from destroying the session, which is
+the difference between a diagnosable failure and a cascade.
+
+**No Python-level route-around reaches layer 1.** Tried and failed, all with the
+session kept alive: explicit `variations` built from raw `GetVariableValue`
+calls (so `nominal_variation` is never called), explicit
+`report_category="Modal Solution Data"`, both together, `create_report` first,
+`export_touchstone`, `export_report_to_file`. The ctypes callback fault fires
+regardless of the path, so it is not reachable from above.
+
+**This is a pyAEDT/plugin defect, not a repo defect and not an AEDT server
+defect.** The realistic fix is a pyAEDT version change (ADR 0004 pins 1.3.0), or
+an upstream report. Neither is a decision to take inside an experiment.
+
 ## Honest limits — what is measured, and what is still inference
 
 **Measured, and safe to rely on:**
@@ -198,17 +302,22 @@ two failures can support and should say so in narrower words.
 - Arm 1 was never reproduced, so the *original* 2026-08-18 failure is attributed
   by inference (same error class, same project, same call path).
 
-**The three tests that would close it**, cheapest first:
+**All three tests were run the same day. See ROUND 2 above** - test 1 refuted
+the per-project reading, test 3 refuted the version-branch reading, test 2
+refuted both `Design.__exit__` and `Desktop.__del__`, and the cause was traced
+to a ctypes callback fault in the gRPC plugin amplified by
+`settings.release_on_exception`. The "Not established" list above is superseded
+by that section and is kept only to show what was believed before the tests.
 
-1. **Read the same expression from a simple project** (e.g. a case with few or
-   no variables) on a fresh process. Settles per-project vs universal in one
-   run, and it is the single most informative thing left. Needs a licence.
-2. **Instrument `Design.__exit__` and `Desktop.__del__` together** with stack
-   traces, on this project. Distinguishes A from B and names the caller. Needs
-   a licence.
-3. **Force the other branch** by faking `_aedt_version` to `"2025.1"` so
-   `GetPropEvaluatedValue()` is called with no argument, and see whether the
-   read survives. Directly tests the uncovered-branch reading, and would hand
-   over a one-line monkeypatch as the route-around if it works. Needs a licence.
+**What is still open after round 2:**
 
-None of the three needs a solve - only an open project and a seat.
+- Why `AEDT.GetAedtObjId`'s ctypes callback raises on this box. It is below
+  pyAEDT's Python layer; diagnosing further means the plugin DLL boundary, not
+  Python.
+- Whether a different pyAEDT release fixes it. ADR 0004 pins 1.3.0, so changing
+  it is a maintainer decision, not an experiment.
+- Whether it is machine-specific. It reproduced on two projects and many
+  processes here, but only on this box.
+- The `"2024.1" <= "2024.2"` string comparison in `_get_prop_generic` is a real
+  latent pyAEDT bug found along the way. It is not this failure, and it was not
+  reported upstream.

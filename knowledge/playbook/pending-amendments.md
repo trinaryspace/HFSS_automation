@@ -41,6 +41,43 @@ observed in that session, on AEDT 2024 R1 (`v241`) with pyAEDT 1.3.0.
 ---
 
 
+## 2c. A ctypes callback fault, amplified by `release_on_exception` (FINAL, 2026-09-01)
+
+**Round 2, same day — supersedes the round-1 text below.** The three follow-up
+tests were run. The claim to record is now:
+
+> On this box, pyAEDT 1.3.0's gRPC plugin raises inside the ctypes callback
+> `AEDT.GetAedtObjId` (`internal/grpc_plugin_dll_class.py:454`,
+> `SystemError: <built-in function isinstance> returned a result with an
+> exception set`). Object resolution then fails, the report layer reports
+> `Solution Data failed to load` / `No Data Available` and returns **`False`**.
+> Separately, `settings.release_on_exception` defaults **on**, so pyAEDT
+> releases **every** desktop session on any wrapped exception - turning one
+> fault into total session death and a misleading
+> `GrpcApiError: ... <whatever was called next>`. The transport is not the
+> fault, and the varying command name is an artefact of the teardown.
+>
+> **Mitigation, verified: `settings.release_on_exception = False`.** The session
+> then survives a failed read - measured across three consecutive failures. It
+> does not make the readout work. No Python-level route-around does; the fault
+> is below pyAEDT's Python layer. The realistic fix is a pyAEDT version change
+> (ADR 0004 pins 1.3.0) or an upstream report.
+
+Refuted by measurement in round 2, and none of these should be recorded: the
+per-project reading (a 10-variable project fails identically to the
+17-variable one), the version-branch reading (forcing the other branch changes
+nothing), `Design.__exit__`, and `Desktop.__del__` (which fires only at
+interpreter exit). Full method: `readout-experiment-result-2026-09-01.md`.
+
+This also reopens something #6 closed. `Solution Data failed to load` is
+verbatim the 2026-08-02 symptom; the 2026-08-17 amendment concluded the
+flakiness was "mostly our own reader", which was true of the reader and left
+this underneath it.
+
+---
+
+### Round-1 text, retained for provenance
+
 ## 2c. pyAEDT tears down its own session mid-read (REWRITTEN 2026-09-01)
 
 **The original claim is withdrawn.** It read: "scripted result readouts

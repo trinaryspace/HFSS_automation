@@ -229,6 +229,47 @@ Exits with code -3 standalone; no WER report. Recorded during the ticket-01
 escalation investigation, not part of the matrix probe list; not on any
 current flow's path; revisit only if a stage needs it.
 
+### 14. Boolean `unite` — LIKE-TO-LIKE ONLY, and the failure is silent
+`unite` joins boxes with boxes and planar sheets with planar sheets. Handed a
+mixed set of 3D bodies and 2D sheets it returns **without error and without
+uniting anything** (observed 2026-08-18, 1.3.0/2024 R1).
+
+Artifact: the fed array's top conductor, rebuilt as 1-oz-copper boxes
+(`cu_t = 0.035 mm`) at Review gate #3. While the patches were boxes and the
+feed strips were still sheets, the call did nothing and the design stayed at
+**18 objects** (4 patch boxes + 10 feed strips + ground + port + air) with no
+error surfaced. With every part converted to boxes the same call produced one
+body — `P1`, `faces=66 edges=192 verts=128`, 8 through-slots present, design
+down to **5 objects**. All-sheet unite was already proven on the earlier flat
+build, so both homogeneous cases work; only the mixed set fails.
+
+The silence is what earns this an entry. The downstream symptom is a
+`GrpcApiError` on a later `Subtract` against a blank that no longer exists —
+several stages away from the cause, and it reads as a transport fault.
+
+**Route-around**: a build that needs one conductor body must make every part of
+it the same dimensionality *before* uniting; never infer success from the
+absence of an error, check the object count. Provenance:
+`workspaces/patch-array-5800/state.md` (copper-revision notes; FED REBUILD LOG
+item 5).
+
+### 15. 2D sheets expose no Material property — a blank material is not evidence
+On 2024 R1 a 2D sheet has no "Material" property in the GUI attribute tab, and
+pyAEDT 1.3.0's `Object3d.material_name` returns `''` for every sheet without
+querying anything. 3D boxes do expose the property and read back normally.
+
+The saved `.aedt` model DB is the authority: it carried `MaterialValue='"pec"'`
+for the same sheets the GUI displayed as "unassigned". `capture_state.py`'s
+material map came back blank for all sheets and correct for all boxes. The
+control came after the 1-oz-copper conversion — same assignment, different
+dimensionality, and the GUI then showed `pec` on everything.
+
+**Route-around**: never judge a sheet's material from `material_name` or the
+GUI attribute tab. Read `MaterialValue` from the saved project, or convert to a
+3D body if the property must be inspectable. Provenance:
+`workspaces/patch-array-5800/state.md` (pitfall 5) and `summary.md` ("Review
+fixes the run ate", item d) — the discrepancy is what closed Review gate #2.
+
 ## Appendix: environment state the matrix left behind
 
 - pandas 2.3.3 installed (needed by rcs_exporter import chain).
@@ -242,3 +283,10 @@ Cross-checked by the final full-matrix run (2026-08-02): attach pair PASS,
 blocking solve True @147 s, non-blocking submission True @3.3 s,
 readout flakiness reproduced as recorded, RCS chain stops at optional-dep
 as recorded.
+
+Entries 14 and 15 were not produced by the matrix run. They were observed
+during the `patch-array-5800` hardware run (2026-08-18) and approved into this
+file on 2026-09-01 under the ADR 0002 ceremony; each carries its own
+provenance inline. They are single-run observations with an explicit control,
+not probe verdicts, and are marked as such rather than being folded into the
+matrix numbering above them.

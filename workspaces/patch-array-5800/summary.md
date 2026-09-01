@@ -145,8 +145,29 @@ the AEDT UI is the authoritative surface on this box):
 
 ## Learning-loop notes
 
-Proposed playbook / KB amendments (ADR 0002 — append only after explicit
-user approval; nothing applied yet):
+**Dispositions, 2026-09-01** (the ADR 0002 ceremony, run against the queue in
+`knowledge/playbook/pending-amendments.md`):
+
+- (2a) `unite` like-to-like — **APPROVED**, applied as `environment-compat.md`
+  entry 14.
+- (2b) 2D sheets expose no Material property — **APPROVED**, applied as
+  `environment-compat.md` entry 15.
+- (1) register a `patch_resonance` estimator for `corporate-patch-array` —
+  **NOT REGISTERED.** The recipe stays `UNCHECKED`. The proposal asked for a 5%
+  tolerance, but the only hardware check ever run on this family — this run —
+  came in +3.57% against the solve, consuming ~70% of that budget. Registering
+  5% would assert more confidence than was measured, which is the circularity
+  RECOMMENDATIONS section 8 objects to. n=1 supports a recorded datapoint, not
+  a tolerance: the measurement is kept in
+  `.scratch/hfss-agent-parallel-tests/estimator-calibration.md` and the entry
+  is revisited when a second hardware point exists. The cost is the
+  `no-estimator` verdict this run already lived with.
+- (2c) scripted readouts systematically broken — **STILL BLOCKED**, pending the
+  two-arm experiment.
+- (2d) setup prop-key normalization — still pending.
+
+Proposed playbook / KB amendments as the run filed them (ADR 0002 — append only
+after explicit user approval):
 1. `precheck-tolerances.json`: register an estimator for
    `corporate-patch-array` (patch_resonance on the element dims, tolerance
    5% — the run verified the element synthesis offline).

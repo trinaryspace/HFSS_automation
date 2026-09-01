@@ -3,10 +3,12 @@
 **This file is not the playbook.** It is the queue in front of it. ADR 0002
 makes the playbook append-only-after-explicit-user-approval, so a proposal
 earned by a run has to wait somewhere a human can read it in one pass and say
-yes or no. That is this file. Nothing here has been applied to
-`environment-compat.md`, `precheck-tolerances.json`, `spine-api.md` or any
-`knowledge/cases/*` entry, and nothing here should be read by an agent as
-compat truth.
+yes or no. That is this file. Nothing **still listed as pending** here has been
+applied to `environment-compat.md`, `precheck-tolerances.json`, `spine-api.md`
+or any `knowledge/cases/*` entry, and nothing still pending should be read by
+an agent as compat truth. Items that have been decided move to the "Resolved"
+table and are removed from the queue; the applied text then lives in the target
+file with its provenance, and the target is the thing to read.
 
 Approving an item means: apply it to the target named in its "If approved"
 line, then delete the item from this file (the applied text carries its own
@@ -22,131 +24,17 @@ observed in that session, on AEDT 2024 R1 (`v241`) with pyAEDT 1.3.0.
 
 | # | proposal | target | status |
 |---|---|---|---|
-| 1 | register a `patch_resonance` estimator for `corporate-patch-array` | `precheck-tolerances.json` | **NEEDS REVISION** - the one hardware check on this family missed by 3.4-3.6% |
-| 2a | `unite` is like-to-like only; mixed box+sheet sets silently no-op | `environment-compat.md`, new entry | ready to approve |
-| 2b | 2D sheets expose no Material attribute-tab property on 2024 R1 | `environment-compat.md`, new entry | ready to approve |
 | 2c | scripted result readouts are systematically broken over this pairing's gRPC | `environment-compat.md` #6 | **BLOCKED** - the conclusion is probably wrong; see below |
 | 2d | normalize setup prop-key spellings in the sync verifier's `canon()` | `hfss_spec` / template `12_verify_sync.py`, plus a compat note | ready to approve |
 | 3 | keep `verify_spec_replay.py` as the design-spec route's replay verifier | workspace template, not the playbook | decision needed, not an amendment |
 
----
+### Resolved 2026-09-01
 
-## 1. Register a `patch_resonance` estimator for `corporate-patch-array`
-
-**Claim (as proposed by the run).** `precheck` returned `no-estimator` for both
-specs of the run because no entry exists for the `corporate-patch-array`
-recipe. The recipe's elements are ordinary inset-fed rectangular patches, so
-`patch_resonance` is the right estimator; register it with the same 5%
-tolerance the `inset-fed-rectangular-patch` entry carries.
-
-**Evidence observed in-session.**
-
-- `precheck` verdict `no-estimator` (UNCHECKED) on BOTH `design.yaml` and
-  `design_elements.yaml` (state.md, Session 1, offline gates).
-- The element closed form was verified offline on 2026-08-18:
-  `patch_resonance(13.6238, 17.2679, 0.762, 3.48) = 5.8000 GHz` exact
-  (recomputed 2026-08-31 from `hfss_spec.physics`: 5.799999 GHz,
-  ereff 3.242632, dL 0.364125 mm).
-- **This amendment was already written once, and never committed.** On
-  2026-08-31 an uncommitted edit to `precheck-tolerances.json` was found in the
-  `cell-S7` worktree, dated to the S7 authoring cell (2026-08-16), registering
-  exactly this entry at `tolerance_pct: 5.0`. It is preserved verbatim as
-  `.scratch/hfss-agent-parallel-tests/S7-corporate-patch-array-estimator.patch`
-  and was **not** applied. Two things follow. First, the proposal is older than
-  the run that re-proposed it, so it has now been arrived at independently
-  twice - which is a point in favour of the entry existing at all. Second, it
-  was written before any hardware existed to check it against, and it chose 5.0
-  by copying the neighbouring `inset-fed-rectangular-patch` entry. That is the
-  number the measurement below calls into question, so the patch should be
-  treated as the draft it is, not as prior approval.
-
-**Why this is NOT ready to approve as written.** The hardware solved at
-**5.6 GHz** in both designs. Against that measurement the estimator is out by
-**+3.57%** in the repo's own `delta_pct` convention
-(`100*(predicted - target)/target` with the solve as target), equivalently
-**-3.45%** if the prediction is the denominator. Registering a clean 5%
-tolerance would state that this closed form is trusted to 5% on this recipe
-while the only hardware check ever run against it consumed roughly 70% of that
-budget. That is exactly the circularity RECOMMENDATIONS.md section 8 objects
-to, in the direction of asserting more confidence than was measured.
-
-Full working, caveats and the open attribution question:
-`.scratch/hfss-agent-parallel-tests/estimator-calibration.md`.
-
-**If approved, and in what form.** Target
-`knowledge/playbook/precheck-tolerances.json`, a new `recipes` key
-`corporate-patch-array`. Three honest shapes, for the user to pick between:
-
-- register at 5% and put the measured -3.45% residual in the entry's `note`,
-  so the number travels with the tolerance;
-- register at a tolerance the measurement supports (the residual is 3.5%, so
-  5% is only 1.4 points of headroom, not 5);
-- do not register yet and leave the recipe `UNCHECKED` until a second hardware
-  point exists. n=1 supports a recorded datapoint, not a tolerance.
-
-The last is the most defensible on the evidence available, and costs only the
-`no-estimator` verdict the run already lived with.
-
----
-
-## 2a. `unite` is like-to-like only; mixed box+sheet sets silently no-op
-
-**Claim.** On AEDT 2024 R1 with pyAEDT 1.3.0, `unite` joins boxes with boxes
-and planar sheets with planar sheets. Handed a mixed set of 3D bodies and 2D
-sheets it returns without error and without uniting anything. The rule is
-like-to-like; a build that needs one conductor body must make every part of it
-the same dimensionality first.
-
-**Evidence observed in-session.**
-
-- The fed array's top conductor was rebuilt as 1-oz-copper boxes
-  (`cu_t = 0.035 mm`) at Review gate #3; while the patches were boxes and the
-  feed strips were still sheets, the unite call did nothing and the design
-  stayed at 18 objects (4 patch boxes + 10 feed strips + ground + port + air)
-  with no error surfaced (state.md, copper-revision notes).
-- With all parts converted to boxes the same call produced one body:
-  `P1` united copper body, `faces=66 edges=192 verts=128`, 8 through-slots
-  present, design down to 5 objects (state.md, FED REBUILD LOG item 5).
-- All-sheet unite was already proven on the earlier flat build.
-- The failure is silent, which is what makes it worth an entry: the downstream
-  symptom is a `GrpcApiError` on the later `Subtract` against a blank that no
-  longer exists, several stages away from the cause.
-- User verdict, verbatim (state.md): "the unite box + sheet doesn't work
-  because it can't work. Boxes have to unite with boxes and planar structures
-  must unite with planars".
-
-**If approved.** `knowledge/playbook/environment-compat.md`, a new numbered
-matrix entry ("Boolean unite - like-to-like only") in the existing
-observation + route-around form, with the object counts above as the artifact
-and `workspaces/patch-array-5800/state.md` as provenance.
-
----
-
-## 2b. 2D sheets expose no Material attribute-tab property on 2024 R1
-
-**Claim.** On 2024 R1 a 2D sheet object has no "Material" property in the GUI
-attribute tab, and pyAEDT 1.3.0's `Object3d.material_name` returns `''` for
-every sheet without querying anything. The saved `.aedt` model DB is the
-authority: it carries `MaterialValue='"pec"'` for those same sheets. 3D boxes
-do expose the property and read back normally. A blank material on a sheet is
-therefore not evidence of an unassigned material.
-
-**Evidence observed in-session.**
-
-- `capture_state.py`'s material map came back blank for all 2D sheets and
-  correct for all boxes (state.md, pitfall 5).
-- The GUI displayed "unassigned" for the sheets while the saved project file
-  carried `MaterialValue='"pec"'` on every one of them - checked directly in
-  the model DB, and the discrepancy is what closed Review gate #2
-  (summary.md, "Review fixes the run ate" item (d); state.md Session 2).
-- After the conversion to 1-oz-copper boxes the GUI showed `pec` on
-  everything, which is the control: same assignment, different
-  dimensionality, different readback.
-
-**If approved.** `knowledge/playbook/environment-compat.md`, a new numbered
-entry, with the route-around stated as: never judge a sheet's material from
-`material_name` or the GUI attribute tab; read `MaterialValue` from the saved
-project, or convert to a 3D body if the property must be inspectable.
+| # | proposal | outcome |
+|---|---|---|
+| 1 | register a `patch_resonance` estimator for `corporate-patch-array` | **NOT REGISTERED.** The recipe stays `UNCHECKED`. Of the three shapes offered, the maintainer took the third: n=1 supports a recorded datapoint, not a tolerance, and registering 5% would assert confidence the single hardware check does not support (it consumed ~70% of that budget). The measurement stands as the standing record in `.scratch/hfss-agent-parallel-tests/estimator-calibration.md`; revisit when a second hardware point exists. Cost of the decision: the `no-estimator` verdict the run already lived with. |
+| 2a | `unite` is like-to-like only | **APPROVED and applied** as `environment-compat.md` entry 14. |
+| 2b | 2D sheets expose no Material property | **APPROVED and applied** as `environment-compat.md` entry 15. |
 
 ---
 

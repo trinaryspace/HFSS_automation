@@ -93,6 +93,33 @@ Artifact: `workspaces/smoke-matrix/src/probe_solve.py` (submission PASS).
 
 ### 6. Reading results (`post.get_solution_data`) — WORKS. The "flakiness" was mostly a broken reader.
 
+**Precision note, 2026-09-01 (approved, ADR 0002). This note decides nothing;
+it records that a load-bearing phrase in this entry is ambiguous.**
+
+Both halves of this entry turn on the words "fresh attach" / "fresh session",
+and **neither distinguishes a new gRPC connection from a new AEDT process.**
+Nobody now knows which was actually performed in August, and the entry is cited
+in both directions because of it:
+
+- the 2026-08-02 route-around below says "Retries within a session don't
+  reliably heal it… prefer re-attaching (fresh session) to read results", which
+  reads as evidence that the *channel* degrades over a session;
+- the "Still true" clause says the raise reproduces "even on a fresh attach to a
+  copy", which reads as evidence that it does not.
+
+On this box `ws_common.attach()` reconnects by the **pinned port** and clears
+the pin only if a bounded socket connect finds the desktop dead — so a
+degraded-but-answering desktop passes, and a "fresh attach" performed through
+that path was a new connection to the *same process*. `SKILL.md` has since been
+changed to say fresh **process**, which this entry currently contradicts.
+
+Do not resolve the contradiction by reading either clause harder. It is under
+test: `.scratch/hfss-agent-parallel-tests/TASK-readout-channel-vs-systematic.md`
+runs both arms against the banked project, and pending amendment 2c is BLOCKED
+until it does. Until then, treat "fresh attach" anywhere in this entry as
+**unspecified**, and prefer a genuinely new process when retrying a readout —
+that is the arm this entry has never actually tested.
+
 **Amended 2026-08-17 (approved learning-loop amendment, ADR 0002).** The entry
 below is the 2026-08-02 matrix observation and is kept for provenance, but its
 conclusion is superseded: the dominant cause of "unfilled SolutionData" was
@@ -269,6 +296,30 @@ GUI attribute tab. Read `MaterialValue` from the saved project, or convert to a
 3D body if the property must be inspectable. Provenance:
 `workspaces/patch-array-5800/state.md` (pitfall 5) and `summary.md` ("Review
 fixes the run ate", item d) — the discrepancy is what closed Review gate #2.
+
+### 16. Setup property key spellings vary by fetch view — a phantom model diff
+The same setup, fetched from two sessions, names its own properties
+differently: `BasisOrder` vs `Basis Order`, `IsEnabled` vs `Enabled`. A byte
+comparison of setup blocks between a long-lived pinned session and a fresh
+replay desktop therefore reports a difference where there is none.
+
+Observed 2026-08-18 in the `patch-array-5800` read-back sync. Every model
+section diffed **exactly zero** — objects, bounding boxes, boundaries, ports,
+variables — and only the setups section differed, on key spelling alone. It was
+recorded and retried once during the run before being dismissed as noise.
+
+**Route-around**: do not chase a setups-only diff as a model difference; check
+whether the keys differ only in spacing or an `Is` prefix first. The durable fix
+is for the sync verifier's `canon()` to normalize the keys before comparing;
+that code change is deliberately **not** landed yet, because
+`docs/agents/fixture-fidelity.md` requires its test fixture be a *captured* pair
+of real setup blocks and no such capture exists on disk — the ledger records the
+key names, not the blocks. Capture the pair the next time a live session is up,
+and prefer an explicit alias map of observed pairs over a blanket transform: a
+general "strip spaces and the `Is` prefix" rule can collapse two genuinely
+distinct keys, which would weaken the verifier in a direction nobody would
+notice. Provenance: `workspaces/patch-array-5800/state.md` (COMPAT NOTE
+candidate 3) and `summary.md` ("Model shape record").
 
 ## Appendix: environment state the matrix left behind
 

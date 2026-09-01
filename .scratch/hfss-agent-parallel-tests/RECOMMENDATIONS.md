@@ -37,7 +37,7 @@ matter.
 |---|---|---|---|
 | 1 | λ₀/3 as the schema **default** | **WITHDRAWN — premise wrong** | No clearance default in `hfss_spec/schema.py` or `loader.py`; `air_pad` appears there only in docstrings and tests. Commit `9ed76b4` "airboxes to lambda/3 across the board" edited **two cell specs** (`S1`, `X0b`) by hand and touched no code. An attempt to implement it on 2026-08-31 found there is nothing to default: there is no clearance *field* (clearance is emergent from a plain `op: box`'s expressions), and all 13 specs declare an explicit pad, so a default-when-absent fires on none of them. The defect is authors choosing a too-small **coefficient**, copied from a contaminated exemplar. See `clearance-defect-mechanism.md`. |
 | 2 | `no-estimator` as its own verdict | **LANDED** | `Precheck.text()` in `hfss_spec/physics.py`: `head = "UNCHECKED"` with the tail "no estimator for this recipe; nothing was verified". Commit `ad7e4da`, 2026-08-17. |
-| 3 | two **blocking** validator rules | **PARTIAL — they are warnings** | `_check_model_relations` in `hfss_spec/validate.py` appends `radiation_clearance` and `port_geometry` as `WARNING`, deliberately, with a docstring giving the reason. Only `feed_check.walk` emits `ERROR`. Commit `ad7e4da`. |
+| 3 | two **blocking** validator rules | **PARTIAL — warnings; severity decision DEFERRED 2026-09-01** | `_check_model_relations` in `hfss_spec/validate.py` appends `radiation_clearance` and `port_geometry` as `WARNING`, deliberately, with a docstring giving the reason. Only `feed_check.walk` emits `ERROR`. Commit `ad7e4da`. Deferred on purpose — see the note below. |
 | — | (a third gate, not recommended here) | landed, blocking | The feed-network walk: `hfss_spec/feed_check.py`, commits `b98c9a7` / `e797189` / `b45680d` (2026-08-18) and `2d9a6d0` (2026-08-31). It is an ERROR because the designer declared what the elements present and the arithmetic either closes or it does not. |
 | 4 | scope stop-rule as a hard rule | **LANDED** | `skill/hfss-agent/SKILL.md` hard rule 8, "Never build the missing capability", with S11 written in as the measurement. |
 | 5 | per-session budget cap | **LANDED** | `hfss_spec/session.py`: `DEFAULT_CALL_BUDGET = 60`, `note_call`, `over_budget`, `budget_verdict`. Commit `ad7e4da`. Honest limit: it binds whoever calls `note_call`. |
@@ -63,6 +63,27 @@ is the opposite call from the one made here, and nobody recorded the reversal
 until now. Whether a warning binds is an empirical question this campaign
 already has an answer to (S11 read a note and ignored it), and no cell has run
 against the warnings yet.
+
+**Severity decision deferred 2026-09-01, and the reason is a dependency.** The
+question is currently *un-decidable on the available evidence*, because the
+evidence is contaminated by the defect in §1. The clearance warning fires on
+nearly every spec in the repo — not because nearly every spec is badly designed,
+but because the exemplar the skill tells authors to copy under-pads at λ₀/4
+(`clearance-defect-mechanism.md`). Escalating a gate whose false-positive rate
+is set by a broken template would block nearly everything, and would "prove" the
+warn-camp right for the wrong reason. There is no clean baseline to measure
+against yet.
+
+Sequence: fix the exemplar first, regenerate the picture, then decide. If the
+warning stops firing broadly, a warning may be sufficient after all; if it still
+fires on genuine designs, there is a real case for blocking.
+
+When it is decided, stop treating the two rules as one question. They are not
+the same kind of rule. `radiation_clearance` has a defensible physical floor —
+below some clearance the absorbing boundary reflects and the result is simply
+invalid — and could reasonably be two-tier: warn below λ₀/3, error below a hard
+floor. `port_geometry`'s ~1.5× really is a rule of thumb; a flared port can be
+right, and it should stay a warning. Offered as an option, not a settled call.
 
 ## Do now — small, certain, high yield
 

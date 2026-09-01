@@ -24,9 +24,8 @@ observed in that session, on AEDT 2024 R1 (`v241`) with pyAEDT 1.3.0.
 
 | # | proposal | target | status |
 |---|---|---|---|
-| 2c | scripted result readouts are systematically broken over this pairing's gRPC | `environment-compat.md` #6 | **BLOCKED** - the conclusion is probably wrong; see below |
-| 2d | normalize setup prop-key spellings in the sync verifier's `canon()` | `hfss_spec` / template `12_verify_sync.py`, plus a compat note | ready to approve |
-| 3 | keep `verify_spec_replay.py` as the design-spec route's replay verifier | workspace template, not the playbook | decision needed, not an amendment |
+| 2c | scripted result readouts are systematically broken over this pairing's gRPC | `environment-compat.md` #6 | **BLOCKED** - the conclusion is probably wrong; needs the two-arm experiment, which needs a licence |
+| 2d-code | `canon()` normalizes setup prop keys before comparing | template `12_verify_sync.py` | **DEFERRED - needs a licence.** Not a playbook item; blocked on capturing a real pair of setup blocks (`docs/agents/fixture-fidelity.md`). See entry 16 for the caution about blanket normalization. |
 
 ### Resolved 2026-09-01
 
@@ -35,6 +34,9 @@ observed in that session, on AEDT 2024 R1 (`v241`) with pyAEDT 1.3.0.
 | 1 | register a `patch_resonance` estimator for `corporate-patch-array` | **NOT REGISTERED.** The recipe stays `UNCHECKED`. Of the three shapes offered, the maintainer took the third: n=1 supports a recorded datapoint, not a tolerance, and registering 5% would assert confidence the single hardware check does not support (it consumed ~70% of that budget). The measurement stands as the standing record in `.scratch/hfss-agent-parallel-tests/estimator-calibration.md`; revisit when a second hardware point exists. Cost of the decision: the `no-estimator` verdict the run already lived with. |
 | 2a | `unite` is like-to-like only | **APPROVED and applied** as `environment-compat.md` entry 14. |
 | 2b | 2D sheets expose no Material property | **APPROVED and applied** as `environment-compat.md` entry 15. |
+| 2d-note | setup prop-key spellings vary by fetch view | **APPROVED and applied** as `environment-compat.md` entry 16. The proposal's two halves were split: the note lands now, the `canon()` code change is deferred (see the pending table) because its fixture cannot be captured without a live session. |
+| 2e | `environment-compat.md` #6 says "fresh attach" and does not define it | **APPROVED and applied** as a precision note at the top of entry 6. It deliberately decides nothing: it records that "fresh attach"/"fresh session" is ambiguous between a new connection and a new process, that the entry is cited in both directions because of it, that `attach()` on this box reconnects by pinned port, and that `SKILL.md` now says process. Raised because the skill and the playbook had come to contradict each other while 2c stayed blocked. |
+| 3 | keep `verify_spec_replay.py` as the design-spec route's replay verifier | **PROMOTED into the workspace template.** Not a playbook amendment. The design-spec route is the primary route and `12_verify_sync.py` replays only numbered staged scripts, so a `design.yaml` run had no ADR-0005 replay path without it. Promoted with a defect fix - the default spec list required `design_elements.yaml` and reported `FAIL: sync mismatch` on any workspace lacking it. |
 
 ---
 
@@ -110,7 +112,12 @@ reading retained inline for provenance.
 
 ---
 
-## 2d. Normalize setup prop-key spellings in the sync verifier's `canon()`
+## 2d-code. Normalize setup prop-key spellings in the sync verifier's `canon()`
+
+**Split 2026-09-01.** The playbook half of this proposal was approved and is now
+`environment-compat.md` entry 16, which carries the evidence below. What remains
+here is the **code** half, which is not a playbook item and does not need the
+ADR 0002 ceremony — it needs a fixture, and the fixture needs a live session.
 
 **Claim.** Setup property keys come back with different spellings from
 different sessions - `BasisOrder` vs `Basis Order`, `IsEnabled` vs `Enabled` -
@@ -129,35 +136,22 @@ comparing.
   setup, fetched two ways, names its own properties differently. It was
   recorded and retried once during the run.
 
-**If approved.** Two parts, and they are different kinds of change:
+**What is left to do, and what blocks it.** `canon()` in the sync-verify runner
+(`12_verify_sync.py` in the workspace template) should normalize setup prop keys
+before comparison. Blocked on the fixture: `docs/agents/fixture-fidelity.md`
+requires it be a *captured* pair of real setup blocks, and no such capture is on
+disk - the ledger recorded the key *names*, not the blocks. Writing the fixture
+from that prose is precisely the move the fixture-fidelity rule exists to
+prevent, and it would produce a test that passes against a guess at AEDT's
+format rather than against AEDT.
 
-- code: `canon()` in the sync-verify runner (`12_verify_sync.py` in the
-  workspace template) normalizes setup prop keys before comparison. This is an
-  ordinary code change, not a playbook append, and needs a tier-0 test with a
-  real captured pair of spellings as its fixture (`docs/agents/fixture-fidelity.md`
-  - do not write the fixture from memory).
-- playbook: a short `environment-compat.md` note recording that the spelling
-  varies by fetch view, so the next reader does not chase a phantom model diff.
+Capture the pair the next time a live session is up. The readout experiment
+(2c) needs a desktop anyway, so the two pair naturally in one sitting.
 
----
+**Implementation caution when it does land.** Prefer an explicit alias map of
+observed pairs over a blanket "strip spaces and the `Is` prefix" transform.
+Normalization makes the comparison strictly more permissive, and a general rule
+can collapse two genuinely distinct keys - weakening the verifier in a direction
+nobody would notice. That is the same failure class as the `read_results`
+`__main__` bug that reported healthy while doing nothing.
 
-## 3. Keep `verify_spec_replay.py` in the workspace
-
-**Claim.** `verify_spec_replay.py` is the design-spec route's ADR-0005 replay
-verifier: `12_verify_sync.py` only replays numbered staged scripts, so a run
-that built from a `design.yaml` has no replay path without it. It should stay
-in the workspace as the route's verifier.
-
-**Evidence observed in-session.** The run's read-back sync was performed by
-this script, and the model sections diffed zero against
-`results/state/model_snapshot.json` (summary.md, "Model shape record"). It
-takes `--spec <name>` to match the `ws_common.DESIGN` constant; its default
-compiles both specs into one design, which is a replay-only artifact
-(state.md, pitfall 6).
-
-**This is not a playbook amendment.** It is a question about the workspace
-template - whether the script is promoted into
-`skill/hfss-agent/templates/workspace/src/` so every design-spec run gets it,
-or stays a per-run local file. It is listed here only because the run filed it
-alongside the other two and it should not get lost. Route it to the template
-owner rather than to the playbook.

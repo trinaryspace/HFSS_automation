@@ -76,8 +76,18 @@ VERDICTS = {
     ROUTE_LIVE: "OK on the live channel",
     ROUTE_FRESH: ("CHANNEL DEGRADATION CONFIRMED - the live channel could not read this "
                   "signal and a freshly launched desktop process could"),
-    ROUTE_BOTH_FAILED: ("SYSTEMATIC on this pyAEDT/AEDT pairing - the read failed on the "
-                        "live channel AND on a freshly launched desktop process"),
+    # Deliberately narrower than it used to be. This token once read
+    # "SYSTEMATIC on this pyAEDT/AEDT pairing", which is more than two failures
+    # can carry: environment-compat #6 records the same call working on the same
+    # pairing on 2026-08-07, so "systematic on this pairing" cannot be inferred
+    # from one project. The 2026-09-01 experiment then traced the real cause to
+    # pyAEDT releasing its own session mid-read - not the transport at all - and
+    # a verdict string that had already named the pairing would have sent the
+    # reader past it. Name what was tried; leave the cause to the investigation.
+    ROUTE_BOTH_FAILED: ("read failed on BOTH the live channel and a freshly launched "
+                        "desktop process - so not the channel's age; cause is shared by "
+                        "both processes (project, expression, or client) and is NOT "
+                        "established by this run alone"),
     ROUTE_UNTESTED: ("HYPOTHESIS UNTESTED - the read failed on the live channel and no "
                      "fresh process ever ran, so nothing here says whether the channel "
                      "or the pairing is at fault"),

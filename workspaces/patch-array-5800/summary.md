@@ -162,8 +162,20 @@ the AEDT UI is the authoritative surface on this box):
   `.scratch/hfss-agent-parallel-tests/estimator-calibration.md` and the entry
   is revisited when a second hardware point exists. The cost is the
   `no-estimator` verdict this run already lived with.
-- (2c) scripted readouts systematically broken — **STILL BLOCKED**, pending the
-  two-arm experiment.
+- (2c) scripted readouts systematically broken — **REWRITTEN 2026-09-01, and
+  the original claim is withdrawn.** The experiment ran. Arm 1 was lost (the
+  13-day desktop died first); arm 2 returned `route=both-failed` across six or
+  more freshly launched processes, so it is not the channel's age — the
+  hypothesis this run's ledger implied is false too. The cause was then traced:
+  pyAEDT releases its own session from inside the read (`get_solution_data` ->
+  report `__init__` -> `nominal_variation` -> `Variable.evaluated_value` ->
+  `release_desktop`). Every `GrpcApiError: ... GetVariables/GetSetups/
+  ExportToFile` recorded by this run is a symptom of an already-dead session,
+  the command name being merely whatever was attempted next. The transport was
+  never the fault. Full method and limits:
+  `.scratch/hfss-agent-parallel-tests/readout-experiment-result-2026-09-01.md`.
+  S11 was still not read scripted; the UI remains the only surface that has
+  produced these numbers on this box, now for an understood reason.
 - (2d) setup prop-key normalization — still pending.
 
 Proposed playbook / KB amendments as the run filed them (ADR 0002 — append only

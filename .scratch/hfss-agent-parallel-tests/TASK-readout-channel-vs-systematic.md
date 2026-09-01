@@ -1,6 +1,6 @@
 # Task - is the gRPC readout failure the channel, or the pairing?
 
-Status: ready-to-run
+Status: RUN 2026-09-01 — result in `readout-experiment-result-2026-09-01.md`. Arm 1 was lost (the 13-day desktop died first); arm 2 returned `both-failed`, and the cause was traced to pyAEDT releasing its own session mid-read. The channel-degradation hypothesis this task was written to test is FALSE.
 Written 2026-08-31. Hand this to a maintainer (or the hfss-agent) when the VPN
 is up. It needs a licence seat and about an hour.
 

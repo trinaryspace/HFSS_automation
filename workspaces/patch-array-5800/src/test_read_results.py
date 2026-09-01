@@ -228,14 +228,29 @@ class TestReadoutSessionRoutes(unittest.TestCase):
         self.assertIn("fresh process:", out.note)   # and what the fresh one did
         self.assertIn("CONFIRMED", read_results.verdict_line("s11", out))
 
-    def test_failure_on_both_is_the_only_systematic_verdict(self):
+    def test_failure_on_both_rules_out_the_channel_without_naming_a_cause(self):
+        """Both arms failing narrows the cause; it does not identify one.
+
+        This assertion was inverted on 2026-09-01. It used to require the word
+        SYSTEMATIC, which the verdict string duly supplied - and the 2026-08-18
+        run's conclusion ("systematic over this pairing") is exactly the
+        overclaim that sent it to the wrong answer. Two failures rule out the
+        channel's age and nothing more: environment-compat #6 records the same
+        call working on the same pairing, and the experiment later traced the
+        real cause to pyAEDT releasing its own session mid-read. The verdict
+        must now say what was tried and explicitly disclaim the cause.
+        """
         recycler = FakeRecycler(sick_hfss())
         session = read_results.ReadoutSession(sick_hfss(), recycle=recycler)
         out = session.read("dB(S(1,1))")
         self.assertEqual(out.y, [])
         self.assertEqual(out.route, read_results.ROUTE_BOTH_FAILED)
         self.assertEqual(recycler.calls, 1)
-        self.assertIn("SYSTEMATIC", read_results.verdict_line("s11", out))
+        line = read_results.verdict_line("s11", out)
+        self.assertIn("BOTH", line)
+        self.assertIn("not the channel's age", line)
+        self.assertIn("NOT established by this run alone", line)
+        self.assertNotIn("SYSTEMATIC", line)
 
     def test_no_recycler_is_untested_and_never_reads_as_systematic(self):
         """The defect verbatim: no fresh process ran, so nothing was proved."""

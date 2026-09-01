@@ -24,7 +24,7 @@ observed in that session, on AEDT 2024 R1 (`v241`) with pyAEDT 1.3.0.
 
 | # | proposal | target | status |
 |---|---|---|---|
-| 2c | scripted result readouts are systematically broken over this pairing's gRPC | `environment-compat.md` #6 | **BLOCKED** - the conclusion is probably wrong; needs the two-arm experiment, which needs a licence |
+| 2c | ~~scripted readouts are systematically broken over this pairing's gRPC~~ **-> pyAEDT tears down its own session mid-read** | `environment-compat.md` #6 | **UNBLOCKED, REWRITTEN, ready to approve.** Experiment run 2026-09-01: the readout does fail on fresh processes, but the transport is not the cause and the original wording teaches the wrong lesson. |
 | 2d-code | `canon()` normalizes setup prop keys before comparing | template `12_verify_sync.py` | **DEFERRED - needs a licence.** Not a playbook item; blocked on capturing a real pair of setup blocks (`docs/agents/fixture-fidelity.md`). See entry 16 for the caution about blanket normalization. |
 
 ### Resolved 2026-09-01
@@ -40,75 +40,71 @@ observed in that session, on AEDT 2024 R1 (`v241`) with pyAEDT 1.3.0.
 
 ---
 
-## 2c. Scripted result readouts over this pairing's gRPC - **BLOCKED**
 
-**Claim as the run proposed it.** "Scripted result readouts systematically fail
-over this pairing's gRPC (`GetVariables` / `GetPropValue` error classes) - UI
-is the readout surface."
+## 2c. pyAEDT tears down its own session mid-read (REWRITTEN 2026-09-01)
 
-**Do not approve this. The conclusion is probably wrong, and the playbook is
-append-only.**
+**The original claim is withdrawn.** It read: "scripted result readouts
+systematically fail over this pairing's gRPC (`GetVariables` / `GetPropValue`
+error classes) - UI is the readout surface." The experiment
+(`TASK-readout-channel-vs-systematic.md`) ran on 2026-09-01. Full result and
+method: `.scratch/hfss-agent-parallel-tests/readout-experiment-result-2026-09-01.md`.
 
-**What was actually observed.** Two failures, both recorded, both on the same
-long-lived pinned session:
+That wording is right about the symptom and wrong about the cause, and the
+cause is the part a playbook entry teaches.
 
-- `results/state/outcome.txt`:
-  `readout=unreadable - create_report raised: GrpcApiError: Failed to execute
-  gRPC AEDT command: GetVariables`
-- `results/state/readouts.txt`:
-  `s11: unreadable - get_solution_data raised on 'Setup1 : Sweep1':
-  GrpcApiError: Failed to execute gRPC AEDT command: GetPropValue`
+**Claim, as it should be recorded.** On AEDT 2024 R1 / pyAEDT 1.3.0, a scripted
+readout of this project fails reproducibly on freshly launched desktop
+processes - but the gRPC transport is not the fault. **pyAEDT releases its own
+session from inside the read.** Building a report evaluates every design
+variable, and evaluating a variable calls `release_desktop`:
 
-Both are the same error class - "Failed to execute gRPC AEDT command" - which
-is the transport failing, not the readout API being absent. Compare
-environment-compat #6, which distinguishes a genuinely missing API
-(`data_real`, `hfss.results`, `HfssConstants.default_solution` - all
-`AttributeError`, all reproducible on a fresh process) from a channel that has
-gone bad.
+    get_solution_data
+      -> visualization/report/standard.py:57   Report.__init__
+      -> visualization/report/common.py:513    nominal_variation(dependent_params=False)
+      -> application/analysis.py:3035          {k: v.evaluated_value for k, v in ...}
+      -> application/variables.py:2435         numeric_value
+      -> release_desktop(close_projects=False, close_on_exit=False)
 
-**Why the "systematic" reading is not supported by the run's own ledger.**
-Earlier in the same run, on the same channel, the identical error class was
-observed on `GetVariables` and on `Subtract`, and it was **cured by recycling
-the desktop** (state.md, FED REBUILD LOG item 2: "desktop recycled
-(`GetVariables` + `Subtract` gRPC failures on the long-lived channel)";
-summary.md acute decision 5). The run therefore holds a within-session
-counter-example to its own conclusion: that error class on that channel was
-transient degradation at least once.
+Every `GrpcApiError: Failed to execute gRPC AEDT command: X` observed here is a
+**symptom of an already-dead session**; `X` is whatever call came next, which is
+why the name varies across otherwise identical runs (`GetVariables`,
+`GetSetups`, `ExportToFile`, `OpenProject`). Reading `X` as the defect is what
+produced the original claim.
 
-The retry that was supposed to test this did not test it. The skill's policy is
-"one scripted attempt plus one retry on a fresh attach", but the attach on this
-box pins the port (`results/state/aedt_port.txt` = `57850`,
-`aedt_process_id.txt` = `25840`), so the "fresh attach" reattached to the same
-degraded process. The hypothesis "the channel is degraded" was never given a
-chance to fail.
+**Evidence.** Arm 2 returned `route=both-failed`, with the pin moving
+`57850/25840` -> `64077/29620` proving a genuine relaunch. Six or more
+independently launched processes failed. On a live session, `design_name`,
+`existing_analysis_sweeps`, `odesign.GetVariables()` (all 17 variables),
+`GetVariableValue`, `variable_manager.independent_variables` and
+`post.all_report_names` all returned real values - so the API is present and the
+channel carries calls. Ruled out by direct test: session age (every process was
+seconds old), garbage collection (`gc.disable()`), the anonymous `Desktop()` in
+`ws_common.attach` (reproduced holding an explicit reference), attach-vs-launch,
+and the licence (reachable throughout). Arm 1 could not be run - the 13-day
+desktop died on its own first, exactly as the task doc warned.
 
-**Why approving it now is worse than leaving it pending.** The playbook is
-append-only by ADR 0002. An approved entry saying the scripted readout is
-systematically broken on this pairing would (a) contradict environment-compat
-#6, which records `get_solution_data` working on this exact pairing across
-three independent fresh attaches on 2026-08-07, (b) retire the readout path
-that ticket 16 was built to fix, and (c) make every future run skip straight to
-a manual UI read, which removes the only route by which the claim could ever be
-falsified. A wrong entry here is self-sealing.
+**Why this matters more than the original.** It reconciles the one piece of
+evidence that never fitted: environment-compat #6 records `get_solution_data`
+**working** on this same pairing on 2026-08-07 across three fresh attaches. The
+trigger runs through the design's own variables, so it is per-project - a simple
+project clears it, this 17-variable parametric one does not. "Systematic over
+this pairing" cannot be true while #6 stands; "pyAEDT tears down the session
+when it evaluates this project's variables" is consistent with both.
 
-**What unblocks it.** The two-arm experiment in
-`.scratch/hfss-agent-parallel-tests/TASK-readout-channel-vs-systematic.md`. The
-long-lived desktop from the run (pid 25840, port 57850) was still alive on
-2026-08-31 - 13 days - holding the banked project and a licence seat, so both
-arms are runnable today and the "before" arm is a genuine reproduction rather
-than a re-creation.
+**If approved.** `knowledge/playbook/environment-compat.md` entry #6, amended in
+its established style - new text on top, superseded reading retained inline. The
+amendment must say the transport is not the fault, must carry the stack path so
+the next reader can recognise it, and must state that the UI remains the
+practical readout surface on this box **for this reason** rather than because
+the scripted surface is absent. It should not say "systematic over this
+pairing".
 
-- If arm 2 (fresh process, same project, same expression) also fails, the claim
-  is supported and can be rewritten with two-process evidence and approved.
-- If arm 2 succeeds, the claim is false as written. The correct amendment is
-  the opposite one - a readout gets a fresh process, and the retry policy must
-  stop reattaching by pinned port - and the UI-is-the-surface conclusion should
-  never enter the playbook.
-
-**If approved (after the experiment, and only in the form the result
-supports).** `knowledge/playbook/environment-compat.md` entry #6, amended in
-the same style as its 2026-08-17 amendment: new text on top, the superseded
-reading retained inline for provenance.
+**Known limits, to travel with the entry.** Arm 1 was never reproduced, so the
+original 2026-08-18 failure is attributed by inference, not measurement. The
+post-construction teardown (one run logged "released **and closed**") was
+observed but not traced to its caller. One project, one design, one expression:
+a second project is the cheapest remaining question, and would settle the
+per-project reading.
 
 ---
 
@@ -145,8 +141,10 @@ from that prose is precisely the move the fixture-fidelity rule exists to
 prevent, and it would produce a test that passes against a guess at AEDT's
 format rather than against AEDT.
 
-Capture the pair the next time a live session is up. The readout experiment
-(2c) needs a desktop anyway, so the two pair naturally in one sitting.
+Capture the pair the next time a live session is up. (The 2026-09-01 readout
+experiment had a desktop up and would have been the natural moment; it went
+into diagnosing the teardown instead and the capture was not taken. It is a
+few minutes' work whenever a session next exists.)
 
 **Implementation caution when it does land.** Prefer an explicit alias map of
 observed pairs over a blanket "strip spaces and the `Is` prefix" transform.

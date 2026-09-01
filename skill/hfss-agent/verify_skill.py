@@ -125,8 +125,16 @@ ADRS = {
 }
 
 TEMPLATE_FILES = ["README.md", "summary.md", "state.md", "src"]
+# The two sync verifiers are both required, because the two Build routes each
+# have exactly one: `12_verify_sync.py` replays numbered staged scripts, and
+# `verify_spec_replay.py` replays the design-spec route's `design*.yaml`. A
+# design-spec run has no numbered scripts, so without the second file the
+# primary route ships with no way to satisfy ADR 0005 and every workspace
+# reinvents it — the same "nowhere for the fix to live" pathology recorded in
+# read_results.py's docstring.
 TEMPLATE_SRC_FILES = ["ws_common.py", "poll_solve.py", "capture_state.py",
-                      "12_verify_sync.py", "00_static_gate.py", "stage_skeleton.py",
+                      "12_verify_sync.py", "verify_spec_replay.py",
+                      "00_static_gate.py", "stage_skeleton.py",
                       "confirm_solve.py", "profile_evidence.py", "real_fixtures.py"]
 
 

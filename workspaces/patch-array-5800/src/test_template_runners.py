@@ -2,7 +2,10 @@
 
 Covers poll_solve (scan + state machine + progress line), capture_state
 (shape extraction + normalization), 12_verify_sync (diff, replay
-selection, copy hygiene), 00_static_gate (compile/import gate on
+selection, copy hygiene), verify_spec_replay (the design-spec
+route's spec discovery: what a defaulted run replays, and why an
+absent spec is never a sync-mismatch verdict), 00_static_gate
+(compile/import gate on
 throwaway trees), confirm_solve (terminal profile parse + sweep count +
 in-flight test + banking), and the guarded teardown decision
 (banked / unbanked-with-evidence / neither) on fixture state, and the
@@ -499,6 +502,140 @@ class TestVerifySync(unittest.TestCase):
         for banned in ("m.aedt", "m.aedt.lock", "m.aedtresults", "results"):
             self.assertNotIn(banned, copied)
         self.assertTrue(os.path.isdir(os.path.join(copy, "src")))
+
+
+class TestSpecReplayDiscovery(unittest.TestCase):
+    """The design-spec route's spec set, which is pure filesystem work.
+
+    `verify_spec_replay.py` is the design-spec route's ADR-0005 verifier: it
+    replays `design*.yaml` where `12_verify_sync.py` replays numbered staged
+    scripts. Its default spec list was once the literal pair
+    `["design.yaml", "design_elements.yaml"]`, copied from the one workspace
+    that happened to have two specs, and it required BOTH to exist. An
+    ordinary single-spec workspace therefore failed its own sync gate — with
+    the `sync mismatch` verdict — because a file that was never supposed to
+    be there was not there. A false FAIL in a gate is the worst kind, so the
+    set is now discovered, and the two ways a spec can be absent have
+    verdicts of their own.
+
+    None of this needs AEDT: discovery is a listdir over the copy, so the
+    defect class is caught here in milliseconds against a temp directory
+    instead of against a licensed second desktop.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.replay = load("verify_spec_replay")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def _write(self, *names):
+        for name in names:
+            with open(os.path.join(self.tmp, name), "w") as f:
+                f.write("meta:\n  name: x\n")
+
+    # --- defaults discover only what is present -------------------------
+
+    def test_default_single_spec(self):
+        self._write("design.yaml")
+        self.assertEqual(self.replay.discover_specs(self.tmp), ["design.yaml"])
+
+    def test_default_two_specs(self):
+        self._write("design.yaml", "design_elements.yaml")
+        self.assertEqual(self.replay.discover_specs(self.tmp),
+                         ["design.yaml", "design_elements.yaml"])
+
+    def test_default_no_specs(self):
+        self.assertEqual(self.replay.discover_specs(self.tmp), [])
+
+    def test_default_ignores_non_specs(self):
+        self._write("design.yaml", "notes.yaml", "design.json", "designs.txt")
+        os.makedirs(os.path.join(self.tmp, "design_dir.yaml"))
+        self.assertEqual(self.replay.discover_specs(self.tmp), ["design.yaml"])
+
+    def test_discovery_survives_a_missing_directory(self):
+        # A caller gets "nothing to replay", never a traceback out of a gate.
+        self.assertEqual(
+            self.replay.discover_specs(os.path.join(self.tmp, "nope")), [])
+
+    # --- order is deliberate and stable ---------------------------------
+
+    def test_primary_spec_leads_and_the_rest_are_sorted(self):
+        # The specs compile into ONE design on the copy in the order given,
+        # so `design.yaml` leading is a property worth asserting, not an
+        # ASCII accident: '-' sorts BELOW '.', so a plain sorted() would
+        # demote design.yaml behind design-alt.yaml here.
+        self._write("design_z.yaml", "design_a.yaml", "design-alt.yaml",
+                    "design.yaml")
+        self.assertEqual(self.replay.discover_specs(self.tmp),
+                         ["design.yaml", "design-alt.yaml", "design_a.yaml",
+                          "design_z.yaml"])
+
+    def test_order_does_not_depend_on_listdir(self):
+        self._write("design.yaml", "design_elements.yaml", "design_b.yaml")
+        expected = ["design.yaml", "design_b.yaml", "design_elements.yaml"]
+        for order in (["design_elements.yaml", "design.yaml", "design_b.yaml"],
+                      ["design_b.yaml", "design_elements.yaml", "design.yaml"]):
+            with mock.patch.object(self.replay.os, "listdir", return_value=order):
+                self.assertEqual(self.replay.discover_specs(self.tmp), expected)
+
+    # --- defaulted vs named: absence is never a mismatch ----------------
+
+    def test_defaulted_run_takes_what_is_there(self):
+        self._write("design.yaml")
+        specs, failure = self.replay.resolve_specs(self.tmp)
+        self.assertEqual(specs, ["design.yaml"])
+        self.assertIsNone(failure)
+
+    def test_defaulted_run_with_no_specs_is_not_a_sync_mismatch(self):
+        specs, failure = self.replay.resolve_specs(self.tmp)
+        self.assertEqual(specs, [])
+        self.assertTrue(failure.startswith("FAIL: no design*.yaml to replay"))
+        # The whole point: "the model differed" is a verdict this run has not
+        # earned, because nothing was replayed at all.
+        self.assertNotIn("sync mismatch", failure)
+
+    def test_absent_second_spec_is_not_a_failure_when_defaulted(self):
+        # The exact false FAIL this suite exists for: a workspace holding
+        # only design.yaml used to trip on design_elements.yaml being absent.
+        self._write("design.yaml")
+        specs, failure = self.replay.resolve_specs(self.tmp)
+        self.assertIsNone(failure)
+        self.assertNotIn("design_elements.yaml", specs)
+
+    def test_named_spec_that_is_missing_still_fails_loudly(self):
+        self._write("design.yaml")
+        specs, failure = self.replay.resolve_specs(
+            self.tmp, ["design.yaml", "design_elements.yaml"])
+        self.assertEqual(specs, [])
+        self.assertTrue(failure.startswith("FAIL: named spec missing from copy"))
+        self.assertIn("design_elements.yaml", failure)
+
+    def test_named_missing_spec_names_only_the_missing_one(self):
+        self._write("design.yaml")
+        _, failure = self.replay.resolve_specs(
+            self.tmp, ["design.yaml", "design_elements.yaml"])
+        self.assertEqual(failure.split(": ")[-1], "design_elements.yaml")
+
+    def test_named_specs_are_used_verbatim_and_in_order(self):
+        # Named beats discovery: membership and order are the caller's.
+        self._write("design.yaml", "design_elements.yaml")
+        specs, failure = self.replay.resolve_specs(
+            self.tmp, ["design_elements.yaml", "design.yaml"])
+        self.assertIsNone(failure)
+        self.assertEqual(specs, ["design_elements.yaml", "design.yaml"])
+
+    def test_named_spec_need_not_match_the_discovery_glob(self):
+        self._write("variant.yaml")
+        specs, failure = self.replay.resolve_specs(self.tmp, ["variant.yaml"])
+        self.assertIsNone(failure)
+        self.assertEqual(specs, ["variant.yaml"])
+
+    def test_named_missing_spec_is_not_a_sync_mismatch_either(self):
+        _, failure = self.replay.resolve_specs(self.tmp, ["design.yaml"])
+        self.assertNotIn("sync mismatch", failure)
 
 
 class TestStaticGate(unittest.TestCase):

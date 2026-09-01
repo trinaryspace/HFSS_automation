@@ -98,10 +98,19 @@ def _check_expression(raw: Expr, field: str) -> Expr:
 class FaceOf(SpecModel):
     """The face of an object on a given side. Ambiguity is an ERROR (Q3)."""
 
-    face_of: str
-    direction: Literal["+x", "-x", "+y", "-y", "+z", "-z"]
-    pick: Optional[Literal["largest_area", "smallest_area"]] = None
-    nearest: Optional[list[Expr]] = Field(default=None, min_length=3, max_length=3)
+    face_of: str = Field(
+        description="Name of the object whose face this is.")
+    direction: Literal["+x", "-x", "+y", "-y", "+z", "-z"] = Field(
+        description="Which side of the object the face is on.")
+    pick: Optional[Literal["largest_area", "smallest_area"]] = Field(
+        default=None,
+        description="Tie-break when the side has more than one face. Without "
+                    "a tie-break an ambiguous selector is an error, never a "
+                    "silent choice.")
+    nearest: Optional[list[Expr]] = Field(
+        default=None, min_length=3, max_length=3,
+        description="Tie-break by proximity to this [x, y, z] point. Mutually "
+                    "exclusive with `pick`.")
 
     @model_validator(mode="after")
     def _one_tiebreak(self):
@@ -113,13 +122,20 @@ class FaceOf(SpecModel):
 class ObjectRef(SpecModel):
     """A whole object, by name."""
 
-    object: str
+    object: str = Field(description="Name of the object.")
 
 
 class OuterFaces(SpecModel):
     """Every outward face of an object — the radiation-boundary shape."""
 
-    outer_faces: str
+    outer_faces: str = Field(
+        description="Name of the object whose outward faces carry the "
+                    "boundary. For a radiation boundary this object is the "
+                    "airbox. There is no clearance field: the clearance is "
+                    "whatever this box's own origin/size expressions leave "
+                    "between it and the model. Pad every face that is not "
+                    "deliberately flush with a port by at least lambda0/3 at "
+                    "the design frequency.")
 
 
 Selector = Annotated[Union[FaceOf, ObjectRef, OuterFaces], Field(union_mode="left_to_right")]
@@ -218,26 +234,55 @@ class GeometryOp(SpecModel):
     below, which keeps the error messages in one place and readable.
     """
 
-    op: Literal[GEOMETRY_OPS]  # type: ignore[valid-type]
-    name: str
-    material: Optional[str] = None
+    op: Literal[GEOMETRY_OPS] = Field(  # type: ignore[valid-type]
+        description="The modeler operation that builds this object.")
+    name: str = Field(
+        description="Object name in the modeler. A boolean op names its "
+                    "result, which keeps the first operand's name.")
+    material: Optional[str] = Field(
+        default=None,
+        description="Key into the spec's `materials` table. Omit for a sheet "
+                    "that will carry a `perfect_e` boundary instead, and for "
+                    "an op that only modifies an existing object.")
 
     # primitives
-    origin: Optional[list[Expr]] = None
-    size: Optional[list[Expr]] = None
-    plane: Optional[Literal["xy", "yz", "xz"]] = None
-    radius: Optional[Expr] = None
-    height: Optional[Expr] = None
-    axis: Optional[Literal["x", "y", "z"]] = None
-    points: Optional[list[list[Expr]]] = None
+    origin: Optional[list[Expr]] = Field(
+        default=None,
+        description="[x, y, z] of the primitive's corner. Each component is a "
+                    "literal with a unit ('-40mm') or an expression over "
+                    "variables ('-sub_W/2 - air_pad').")
+    size: Optional[list[Expr]] = Field(
+        default=None,
+        description="Extents from the origin, in axis order: [dx, dy, dz] for "
+                    "a box, two components for a sheet in its plane's axis "
+                    "order. State axis order and let the compiler swap for "
+                    "XZ; never pre-swap.")
+    plane: Optional[Literal["xy", "yz", "xz"]] = Field(
+        default=None, description="Plane a sheet lies in.")
+    radius: Optional[Expr] = Field(default=None, description="Cylinder radius.")
+    height: Optional[Expr] = Field(
+        default=None, description="Cylinder height along `axis`.")
+    axis: Optional[Literal["x", "y", "z"]] = Field(
+        default=None, description="Axis of a cylinder or a revolve.")
+    points: Optional[list[list[Expr]]] = Field(
+        default=None,
+        description="Polyline vertices, each an [x, y, z]. Wind them counter-"
+                    "clockwise for a +z normal.")
     cover: bool = False
     close: bool = False
     segment_type: Optional[Literal["Line", "Arc", "Spline", "AngularArc"]] = None
 
     # booleans
-    tools: Optional[list[str]] = None
-    with_: Optional[list[str]] = Field(default=None, alias="with")
-    keep_tools: bool = False
+    tools: Optional[list[str]] = Field(
+        default=None,
+        description="Objects subtracted from (or intersected with) `name`.")
+    with_: Optional[list[str]] = Field(
+        default=None, alias="with",
+        description="Objects united into `name`. They are consumed.")
+    keep_tools: bool = Field(
+        default=False,
+        description="Keep the tool objects after the boolean instead of "
+                    "consuming them.")
 
     # sweeps and lofts (Q1c)
     sweep_vector: Optional[list[Expr]] = None
@@ -340,12 +385,26 @@ def _op_fields(op: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
 class Excitation(SpecModel):
     """A port. Lumped and wave ports only in v1."""
 
-    name: str
-    type: Literal["lumped_port", "wave_port"]
-    on: Selector
-    integration_line: Optional[IntegrationLine] = None
-    impedance: Expr = "50ohm"
-    renormalize: bool = True
+    name: str = Field(description="Port name in the design.")
+    type: Literal["lumped_port", "wave_port"] = Field(
+        description="`wave_port` on a sheet spanning the guide's cross "
+                    "section; `lumped_port` across a gap, with an integration "
+                    "line.")
+    on: Selector = Field(
+        description="The sheet or face the port sits on. Symbolic only — an "
+                    "object name or a face selector, never an index into the "
+                    "live model.")
+    integration_line: Optional[IntegrationLine] = Field(
+        default=None,
+        description="Two symbolic endpoints giving the field direction. "
+                    "Required for a lumped port.")
+    impedance: Expr = Field(
+        default="50ohm",
+        description="Reference impedance, with a unit.")
+    renormalize: bool = Field(
+        default=True,
+        description="Renormalize S-parameters to `impedance`. Set false for a "
+                    "waveguide port, whose modal impedance is not 50 ohm.")
 
     @field_validator("impedance")
     @classmethod
@@ -370,11 +429,18 @@ class Boundary(SpecModel):
     patterns are legal and the schema must express both (findings, ticket 12a).
     """
 
-    name: str
+    name: str = Field(description="Boundary name in the design.")
     type: Literal["radiation", "perfect_e", "perfect_h", "finite_conductivity",
-                  "symmetry", "impedance", "fe_bi"]
-    on: Selector
-    conductivity: Optional[Expr] = None
+                  "symmetry", "impedance", "fe_bi"] = Field(
+        description="`radiation` is the open-space boundary, assigned to the "
+                    "outer faces of the airbox; `perfect_e` is metal on a "
+                    "sheet.")
+    on: Selector = Field(
+        description="What the boundary is assigned to. A radiation boundary "
+                    "takes `outer_faces: <airbox name>`.")
+    conductivity: Optional[Expr] = Field(
+        default=None,
+        description="Surface conductivity, for `finite_conductivity` only.")
 
 
 class Mesh(SpecModel):
@@ -407,11 +473,19 @@ class Sweep(SpecModel):
 class Setup(SpecModel):
     """The solution setup. Solve submission stays imperative (ADR 0006)."""
 
-    name: str = "Setup1"
-    solution_frequency: Expr
-    max_passes: int = Field(default=6, gt=0)
-    delta_s: float = Field(default=0.02, gt=0, lt=1)
-    sweep: Optional[Sweep] = None
+    name: str = Field(default="Setup1", description="Setup name in the design.")
+    solution_frequency: Expr = Field(
+        description="Frequency the adaptive mesh is refined at, with a unit or "
+                    "as an expression (usually `f0`). It is also the frequency "
+                    "the airbox clearance is judged at when the target is not "
+                    "itself a frequency.")
+    max_passes: int = Field(
+        default=6, gt=0, description="Adaptive-pass ceiling.")
+    delta_s: float = Field(
+        default=0.02, gt=0, lt=1,
+        description="Convergence criterion on the S-parameter delta.")
+    sweep: Optional[Sweep] = Field(
+        default=None, description="Frequency sweep run after the adaptive solve.")
 
     @field_validator("solution_frequency")
     @classmethod
@@ -482,16 +556,35 @@ class DesignSpec(SpecModel):
     provenance: Provenance
     target: Optional[Target] = None
 
-    variables: dict[str, Expr] = Field(default_factory=dict)
+    variables: dict[str, Expr] = Field(
+        default_factory=dict,
+        description="Design variables, emitted into the AEDT variable table. "
+                    "Every geometry dimension should reference one, so the "
+                    "model stays parametric. Values may be literals with units "
+                    "or expressions over other variables and the constants c0, "
+                    "pi, eps0, mu0 — an airbox pad written 'c0 / (3 * f0)' "
+                    "stays lambda0/3 when f0 moves, where a literal would not.")
     # Project-scoped AEDT variables (`$losstan`), a separate namespace from
     # design variables — 12a found one live on the coplanar model, and a
     # reducer that flattens the two writes back to the wrong place.
     project_variables: dict[str, Expr] = Field(default_factory=dict)
 
-    materials: dict[str, Material] = Field(default_factory=dict)
-    geometry: list[GeometryOp] = Field(default_factory=list)
-    excitations: list[Excitation] = Field(default_factory=list)
-    boundaries: list[Boundary] = Field(default_factory=list)
+    materials: dict[str, Material] = Field(
+        default_factory=dict,
+        description="Materials by key, each an AEDT library reference or an "
+                    "inline definition. Geometry ops refer to these keys.")
+    geometry: list[GeometryOp] = Field(
+        default_factory=list,
+        description="Construction ops in order. An object must exist before a "
+                    "later op consumes it. A radiating model needs an air box "
+                    "here for the radiation boundary to sit on.")
+    excitations: list[Excitation] = Field(
+        default_factory=list,
+        description="The ports that drive the model.")
+    boundaries: list[Boundary] = Field(
+        default_factory=list,
+        description="Boundary conditions. A radiating model needs one "
+                    "`radiation` boundary on its airbox.")
     feed_network: Optional[FeedNetwork] = None
     mesh: list[Mesh] = Field(default_factory=lambda: [Mesh()])
     setup: Setup

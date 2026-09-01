@@ -50,8 +50,13 @@ Then the Review gate, then Solve + QA exactly as `SKILL.md` describes.
 ## Writing the spec
 
 Start from a canonical case if one fits — `knowledge/cases/*/design.yaml` are
-four worked examples, and `patch-2400` describes a model that has been built
-and solved on this box. Otherwise:
+four worked examples. For a patch, copy
+`knowledge/cases/patch-2400-authoring/design.yaml`: it is the maintained
+authoring exemplar and it validates with zero warnings. `patch-2400` beside it
+is the *record* of a model built and solved on this box — the best evidence
+there is that the compiler's target is buildable, and the worst file to copy,
+because its airbox pad predates the lambda0/3 rule below and four of five
+patch specs in one campaign inherited it. Otherwise:
 
 - **Every dimensional value carries a unit** (`52.64mm`, `2.4GHz`, `50ohm`) or
   is an expression over declared variables (`patch_W + 6*h`). A bare number is
@@ -67,6 +72,63 @@ and solved on this box. Otherwise:
   The loader maps it back, but quoting it is clearer.
 - Metal can be a `material: pec` on a sheet **or** a `perfect_e` boundary. Both
   are legal and real models use both; pick one per object and be consistent.
+
+## Airbox clearance
+
+**There is no clearance field, and that is the surprise worth stating plainly.**
+The schema has no `air_pad`, no `clearance`, no airbox op. The airbox is an
+ordinary `op: box` that becomes the radiation boundary only by being the target
+of a `radiation` selector, and its clearance is *emergent* — whatever the six
+expressions in its own `origin` and `size` happen to leave between it and the
+model inside. Nothing defaults it, because there is no unspecified state to
+default: every spec in the repo writes the pad out, and the ones that got it
+wrong got it wrong by choosing a small number, not by omitting one.
+
+**The rule of thumb is lambda0/3 on every face**, at the design frequency —
+41.64 mm at 2.4 GHz, 9.99 mm at 10 GHz. Below that the near field is still
+substantial at the boundary and the radiation condition is being applied where
+it does not hold. `validate_spec` measures it and warns:
+
+```
+PASS: validate_spec errors=0 warnings=1
+
+  warnings:
+  boundaries[0]              radiation boundary 'AirBox' clears the model by
+                             31.00 mm on -z, less than lambda0/3 (41.64 mm at 2.4 GHz)
+                             the near field is still substantial there; lambda0/3
+                             on every side is the rule of thumb
+```
+
+A WARNING does not block `compile_spec`. Treat it as one anyway unless you can
+say why this model is the exception — four of five patch specs in the
+2026-08-31 campaign shipped under-padded, none of them deliberately.
+
+**Write the pad as an expression, not a millimetre literal:**
+
+```yaml
+variables:
+  f0: 2.4GHz
+  air_pad: "c0 / (3 * f0)"      # lambda0/3, and stays lambda0/3 if f0 moves
+
+geometry:
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2 - air_pad", "-sub_L/2 - air_pad", "-air_pad"]
+    size: ["sub_W + 2*air_pad", "sub_L + 2*air_pad", "h + 2*air_pad"]
+```
+
+`c0` is a constant both the validator and AEDT provide, so the expression passes
+through verbatim and the pad stays correct when the design frequency is retuned
+— where a literal `31mm` silently would not, and nothing would say so.
+`knowledge/cases/patch-2400-authoring/design.yaml` is this, worked end to end.
+
+**One scalar does not fit every structure**, so pad per face rather than
+reaching for a single symmetric number. Faces that are deliberately flush are
+fine and the check ignores them: a wave port on the boundary face (`horn-10ghz`
+at -z, `bowtie-3500` at +x), or a box sitting on a ground plane. What the check
+judges is every face that is *not* flush. A directive antenna also wants more
+than lambda0/3 in the beam direction — `horn-10ghz` pads a full lambda0.
 
 ## Reading a validator finding
 

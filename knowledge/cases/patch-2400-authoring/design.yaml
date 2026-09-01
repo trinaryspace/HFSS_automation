@@ -1,12 +1,33 @@
-# patch-2400 as a Design Spec.
+# patch-2400-authoring — the spec an author copies.
 #
-# Not invented: this describes the model the 2026-08-15 run actually built and
-# solved (session kind-rocket, S11 minimum 2.317 GHz at -20 dB). The geometry
-# numbers come from `case.json` (Balanis closed-form) and the construction
-# details from `workspaces/patch-2400/summary.md`, so the compiler's target is
-# a model that is known to build, validate and solve.
+# The split. `patch-2400/design.yaml` is a *solved record*: it describes the
+# model the 2026-08-15 run actually built and solved on this box, so its numbers
+# cannot be corrected without breaking that correspondence
+# (`docs/agents/fixture-fidelity.md`). It also carries an airbox pad of 31 mm —
+# lambda0/4 at 2.4 GHz — written before the lambda0/3 rule existed. Four of five
+# patch-family specs in the 2026-08-31 campaign independently chose lambda0/4 or
+# worse, because the skill named that file as the thing to start from and there
+# was no compliant worked example anywhere in the corpus to copy instead.
+#
+# So the roles are split rather than the record edited. This file is the same
+# patch — every Balanis dimension identical to the solved record — and it is
+# what `SKILL.md` and `reference/design-spec.md` now point authors at. Two
+# things differ, both because an exemplar that trips the validator is the
+# defect it is supposed to cure:
+#
+#   1. `air_pad` is the expression `c0 / (3 * f0)`, not a millimetre literal.
+#      That is lambda0/3 exactly, and it **stays** lambda0/3 if f0 moves — a
+#      literal silently would not. `c0` is a constant both `hfss_spec` and AEDT
+#      provide, so the expression passes through verbatim and the parametric
+#      link survives into the variable table.
+#   2. The sweep brackets 2.4 GHz by 0.6 GHz on each side instead of 0.4 on the
+#      near side, so the bracket warning does not fire either.
+#
+# This case is deliberately **not** in `index.json`: it is not a sixth structure
+# the tool must build, it is the authoring exemplar for the first one. See
+# `notes.md`.
 spec_version: 1
-name: patch-2400
+name: patch-2400-authoring
 recipe: inset-fed-rectangular-patch
 solution_type: Modal            # explicit, never the default (env-compat #11)
 
@@ -15,8 +36,10 @@ provenance:
   canonical_reading: closed-form
   case: knowledge/cases/patch-2400
   notes: >-
-    Closed-form, not paper-sourced, so there is no Table/Figure disagreement to
-    arbitrate. Construction shape verified against the delivered patch-2400 run.
+    Geometry numbers are patch-2400's, closed-form from that case's `case.json`;
+    this file adds no dimension of its own. It is an authoring exemplar, not a
+    record of a solve — nothing here has been built on a desktop, and the airbox
+    is deliberately larger than the solved model's.
 
 target:
   quantity: resonant_frequency
@@ -35,14 +58,9 @@ variables:
   inset_g: 3.0mm
   sub_W: 80mm
   sub_L: 80mm
-  # DO NOT COPY THIS PAD. 31 mm is lambda0/4 at 2.4 GHz; the rule of thumb is
-  # lambda0/3, which is 41.64 mm, and `validate_spec` warns on this line. The
-  # value predates that rule and stays only because this file is the record of
-  # a model actually built and solved here on 2026-08-15 — correcting it would
-  # break that correspondence (docs/agents/fixture-fidelity.md). To author a
-  # new patch, start from `knowledge/cases/patch-2400-authoring/design.yaml`,
-  # which is this same design with `air_pad: "c0 / (3 * f0)"`.
-  air_pad: 31mm                 # ~lambda0/4 at f0
+  # The radiation clearance, as an expression rather than a number: lambda0/3
+  # at f0 (41.64 mm here). Write it this way and it tracks f0.
+  air_pad: "c0 / (3 * f0)"
   feed_run: "sub_L/2 - patch_L/2"
 
 materials:
@@ -75,7 +93,7 @@ geometry:
     size: [patch_W, patch_L]
 
   # The two inset notches that set the feed match. Cut, not drawn: the patch is
-  # a rectangle minus two slots, which is exactly how the run built it.
+  # a rectangle minus two slots.
   - op: sheet
     name: InsetL
     plane: xy
@@ -103,6 +121,12 @@ geometry:
     name: Patch
     with: [Feed]
 
+  # The airbox. There is no clearance field in the schema — the clearance is
+  # whatever these six expressions leave between this box and the model inside
+  # it, which is why it has to be written deliberately. Pad every face by
+  # `air_pad`: subtract it from each origin component, add twice it to each
+  # size. `-air_pad` in z is the -z face; `h + 2*air_pad` puts the +z face
+  # `air_pad` above the patch.
   - op: box
     name: AirBox
     material: air
@@ -144,8 +168,8 @@ setup:
   sweep:
     name: Sweep1
     type: discrete
-    start: 2.0GHz
+    start: 1.8GHz
     stop: 3.0GHz
-    count: 201
+    count: 241
 
 qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]

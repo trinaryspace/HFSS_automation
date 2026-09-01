@@ -28,6 +28,23 @@ stay parametric. The escape-hatch metric therefore needs a new out-of-scope
 case — the proposal is imported vendor CAD (a connector or housing), which
 is genuinely not expressible as a parametric spec. Still open.
 
+## The authoring exemplar
+
+`patch-2400-authoring/` is **not** a sixth case. It is not in `index.json`, it
+carries no `case.json`, and it contributes no dimension of its own: it is
+`patch-2400`'s design with the airbox pad written as `c0 / (3 * f0)`, and it is
+the file `SKILL.md` and `reference/design-spec.md` send authors to.
+
+The split is deliberate. `patch-2400/design.yaml` is the record of a model
+built and solved here on 2026-08-15, so its geometry cannot be corrected
+without breaking that correspondence (`docs/agents/fixture-fidelity.md`) — and
+its pad is lambda0/4, written before the lambda0/3 rule existed. Because the
+skill named that file as the thing to copy and no case anywhere showed the
+compliant idiom, four of five patch specs in the 2026-08-31 campaign inherited
+the under-pad. Splitting the roles is what fixed it: the record keeps its
+numbers, authoring gets a file that validates clean. See
+`patch-2400-authoring/notes.md`.
+
 ## Layout
 
 Each case directory holds:

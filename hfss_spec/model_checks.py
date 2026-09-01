@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-from .expressions import ExpressionError, Value, evaluate
+from .expressions import ExpressionError, Value, evaluate, resolve_all
 from .units import DIMENSIONLESS, FREQUENCY, LENGTH, UnitError
 
 C0 = 299792458.0
@@ -167,17 +167,70 @@ def _integration_axis(excitation, scope) -> Optional[int]:
     return deltas.index(widest) if widest > 0 else None
 
 
-def _target_frequency(spec) -> Optional[float]:
-    """The frequency the clearance is judged at, in Hz."""
+def _spec_scope(spec) -> dict:
+    """Best-effort variable table for a spec, when no resolved scope was passed.
+
+    `setup.solution_frequency` is almost always the name `f0`, not a literal, so
+    the fallback below needs a scope to evaluate it in. Callers that already have
+    the validator's resolved scope should pass it; this reconstructs one for the
+    callers that do not. Names that will not resolve are dropped rather than
+    raised on — a target frequency we cannot read is a check that stays quiet,
+    which is this module's standing rule.
+    """
+    table = getattr(spec, "variable_scope", None)
+    if table is None:
+        return {}
+    try:
+        raw = table()
+    except Exception:                                # pragma: no cover - defensive
+        return {}
+    try:
+        return resolve_all(raw)
+    except ExpressionError:
+        partial: dict = {}
+        for name in raw:
+            try:
+                partial[name] = evaluate(raw[name], partial)
+            except (ExpressionError, UnitError):
+                continue
+        return partial
+
+
+def _target_frequency(spec, scope: Optional[dict] = None) -> Optional[float]:
+    """The frequency the clearance is judged at, in Hz.
+
+    Both branches were dead until 2026-08-31, and the fallback's death was the
+    expensive one. `Setup`'s field is `solution_frequency` — `frequency` has
+    never existed on it, and the model is `extra="forbid"`, so no spec could ever
+    have carried one. Reading the wrong name meant that any spec whose target is
+    not itself a frequency (`gain`, `characteristic_impedance`) resolved None,
+    and `radiation_clearance` returned `[]` before measuring anything: the check
+    was silently inert on a whole class of specs rather than passing them.
+    `horn-10ghz`, `S3` and `microstrip-50r` were all unchecked, and
+    `microstrip-50r` warns now that it is measured.
+
+    `"cutoff_frequency"` was in the literal tuple and is not a member of
+    `Target.quantity`'s `Literal`, so that branch never fired either. It is
+    dropped rather than added to the schema: the enum belongs to `schema.py`, and
+    inventing a quantity here would put the two out of step in the other
+    direction.
+
+    The target still wins over the setup when both resolve. A spec that declares
+    `resonant_frequency: 2.4GHz` and solves at 2.45 GHz is asking to be judged at
+    the design frequency; the setup value is the fallback for specs whose
+    headline goal is not a frequency at all.
+    """
+    if scope is None:
+        scope = _spec_scope(spec)
     target = getattr(spec, "target", None)
     if target is not None and getattr(target, "quantity", "") in (
-            "resonant_frequency", "center_frequency", "cutoff_frequency"):
-        hz = _num(getattr(target, "value", None), {}, FREQUENCY)
+            "resonant_frequency", "center_frequency"):
+        hz = _num(getattr(target, "value", None), scope, FREQUENCY)
         if hz:
             return hz
     setup = getattr(spec, "setup", None)
     if setup is not None:
-        hz = _num(getattr(setup, "frequency", None), {}, FREQUENCY)
+        hz = _num(getattr(setup, "solution_frequency", None), scope, FREQUENCY)
         if hz:
             return hz
     return None
@@ -190,7 +243,7 @@ def radiation_clearance(spec, scope) -> list[tuple[str, str, str]]:
     other bounded body, on all six faces, and reports the tightest.
     """
     out: list[tuple[str, str, str]] = []
-    f0 = _target_frequency(spec)
+    f0 = _target_frequency(spec, scope)
     if not f0:
         return out
     required = CLEARANCE_FRACTION * C0 / f0

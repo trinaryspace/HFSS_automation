@@ -108,6 +108,33 @@ whether a lambda0/3 radiation-clearance rule should apply to a non-radiating TEM
 line like `microstrip-50r`. That is adjacent to the open WARNING-vs-ERROR
 decision and belongs to the rule's owner.
 
+## A third defect, found while repairing the second (2026-09-01, NOT fixed)
+
+`port_geometry` reads `exc.on.object` raw instead of going through
+`_selector_object`. `Excitation.on` is a
+`Union[FaceOf, ObjectRef, OuterFaces]`, and **5 of the 12 lumped ports in the
+corpus declare `face_of`** - S1, X0b, patch-2400 and the `fixed/` copies of the
+first two. Those ports are invisible to the width check.
+
+This is the same class of defect as the one `_selector_object`'s own docstring
+records having already fixed for the clearance rule: a selector read one way in
+one place and another way elsewhere. It is currently *masked*, because
+`port_geometry` returns early unless the spec contains a cylinder - so no
+finding is missing today. It is a latent false negative that will surface the
+first time a `face_of` port meets a cylindrical conductor.
+
+Left unfixed deliberately: it was found during a scoped repair of
+`_target_frequency`, and fixing it would have changed the blast radius that
+repair was measuring. It wants its own change with its own before/after count.
+
+Worth noting what these three defects have in common. None of them made a gate
+say something wrong; each made a gate **quietly say nothing**. The clearance
+rule returned `[]` on a whole class of specs, `port_geometry` skips half the
+ports it was written for, and the lambda0/3 default was believed to exist for
+two weeks. A gate that is silent is indistinguishable from a gate that passed,
+which is the same reason `read_results.py` exists and the same reason section 2
+of RECOMMENDATIONS made `UNCHECKED` its own word.
+
 ## What the fix actually looks like
 
 1. **Fix the exemplar. Cheapest, highest yield, and the thing that actually

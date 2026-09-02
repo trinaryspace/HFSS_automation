@@ -57,6 +57,7 @@ SUITES = [
     # the same steps.jsonl shape from a captured Claude Code transcript and a
     # captured opencode family, usage once per request, subagents linked.
     ("run-trace", [sys.executable, os.path.join(REPO, "scripts", "test_run_trace.py")]),
+    ("hook-log", [sys.executable, os.path.join(REPO, "scripts", "test_hook_log.py")]),
     # The event log (run-logging 03): `hfss_spec/events.py` never raises and
     # is a no-op without a state dir; the compiler leaves one stage.start /
     # stage.end pair per Spine stage against the recorder; every script in

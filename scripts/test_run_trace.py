@@ -611,6 +611,41 @@ class TestClaudeCapture(unittest.TestCase):
         self.assertIn("agent-abc", index["syn"]["subagents"])
 
 
+class TestHookLog(unittest.TestCase):
+    """The hook log merge (ticket 08). The full suite over the real
+    captured payloads lives in scripts/test_hook_log.py; this pins the
+    contract run_trace offers: no step key added, hook verdicts win."""
+
+    HOOKS = Path(__file__).resolve().parent / "fixtures" / "hooks"
+    HOOK_SESSION = "45641dd8-dbcc-4f08-8f92-90237c4a0f63"
+
+    def test_merge_prefers_the_hook_exit_code_and_duration(self):
+        steps = run_trace.trace_transcript(self.HOOKS / f"{self.HOOK_SESSION}.jsonl")
+        uses = [s for s in steps if s["kind"] == "tool_use"]
+        results = {s["tool_use_id"]: s for s in steps if s["kind"] == "tool_result"}
+        self.assertEqual([s["command"] for s in uses], ["echo hello", "exit 3"])
+        self.assertTrue(results[uses[1]["tool_use_id"]]["is_error"])
+        entries = [{"tool": "Bash", "tool_use_id": uses[0]["tool_use_id"], "exit_code": 7,
+                    "duration_ms": 1234},
+                   {"tool": "Bash", "tool_use_id": uses[1]["tool_use_id"], "exit_code": 0,
+                    "duration_ms": None}]
+        self.assertEqual(run_trace.merge_tool_log(steps, entries), 2)
+        self.assertEqual(uses[0]["latency_ms"], 1234)
+        self.assertTrue(results[uses[0]["tool_use_id"]]["is_error"])
+        self.assertFalse(results[uses[1]["tool_use_id"]]["is_error"])
+        self.assertEqual(uses[1]["latency_ms"], 332)          # unchanged: no duration
+        for step in steps:
+            self.assertEqual(tuple(step), run_trace.STEP_KEYS)
+
+    def test_the_fixtures_trace_without_a_log_exactly_as_before(self):
+        for family in (run_trace.trace_claude(CC_TRANSCRIPT),
+                       run_trace.trace_opencode_family(run_trace.SliceStore(OC_SLICE), OC_SESSION)):
+            for steps in family.values():
+                copy = [dict(s) for s in steps]
+                self.assertEqual(run_trace.merge_tool_log(steps, []), 0)
+                self.assertEqual(steps, copy)
+
+
 class TestCli(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

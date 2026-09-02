@@ -9790,6 +9790,7 @@
     "skill_commit": "unrecorded",
     "solve_gate": "n/a",
     "solve_submissions": 0,
+    "started": "2026-08-18T19:20:40Z",
     "steps": 4106,
     "steps_by_phase": {
       "build #1": 230,
@@ -9915,6 +9916,7 @@
     "report_path": "workspaces/patch-array-5800/run-report.md",
     "run_id": "patch-array-5800-2026-08-18",
     "skill_commit": "unrecorded",
+    "started": "2026-08-18T19:20:40Z",
     "tokens_by_phase": {
       "build #1": 250244,
       "build #3": 297873,
@@ -9930,8 +9932,52 @@
     "workspace": "patch-array-5800"
   },
   "previous": {
-    "note": "no index yet (docs/runs/index.jsonl not found; ticket 07)",
-    "rows": []
+    "note": null,
+    "rows": [
+      {
+        "active_wall_ms": null,
+        "billed": 2758554,
+        "billed_per_completion": "unrecorded",
+        "completions": "unrecorded",
+        "delta": {
+          "active_wall_ms": {
+            "abs": null,
+            "pct": null
+          },
+          "billed": {
+            "abs": null,
+            "pct": null
+          },
+          "parts": {
+            "abs": null,
+            "pct": null
+          }
+        },
+        "findings_high": 35,
+        "host": "claude-code+opencode",
+        "outcome": "unrecorded (outcome.txt is not key=value: completed - user verdict: tuning issue (element resonance 5.6 GHz, ~7 dB in both designs), not a feed defeat; solves #1b + #2 banked Normal Completion)",
+        "parts": null,
+        "raw_wall_ms": 1240320776,
+        "recipe": "corporate-patch-array",
+        "report_path": "workspaces/patch-array-5800/run-report.md",
+        "run_id": "patch-array-5800-2026-08-18",
+        "skill_commit": "unrecorded",
+        "started": "2026-08-18T19:20:40Z",
+        "tokens_by_phase": {
+          "build #1": 250244,
+          "build #3": 297873,
+          "build #5": 26238,
+          "clarify #0": 509747,
+          "solve #2": 241503,
+          "solve #4": 556663,
+          "solve #6": 338595,
+          "solve #7": 398515,
+          "undeclared": 139176
+        },
+        "top_finding_kind": "long_reasoning",
+        "workspace": "patch-array-5800"
+      }
+    ]
   },
   "retries": [
     {

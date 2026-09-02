@@ -42,3 +42,7 @@ Filled by the measurement harness (`scripts/run_card.py --summary summary.md`):
 slug, created/updated, duration, `tokens_input`/`tokens_output`/
 `tokens_reasoning`/`tokens_cache_read`/`tokens_cache_write`, billed, parts,
 store_bytes — one `- key: value` line per metric.
+
+Where the run's tokens, wall, retries and escalations went: `run-report.md`
+beside this file, written by `scripts/run_report.py --workspace …` after the
+card is appended.

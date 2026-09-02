@@ -10,6 +10,7 @@
 - completions: unrecorded
 - billed: 2,581,078
 - billed_per_completed_sim: unrecorded
+- started: 2026-08-06T03:56:43Z (first traced step)
 - raw_wall: 35 h 26 min 51 s
 - active_wall: unmeasurable: no session-1 start in state.md
 - active_wall_start: n/a (n/a)
@@ -162,7 +163,13 @@ _none_
 
 ## 10. Versus previous runs
 
-no index yet (docs/runs/index.jsonl not found; ticket 07)
+| run_id | started | outcome | completions | billed | billed delta | parts | parts delta | active_wall | active_wall delta | findings_high | top_finding_kind |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| silent-engine (seed) | 2026-08-03T04:43:14Z | completed | 1 | 398,130 | - | 424 | - | n/a | - | n/a | n/a |
+| shiny-canyon (seed) | 2026-08-06T03:56:43Z | abandoned | 0 | 1,579,333 | +1,181,203 (+297%) | 1,392 | +968 (+228%) | n/a | n/a | n/a | n/a |
+| bowtie-3500-pilot-2026-08-06 | 2026-08-06T03:56:43Z | unrecorded | unrecorded | 2,581,078 | +1,001,745 (+63%) | n/a | n/a | n/a | n/a | 17 | undeclared_session |
+
+Deltas are against the row above; the last row is this run.
 
 ## 11. The run card
 

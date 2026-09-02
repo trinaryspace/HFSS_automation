@@ -4,15 +4,31 @@
     python scripts/run_report.py --workspace workspaces/<name>
 
 writes `workspaces/<name>/run-report.md` (for people) and `run-report.json`
-(for the runs index, ticket 07, and the `runcard` subagent), next to
-`summary.md`, and prints one line:
+(for the runs index and the `runcard` subagent), next to `summary.md`,
+appends (or replaces, by `run_id`) the run's line in `docs/runs/index.jsonl`
+(ticket 07), and prints one line:
 
-    PASS: run_report workspace=<name> sessions=<resolved>/<found> steps=N findings=N high=N
+    PASS: run_report workspace=<name> sessions=<resolved>/<found> steps=N findings=N high=N trace=<status> index=<rows>
 
 It exits 1 only when the workspace directory does not exist. Everything
 else degrades: a missing store, a missing trace, a missing machine-state
 file each become a labelled line in the report, never a guess and never a
 crash.
+
+Two more modes, neither of which opens a store or writes a report:
+
+    python scripts/run_report.py --workspace workspaces/<name> --compare
+    python scripts/run_report.py --compare <run_id> [<run_id> ...]
+    python scripts/run_report.py --reindex
+
+`--compare` prints the index rows of the workspace's recipe (or exactly the
+runs named), oldest first and newest last, each with its deltas on billed,
+parts and active wall against the row above it — the same table as the
+report's section 10. `--reindex` rebuilds the index from the two seed rows
+(`run_card.seed_rows()`: the `silent-engine` and `shiny-canyon` baselines)
+plus every `workspaces/*/run-report.json`, byte-identical to what the
+appends produced; the reports are the source, the index is derived
+(`docs/runs/README.md`).
 
 Three inputs, one report (`.scratch/hfss-agent-run-logging/spec.md`):
 
@@ -45,8 +61,9 @@ headline with how it was found):
 
 Sections, in this order (ticket 06): headline; top pain points; stage
 timeline; waiting; retries and rebuilds; context; backend; solve;
-discipline; versus previous runs (`docs/runs/index.jsonl`, ticket 07, or
-`no index yet`); the run card (`scripts/run_card.py`'s own section: the
+discipline; versus previous runs (the index rows of this recipe up to and
+including this run, newest last, with deltas — what the index holds once
+this report is written, so the two always agree); the run card (`scripts/run_card.py`'s own section: the
 run's carded sessions when the workspace has a history, else a card built
 from the trace with the store-only fields marked unmeasurable).
 
@@ -79,7 +96,8 @@ from hfss_spec import session as phase_session  # noqa: E402
 
 REPORT_MD = "run-report.md"
 REPORT_JSON = "run-report.json"
-INDEX_PATH = REPO / "docs" / "runs" / "index.jsonl"
+INDEX_PATH = run_card.INDEX_PATH
+WORKSPACES_DIR = REPO / "workspaces"
 TOP_N = 10
 CONTEXT_N = 10
 PREVIOUS_N = 5
@@ -116,7 +134,6 @@ GAP_CLASSES = ("user_wait", "solver_wait", "unexplained")
 EXTRA_STATE_FILES = ("completions.txt", "solve_started.txt", "aedt_port.txt")
 
 SLUG_RE = re.compile(r"\bslug[:\s]+`?([a-z]+-[a-z]+)\b")
-RECIPE_RE = re.compile(r"(?m)^-\s*Recipe:\s*`?([A-Za-z0-9][A-Za-z0-9_-]*)")
 DECLARE_CMD_RE = re.compile(r"session\.py\b[^\n]*--phase\s+(clarify|build|solve)\b")
 GAP_CLASS_RE = re.compile(r"\((user_wait|solver_wait|unexplained)\)")
 STAGE_LEDGER_RE = re.compile(r"stage_ledger=(\S+)")
@@ -126,6 +143,8 @@ ROUTE_LINE_RE = re.compile(r"(?m)^(\w+):\s*route=([\w\-]+)")
 
 _iso = run_card._iso
 _duration = run_card._duration
+recipe_of = run_card.recipe_of
+read_index = run_card.read_index
 
 
 # -- sessions: which ones are the run's --------------------------------------
@@ -155,16 +174,6 @@ def ledger_slugs(workspace):
             if m.group(1) not in slugs:
                 slugs.append(m.group(1))
     return slugs
-
-
-def recipe_of(workspace):
-    """The recipe the ledger's Session 1 block names, or None."""
-    try:
-        text = (Path(workspace) / "state.md").read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    m = RECIPE_RE.search(text)
-    return m.group(1) if m else None
 
 
 def unnamed_declarations(state_dir):
@@ -575,6 +584,8 @@ def headline(workspace, sessions, families, attributed, rows, findings, trace, m
         else f"{UNMEASURABLE}: {REASON_NO_TRACE}",
         "raw_wall": _duration(raw_ms) if raw_ms is not None else f"{UNMEASURABLE}: {REASON_NO_TRACE}",
         "raw_wall_ms": raw_ms,
+        # The first traced step: the instant the index orders runs by.
+        "started": _iso(min(s["ts"] for s in stamped)) if stamped else None,
         "active_wall": wall.label,
         "active_wall_ms": wall.active_ms,
         "active_wall_start": _iso(wall.start_ms),
@@ -622,69 +633,205 @@ def trace_card(workspace, families, hosts):
 
 
 def run_card_section(workspace, families, sessions, args, wall, outcome):
-    """`run_card`'s own `## Run card` section: the carded run when the
-    workspace has a declaration history, else the trace-derived card."""
+    """(`run_card`'s own `## Run card` section, parts): the carded run when
+    the workspace has a declaration history, else the trace-derived card.
+    `parts` is the store's count for a carded run and None otherwise — the
+    trace does not hold it, and the index says so with a null."""
     run = None
     try:
         run = run_card.load_run(str(workspace), args)
     except (OSError, ValueError, sqlite3.Error):
         run = None
     if run is not None and run["cards"]:
-        return run_card.run_summary_section(run["entries"], run["total"], run["run"], wall, outcome)
+        parts = run["total"].get("parts")
+        return (run_card.run_summary_section(run["entries"], run["total"], run["run"], wall, outcome),
+                parts if isinstance(parts, int) else None)
     hosts = sorted({s["host"] for s in sessions if s["host"]})
     if not families:
         card = trace_card(workspace, {}, hosts)
         card["slug"] = f"{Path(workspace).name} ({UNMEASURABLE}: {REASON_NO_TRACE})"
     else:
         card = trace_card(workspace, families, hosts)
-    return run_card.summary_section(card, wall, outcome)
+    return run_card.summary_section(card, wall, outcome), None
 
 
-# -- previous runs (ticket 07's index) ---------------------------------------
+# -- the runs index (ticket 07) ----------------------------------------------
 
-def read_index(path):
-    rows = []
-    try:
-        lines = Path(path).read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(row, dict):
-            rows.append(row)
-    return rows
-
-
-def previous_runs(index_path, head, n=PREVIOUS_N):
-    rows = read_index(index_path)
-    if rows is None:
-        return {"note": f"no index yet ({_relative(index_path)} not found; ticket 07)", "rows": []}
-    recipe = head.get("recipe")
-    mine = [r for r in rows if r.get("run_id") != head.get("run_id")
-            and (recipe in (None, UNRECORDED) or r.get("recipe") == recipe)]
-    if not mine:
-        return {"note": f"no previous run of recipe {recipe} in the index", "rows": []}
-    return {"note": None, "rows": mine[-n:]}
-
-
-def index_row(head, report_path):
-    """This run's line for `docs/runs/index.jsonl` (ticket 07's columns)."""
-    return {
+def index_row(head, report_path, parts=None):
+    """This run's line for `docs/runs/index.jsonl` (`run_card.INDEX_COLUMNS`)."""
+    return run_card.ordered_row({
         "run_id": head["run_id"], "workspace": head["workspace"], "recipe": head["recipe"],
         "skill_commit": head["skill_commit"], "host": "+".join(head["hosts"]) or None,
         "outcome": head["outcome"], "completions": head["completions"],
         "billed": head["billed"] if isinstance(head["billed"], int) else None,
         "billed_per_completion": head["billed_per_completion"],
-        "parts": None, "raw_wall_ms": head["raw_wall_ms"], "active_wall_ms": head["active_wall_ms"],
+        "parts": parts, "raw_wall_ms": head["raw_wall_ms"], "active_wall_ms": head["active_wall_ms"],
+        "started": head["started"],
         "tokens_by_phase": head["tokens_by_phase"], "findings_high": head["findings_high"],
         "top_finding_kind": head["top_finding_kind"], "report_path": report_path,
-    }
+    })
+
+
+def index_text(rows):
+    """The index file's bytes for `rows`: one ordered JSON object per line,
+    oldest first. Same rows in, same bytes out."""
+    ordered = sorted((run_card.ordered_row(r) for r in rows), key=run_card.index_sort_key)
+    return "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in ordered)
+
+
+def write_index(path, rows):
+    """Write the index; (rows written, changed) — `changed` is False when the
+    file already held exactly these bytes."""
+    path = Path(path)
+    text = index_text(rows)
+    try:
+        before = path.read_bytes()
+    except OSError:
+        before = None
+    data = text.encode("utf-8")
+    if before != data:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as handle:
+            handle.write(data)
+    return text.count("\n"), before != data
+
+
+def upsert_index(path, row):
+    """Append `row` to the index, replacing any line with its `run_id`; the
+    seed rows are always present. Idempotent: the same row twice is one line."""
+    rows = [r for r in run_card.index_rows(path) if r.get("run_id") != row["run_id"]]
+    rows.append(row)
+    return write_index(path, rows)
+
+
+def reindex(path, workspaces_dir=None):
+    """Rebuild the index from the seeds plus every `<workspaces>/*/run-report.json`.
+
+    Returns `{reports, rows, changed, skipped}`; `skipped` names a report
+    file that is not JSON or carries no `index_row`. The workspaces are
+    walked in name order and the rows sorted, so the bytes do not depend
+    on the order the reports were written in.
+    """
+    root = Path(WORKSPACES_DIR if workspaces_dir is None else workspaces_dir)
+    by_id = {r["run_id"]: r for r in run_card.seed_rows()}
+    reports, skipped = 0, []
+    for report in sorted(root.glob("*/" + REPORT_JSON)):
+        try:
+            data = json.loads(report.read_text(encoding="utf-8"))
+            row = data["index_row"]
+            if not isinstance(row, dict) or not row.get("run_id"):
+                raise ValueError("index_row has no run_id")
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            skipped.append(f"{_relative(report)}: {exc}")
+            continue
+        by_id[row["run_id"]] = row
+        reports += 1
+    rows, changed = write_index(path, by_id.values())
+    return {"reports": reports, "rows": rows, "changed": changed, "skipped": skipped}
+
+
+# -- versus previous runs (section 10 and --compare) -------------------------
+
+DELTA_KEYS = ("billed", "parts", "active_wall_ms")
+
+
+def _num(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def with_deltas(rows):
+    """The rows, oldest first, each with `delta`: for billed, parts and
+    active_wall_ms, `{abs, pct}` against the row above it (None on the first
+    row and wherever either side is not a number)."""
+    out = []
+    previous = None
+    for row in sorted(rows, key=run_card.index_sort_key):
+        delta = {}
+        for key in DELTA_KEYS:
+            here, there = _num(row.get(key)), _num(previous.get(key)) if previous else None
+            if here is None or there is None:
+                delta[key] = {"abs": None, "pct": None}
+            else:
+                delta[key] = {"abs": here - there, "pct": (here - there) / there * 100.0 if there else None}
+        out.append(dict(row, delta=delta))
+        previous = row
+    return out
+
+
+def previous_runs(index_path, own_row, n=PREVIOUS_N):
+    """Section 10: the index rows of this recipe up to and including this
+    run, newest last, with deltas — the last `n` before it plus itself.
+
+    Built from what the index will hold once this report is written (the
+    file's rows, the seeds, this run's own row in place of any older line
+    with its `run_id`), so the section, the index and `--compare` agree and
+    a second render is byte-identical to the first. A seed row for the same
+    workspace stays: the pilot's seed and its report are one session read
+    at two instants, and that is worth seeing side by side.
+    """
+    recipe = own_row.get("recipe")
+    if recipe in (None, UNRECORDED):
+        return {"note": f"recipe {UNRECORDED}: nothing in the index is comparable", "rows": with_deltas([own_row])}
+    own_key = run_card.index_sort_key(own_row)
+    rows = [r for r in run_card.index_rows(index_path)
+            if r.get("recipe") == recipe and r.get("run_id") != own_row["run_id"]
+            and run_card.index_sort_key(r) <= own_key]
+    return {"note": None, "rows": with_deltas(rows[-n:] + [own_row])}
+
+
+def compare_rows(index_path, recipe=None, run_ids=None):
+    """(rows with deltas, note) for `--compare`: every index row of `recipe`,
+    or exactly the runs named; note says what is missing."""
+    rows = run_card.index_rows(index_path)
+    if run_ids:
+        by_id = {r["run_id"]: r for r in rows}
+        missing = [rid for rid in run_ids if rid not in by_id]
+        if missing:
+            return [], f"no run {', '.join(missing)} in {_relative(index_path)} or among the seed rows"
+        return with_deltas([by_id[rid] for rid in run_ids]), None
+    mine = [r for r in rows if r.get("recipe") == recipe]
+    if not mine:
+        return [], f"no run of recipe {recipe} in {_relative(index_path)}"
+    return with_deltas(mine), None
+
+
+def _fmt_delta(delta, wall=False):
+    if delta is None:
+        return "-"
+    abs_ = delta.get("abs")
+    if abs_ is None:
+        return "n/a"
+    sign = "-" if abs_ < 0 else "+"
+    body = _duration(abs(abs_)) if wall else f"{abs(abs_):,}"
+    pct = delta.get("pct")
+    return f"{sign}{body}" + (f" ({pct:+.0f}%)" if pct is not None else "")
+
+
+COMPARE_HEADER = ["run_id", "started", "outcome", "completions", "billed", "billed delta", "parts",
+                  "parts delta", "active_wall", "active_wall delta", "findings_high", "top_finding_kind"]
+
+
+def render_compare(rows):
+    """The comparison table, oldest first, newest last; the first row has
+    nothing above it, so its deltas read `-`."""
+    table = []
+    for i, r in enumerate(rows):
+        delta = r.get("delta") or {}
+        first = i == 0
+        billed, parts = _num(r.get("billed")), _num(r.get("parts"))
+        table.append([
+            r.get("run_id") + (" (seed)" if r.get("seed") else ""), r.get("started") or "n/a",
+            r.get("outcome"), r.get("completions"),
+            f"{billed:,}" if billed is not None else "n/a",
+            "-" if first else _fmt_delta(delta.get("billed")),
+            f"{parts:,}" if parts is not None else "n/a",
+            "-" if first else _fmt_delta(delta.get("parts")),
+            _duration(_num(r.get("active_wall_ms"))),
+            "-" if first else _fmt_delta(delta.get("active_wall_ms"), wall=True),
+            r.get("findings_high") if r.get("findings_high") is not None else "n/a",
+            r.get("top_finding_kind") or "n/a",
+        ])
+    return _table(COMPARE_HEADER, table)
 
 
 # -- rendering ---------------------------------------------------------------
@@ -745,6 +892,8 @@ def render_headline(h):
              f"- completions: {h['completions']}",
              f"- billed: {h['billed']:,}" if isinstance(h["billed"], int) else f"- billed: {h['billed']}",
              f"- billed_per_completed_sim: {h['billed_per_completion']}",
+             f"- started: {h['started']} (first traced step)" if h["started"]
+             else f"- started: {UNMEASURABLE}: {REASON_NO_TRACE}",
              f"- raw_wall: {h['raw_wall']}",
              f"- active_wall: {h['active_wall']}",
              f"- active_wall_start: {h['active_wall_start']} ({h['active_wall_start_source']})",
@@ -847,14 +996,13 @@ def render_solve(s):
 
 
 def render_previous(p):
-    if p["note"]:
-        return f"{p['note']}\n"
-    header = ["run_id", "outcome", "completions", "billed", "billed_per_completion", "raw_wall", "active_wall",
-              "findings_high", "top_finding_kind"]
-    rows = [[r.get("run_id"), r.get("outcome"), r.get("completions"), r.get("billed"),
-             r.get("billed_per_completion"), _duration(r.get("raw_wall_ms")), _duration(r.get("active_wall_ms")),
-             r.get("findings_high"), r.get("top_finding_kind")] for r in p["rows"]]
-    return _table(header, rows)
+    out = f"{p['note']}\n\n" if p.get("note") else ""
+    out += render_compare(p["rows"])
+    if len(p["rows"]) == 1:
+        out += "\nThis run is the first of its recipe in the index; deltas need a previous run.\n"
+    else:
+        out += "\nDeltas are against the row above; the last row is this run.\n"
+    return out
 
 
 def render(report):
@@ -915,6 +1063,8 @@ def build(workspace, args):
     head = headline(workspace, sessions, families, attributed, rows, findings, trace, machine_state,
                     history, wall, outcome, evs)
     report_path = _relative(workspace / REPORT_MD)
+    card_section, parts = run_card_section(workspace, families, sessions, args, wall, outcome)
+    own_row = index_row(head, report_path, parts)
     report = {
         "_trace_refresh": trace,          # this run's action; not rendered
         "headline": head,
@@ -928,11 +1078,11 @@ def build(workspace, args):
         "backend": backend_section(findings, machine_state, evs),
         "solve": solve_section(machine_state, evs),
         "discipline": [f for f in findings if f["kind"] in DISCIPLINE_KINDS],
-        "previous": previous_runs(getattr(args, "index", None) or INDEX_PATH, head),
-        "run_card": run_card_section(workspace, families, sessions, args, wall, outcome),
+        "previous": previous_runs(getattr(args, "index", None) or INDEX_PATH, own_row),
+        "run_card": card_section,
         "sections": [key for key, _ in SECTIONS],
+        "index_row": own_row,
     }
-    report["index_row"] = index_row(head, report_path)
     return report
 
 
@@ -950,7 +1100,8 @@ def write_report(workspace, report):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--workspace", required=True, help="workspace dir (state.md + results/state/)")
+    parser.add_argument("--workspace", help="workspace dir (state.md + results/state/); required "
+                                            "unless --reindex or --compare with run ids")
     parser.add_argument("--db", help="opencode.db path (default: $OPENCODE_DB or ~/.local/share/opencode/opencode.db)")
     parser.add_argument("--projects-dir", help="Claude Code projects dir (default: ~/.claude/projects)")
     parser.add_argument("--session", action="append", metavar="HOST:ID",
@@ -958,24 +1109,61 @@ def main(argv=None):
     parser.add_argument("--top", type=int, default=TOP_N, help="findings in the top section (default %d)" % TOP_N)
     parser.add_argument("--no-trace", action="store_true", dest="no_trace",
                         help="never touch a store; report from the trace on disk")
-    parser.add_argument("--index", help="runs index to compare against (default docs/runs/index.jsonl)")
+    parser.add_argument("--index", help="runs index to read and write (default docs/runs/index.jsonl)")
+    parser.add_argument("--compare", nargs="*", metavar="RUN_ID",
+                        help="print the index rows of the workspace's recipe (or exactly the runs "
+                             "named), newest last, with deltas; writes nothing")
+    parser.add_argument("--reindex", action="store_true",
+                        help="rebuild the index from the seed rows and every workspaces/*/run-report.json")
+    parser.add_argument("--workspaces", help="workspaces dir --reindex walks (default workspaces/)")
     parser.add_argument("--worktree", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    index_path = Path(args.index) if args.index else INDEX_PATH
 
+    if args.reindex:
+        result = reindex(index_path, args.workspaces)
+        for skipped in result["skipped"]:
+            print(f"warning: skipped {skipped}", file=sys.stderr)
+        print(f"PASS: run_report reindex reports={result['reports']} rows={result['rows']} "
+              f"index={_relative(index_path)} changed={'yes' if result['changed'] else 'no'}")
+        return 0
+
+    if args.compare is not None:
+        if args.compare:
+            rows, note = compare_rows(index_path, run_ids=args.compare)
+        elif args.workspace:
+            recipe = recipe_of(args.workspace)
+            if recipe is None:
+                print(f"error: no `- Recipe:` line in {args.workspace}/state.md; name the runs to compare",
+                      file=sys.stderr)
+                return 1
+            rows, note = compare_rows(index_path, recipe=recipe)
+        else:
+            parser.error("--compare needs --workspace (its recipe) or run ids")
+        if note:
+            print(f"error: {note}", file=sys.stderr)
+            return 1
+        print(render_compare(rows), end="")
+        return 0
+
+    if not args.workspace:
+        parser.error("--workspace is required")
     workspace = Path(args.workspace)
     if not workspace.is_dir():
         print(f"error: workspace not found: {workspace}", file=sys.stderr)
         return 1
     report = build(workspace, args)
     md, js = write_report(workspace, report)
+    index_rows, _ = upsert_index(index_path, report["index_row"])
     head = report["headline"]
     resolved = sum(1 for s in head["sessions"] if s["resolved"])
     refresh = report["_trace_refresh"]
     line = (f"PASS: run_report workspace={workspace.name} sessions={resolved}/{len(head['sessions'])} "
             f"steps={head['steps']} findings={head['findings']} high={head['findings_high']} "
-            f"trace={refresh['status']}")
+            f"trace={refresh['status']} index={index_rows}")
     events.emit(workspace / "results" / "state", REPORT_EVENT, stage="summary", verdict=line,
-                detail=f"md={md.name} json={js.name} trace={refresh['status']}: {refresh['detail']}")
+                detail=f"md={md.name} json={js.name} trace={refresh['status']}: {refresh['detail']}; "
+                       f"index={_relative(index_path)}")
     print(line)
     return 0
 

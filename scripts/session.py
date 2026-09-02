@@ -27,6 +27,13 @@ Every declaration is also recorded: one line appended to
 and, on the first declaration, `results/state/run.json` naming the run. That
 is how `scripts/run_card.py --workspace` finds all three phase sessions
 afterwards. `--task-doc` records the request document the run answers.
+
+A declaration that carries a harness session id (Claude Code exports
+`CLAUDE_CODE_SESSION_ID`; `--session-id` for anything else) is also written
+to the per-machine map `~/.hfss-agent/sessions.json` (session id ->
+workspace + phase), which the Claude Code tool hook `scripts/hook_log.py`
+reads to find the workspace whose `results/state/tools.jsonl` it appends
+to. Without a session id the hook has nothing to look up and logs nothing.
 """
 
 import argparse
@@ -40,7 +47,8 @@ if str(REPO) not in sys.path:
 
 from hfss_spec.session import (                        # noqa: E402
     DEFAULT_CALL_BUDGET, HOST_CLAUDE_CODE, HOST_OPENCODE, PHASES, Session,
-    detect_host, history, run_info, start, trace_calls,
+    detect_host, history, register_session, run_info, start, trace_calls,
+    workspace_of,
 )
 
 
@@ -79,12 +87,18 @@ def main(argv=None):
                         call_budget=args.budget, host=host,
                         host_session_id=host_id, task_doc=args.task_doc)
         run = run_info(state_dir) or {}
+        hooked = False
+        if session.host_session_id:
+            hooked = register_session(session.host_session_id, workspace_of(state_dir),
+                                      session.phase, host=session.host,
+                                      now_ms=session.started_ms) is not None
         print(f"PASS: session declared phase={session.phase} "
               f"name={session.name or '-'} budget={session.call_budget} "
               f"host={session.host or '-'} "
               f"session_id={session.host_session_id or '-'} "
               f"run={run.get('run_id') or '-'} "
-              f"declared={len(history(state_dir))}")
+              f"declared={len(history(state_dir))} "
+              f"hook_map={'registered' if hooked else 'unregistered'}")
         return 0
 
     session = Session.load(state_dir)

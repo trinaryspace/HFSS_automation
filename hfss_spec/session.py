@@ -54,6 +54,18 @@ JSONL is the history; `session.json` keeps its role and format unchanged.
 Declarations, refusals and budget escalations are also events
 (`hfss_spec.events`, ticket 03): `phase.declared`, `phase.refused` (with the
 action) and `budget.escalate` land in `events.jsonl` beside the history.
+
+`scripts/session.py --phase` also registers a declaration that carries a
+harness session id in the per-machine map `~/.hfss-agent/sessions.json`
+(session id -> workspace, phase; `register_session` here), which is how
+the Claude Code tool hook (`scripts/hook_log.py`, ticket 08) finds the
+workspace whose `results/state/tools.jsonl` a tool call belongs to. The
+map lives outside every checkout on purpose — one hook, however many
+worktrees — and `HFSS_AGENT_HOME` relocates it (tests). It is the CLI
+that registers, not `start()`: every suite that declares a session
+through `start()` would otherwise map the live session to a temp dir.
+Registration never raises: a hook that cannot be pointed at a workspace
+logs nothing, which is the status quo.
 """
 
 from __future__ import annotations
@@ -302,6 +314,76 @@ def start(phase: str, name: str = "", state_dir=None,
                            f"session_id={session.host_session_id or '-'} "
                            f"budget={call_budget} declared={len(history(state_dir))}")
     return session
+
+
+# -- the per-machine map: ~/.hfss-agent/sessions.json (ticket 08) -----------
+
+# `scripts/hook_log.py` reads this file with the same three constants; it
+# cannot import this module (it must start in milliseconds, stdlib only),
+# so `scripts/test_hook_log.py` asserts the two agree.
+ENV_AGENT_HOME = "HFSS_AGENT_HOME"
+AGENT_HOME_DIRNAME = ".hfss-agent"
+SESSIONS_MAP = "sessions.json"
+
+
+def agent_home(environ=None) -> str:
+    """`~/.hfss-agent`, or `$HFSS_AGENT_HOME` when set."""
+    env = os.environ if environ is None else environ
+    override = env.get(ENV_AGENT_HOME, "")
+    if override:
+        return override
+    return os.path.join(os.path.expanduser("~"), AGENT_HOME_DIRNAME)
+
+
+def sessions_map_path(environ=None) -> str:
+    return os.path.join(agent_home(environ), SESSIONS_MAP)
+
+
+def load_sessions_map(environ=None) -> dict:
+    """The map as a dict; {} when absent or unreadable."""
+    try:
+        with open(sessions_map_path(environ), encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def register_session(session_id: str, workspace, phase: str, host: str = "",
+                     now_ms: Optional[int] = None, environ=None) -> Optional[str]:
+    """Map a harness session id to its workspace; return the map's path.
+
+    The entry is `{workspace, phase, host, ts, ts_ms}`; re-declaring a phase
+    overwrites the session's entry (the hook wants the current phase), and
+    every other session's entry is kept. Written through a temp file and
+    `os.replace`, so a hook reading mid-write sees the old map, never a torn
+    one. None, and nothing raised, when the file cannot be written.
+    """
+    if not session_id:
+        return None
+    now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+    path = sessions_map_path(environ)
+    data = load_sessions_map(environ)
+    data[str(session_id)] = {
+        "workspace": os.path.abspath(str(workspace)),
+        "phase": phase,
+        "host": host or "",
+        "ts": _iso_utc(now_ms),
+        "ts_ms": now_ms,
+    }
+    tmp = f"{path}.{os.getpid()}.tmp"
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, sort_keys=True)
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        return None
+    return path
 
 
 # -- the record: sessions.jsonl and run.json ---------------------------------

@@ -108,10 +108,21 @@ opencode (`~/.local/share/opencode/opencode.db`, opened read-only through
   `input_head`; `output_bytes` + `output_head`), read back by
   `SliceStore`, and written only if it traces identically to the database.
 
+The hook log (`results/state/tools.jsonl`, written during a Claude Code run
+by `scripts/hook_log.py`, ticket 08) is merged in when it exists
+(`merge_tool_log`): its lines join the steps by `tool_use_id` (else by
+session, tool and command in order), and where they join, the
+tool_result's `is_error` is taken from the hook's exit code (a non-zero
+exit is an error, zero is not, whatever the harness flagged) and the
+tool_use's `latency_ms` from the hook's `duration_ms` — the call's wall as
+the hook saw it, not the gap to whatever record the transcript wrote
+next. No step key is added; the exit code itself stays in `tools.jsonl`.
+
 Usage:
-    python scripts/run_trace.py --workspace W [--out DIR]
+    python scripts/run_trace.py --workspace W [--out DIR] [--tools PATH]
         # every session in results/state/sessions.jsonl (ticket 01), with
-        # subagents, to W/results/state/trace/<session-id>.steps.jsonl
+        # subagents, to W/results/state/trace/<session-id>.steps.jsonl;
+        # W/results/state/tools.jsonl merged in when present
     python scripts/run_trace.py --session-id ID [--host H] [--out DIR]
     python scripts/run_trace.py --slug SLUG [--host H] [--out DIR]
     python scripts/run_trace.py --transcript PATH.jsonl [--out DIR]
@@ -155,6 +166,7 @@ ROLES = ("user", "assistant", "tool_result")
 ROLE_TOOL_RESULT = "tool_result"
 
 SESSIONS_FILE = "sessions.jsonl"          # ticket 01, results/state/
+TOOLS_FILE = "tools.jsonl"                # ticket 08, results/state/ (hook_log.py)
 TRACE_DIR = os.path.join("results", "state", "trace")
 STEPS_SUFFIX = ".steps.jsonl"
 INDEX_FILE = claude_transcript.INDEX_FILE
@@ -713,6 +725,94 @@ def workspace_sessions(workspace):
     return found
 
 
+def read_tool_log(path):
+    """The hook log's records, in file order; a torn or foreign line is
+    skipped, a missing file is []."""
+    entries = []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return entries
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(entry, dict) and entry.get("tool"):
+            entries.append(entry)
+    return entries
+
+
+def _hook_is_error(entry):
+    """The hook's verdict on the call: exit code first, its flag second,
+    None when it says nothing."""
+    code = entry.get("exit_code")
+    if isinstance(code, int) and not isinstance(code, bool):
+        return code != 0
+    flag = entry.get("is_error")
+    return bool(flag) if flag is not None else None
+
+
+def merge_tool_log(steps, entries):
+    """Fold hook records into the steps in place; return how many joined.
+
+    A record joins the tool_use (and its tool_result) with its
+    `tool_use_id`; a record without one joins the first still-unjoined
+    call in the same session with the same tool and command. On a join the
+    result's `is_error` follows the hook's exit code and the use's
+    `latency_ms` the hook's `duration_ms` when it has one.
+    """
+    uses = {}
+    results = {}
+    by_shape = {}
+    for step in steps:
+        if step.get("kind") == "tool_use":
+            if step.get("tool_use_id"):
+                uses[step["tool_use_id"]] = step
+            by_shape.setdefault((step.get("session_id"), step.get("tool"),
+                                 step.get("command")), []).append(step)
+        elif step.get("kind") == "tool_result" and step.get("tool_use_id"):
+            results[step["tool_use_id"]] = step
+    joined = set()
+    merged = 0
+    for entry in entries:
+        use = None
+        call_id = entry.get("tool_use_id")
+        if call_id and call_id in uses:
+            use = uses[call_id]
+        elif not call_id:
+            for cand in by_shape.get((entry.get("session_id"), entry.get("tool"),
+                                      entry.get("command")), []):
+                if id(cand) not in joined:
+                    use = cand
+                    break
+        if use is None or id(use) in joined:
+            continue
+        joined.add(id(use))
+        merged += 1
+        duration = entry.get("duration_ms")
+        if isinstance(duration, int) and not isinstance(duration, bool) and duration >= 0:
+            use["latency_ms"] = duration
+        verdict = _hook_is_error(entry)
+        result = results.get(use.get("tool_use_id"))
+        if result is not None and verdict is not None:
+            result["is_error"] = verdict
+    return merged
+
+
+def merge_tool_log_families(families, entries):
+    """`merge_tool_log` over every session of `[(host, {sid: steps})]`."""
+    merged = 0
+    for _, family in families:
+        for steps in family.values():
+            merged += merge_tool_log(steps, entries)
+    return merged
+
+
 def write_steps(steps, out_dir, session_id):
     """`<out_dir>/<session_id>.steps.jsonl`, one step per line."""
     out_dir = Path(out_dir)
@@ -850,6 +950,8 @@ def main(argv=None):
     parser.add_argument("--db", help="opencode.db path (default: $OPENCODE_DB or ~/.local/share/opencode/opencode.db)")
     parser.add_argument("--projects-dir", help="Claude Code projects dir (default: ~/.claude/projects)")
     parser.add_argument("--out", help="output dir (default: <workspace>/%s)" % TRACE_DIR)
+    parser.add_argument("--tools", help="hook log to merge (default: <workspace>/results/state/%s)"
+                        % TOOLS_FILE)
     parser.add_argument("--top", type=int, metavar="N",
                         help="print the N heaviest outputs and reasoning blocks; write nothing")
     parser.add_argument("--no-subagents", action="store_true",
@@ -870,6 +972,10 @@ def main(argv=None):
 
     if args.no_subagents:                 # a family lists its parent first
         families = [(host, dict(list(fam.items())[:1])) for host, fam in families]
+    tools_path = args.tools
+    if not tools_path and args.workspace:
+        tools_path = os.path.join(args.workspace, "results", "state", TOOLS_FILE)
+    hooked = merge_tool_log_families(families, read_tool_log(tools_path)) if tools_path else 0
     if args.top is not None:
         for host, family in families:
             for sid, steps in family.items():
@@ -883,7 +989,8 @@ def main(argv=None):
             write_steps(steps, out_dir, sid)
             written += 1
             steps_total += len(steps)
-    print(f"PASS: run_trace sessions={written} steps={steps_total} dir={out_dir}")
+    print(f"PASS: run_trace sessions={written} steps={steps_total} dir={out_dir} "
+          f"hooked={hooked}")
     return 0
 
 

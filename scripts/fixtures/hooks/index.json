@@ -1,0 +1,19 @@
+{
+  "45641dd8-dbcc-4f08-8f92-90237c4a0f63": {
+    "captured_from": "45641dd8-dbcc-4f08-8f92-90237c4a0f63.jsonl",
+    "captured_from_dir": "C--Users-afpim-Repos-HFSS-automation--claude-worktrees-run-logging-plan",
+    "card": {
+      "billed": 308,
+      "parts": 8,
+      "slug": "Shell commands test",
+      "storesize": 28535,
+      "time_created": 1788387688952,
+      "time_updated": 1788387699760,
+      "tokens_cache_read": 67856,
+      "tokens_cache_write": 10959,
+      "tokens_input": 114,
+      "tokens_output": 194,
+      "tokens_reasoning": 30
+    }
+  }
+}

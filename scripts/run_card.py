@@ -45,12 +45,21 @@ guessed. The verdict-table helper compares active wall only when the
 baseline's build-to-solve window is derivable the same way; otherwise the
 wall row is marked informational.
 
+The verdict's baseline is a row of the runs index (run logging, ticket 07:
+`docs/runs/index.jsonl`, one line per run, written by `scripts/run_report.py`).
+`--verdict` scores against `--baseline <run_id>` when given, else the newest
+completed run of the same recipe in the index (this workspace's own row
+excluded), else the `silent-engine` seed row — and prints which, as
+`baseline: <run_id> (<how>)`, above the table. The two historical baselines
+(`silent-engine`, `shiny-canyon`) are the index's seed rows, built from the
+`BASELINE` / `PILOT` literals below by `seed_rows()`.
+
 The database is opened read-only (WAL-safe while opencode is running) with
 a generous busy timeout. Stdlib only, Python 3.10 compatible.
 
 Usage:
     python scripts/run_card.py --slug <slug> [--db PATH] [--workspace DIR]
-    python scripts/run_card.py --latest [--db PATH] [--verdict]
+    python scripts/run_card.py --latest [--db PATH] [--verdict [--baseline RUN_ID]]
     python scripts/run_card.py --slug <slug> --summary <path>/summary.md
     python scripts/run_card.py --latest --summary <path>/summary.md --verdict
     python scripts/run_card.py --summary <path>/summary.md      # Claude Code:
@@ -114,6 +123,13 @@ REASON_GATE_BEFORE_START = "solve gate precedes session start"
 # window was never recorded (no ledger/machine state existed then), so
 # active_wall_ms stays None: the wall axis is informational until a
 # baseline measured the same way exists.
+#
+# Since run logging ticket 07 these two are the SEED ROWS of the runs index
+# (`docs/runs/index.jsonl`, `seed_rows()` below): the verdict table reads
+# its baseline from the index and falls back to `silent-engine` only when
+# the index holds no completed run of the same recipe. `recipe`, `workspace`
+# and `started` are the identity columns every index row carries; their
+# provenance is in `SEED_SOURCE`.
 BASELINE = {
     "label": "silent-engine",
     "billed": 398130,
@@ -124,6 +140,9 @@ BASELINE = {
     # billed total.
     "outcome": "completed",
     "completions": 1,
+    "recipe": "bowtie-5g-baseline",
+    "workspace": "bowtie-3500",
+    "started": "2026-08-03T04:43:14Z",
 }
 
 # The pilot, re-scored the same way. Kept as a named constant because it is
@@ -139,6 +158,21 @@ PILOT = {
     "active_wall_ms": None,
     "outcome": "abandoned",
     "completions": 0,
+    "recipe": "bowtie-5g-baseline",
+    "workspace": "bowtie-3500-pilot",
+    "started": "2026-08-06T03:56:43Z",
+}
+
+# Where each seed row's numbers were read, so the index never has to be
+# trusted on its own word (docs/agents/fixture-fidelity.md).
+SEED_SOURCE = {
+    "silent-engine": ("docs/hfss-agent-performance-analysis.md section 1 (billed, parts; "
+                      "the session 'bowtie-3500', created 2026-08-03T04:43:14Z per the "
+                      "reference SQL of section 10, pinned in scripts/test_run_card.py); "
+                      "outcome and completions re-scored by scripts/run_card.py BASELINE"),
+    "shiny-canyon": (".scratch/hfss-agent-perf-refactor/pilot-retrospective.md verdict table "
+                     "(billed, parts) as scripts/run_card.py PILOT; started = the session's "
+                     "first traced step in workspaces/bowtie-3500-pilot/run-report.json"),
 }
 
 REFERENCE_SQL = """
@@ -555,10 +589,19 @@ def _verdict(pct, frac):
 
 
 def _cmp_row(metric, base, value, threshold, frac):
+    """One exact-comparison row; informational when either side is not a
+    number (an index row from a trace-only report has `parts: null`)."""
+    base_ok = isinstance(base, int) and not isinstance(base, bool)
+    value_ok = isinstance(value, int) and not isinstance(value, bool)
+    base_cell = f"{base:,}" if base_ok else "n/a"
+    value_cell = f"{value:,}" if value_ok else "n/a"
+    if not (base_ok and value_ok):
+        why = f"baseline has no {metric}" if not base_ok else f"{metric} unmeasurable"
+        return [metric, base_cell, value_cell, f"informational - {why}", threshold, "-"]
     return [
         metric,
-        f"{base:,}",
-        f"{value:,}",
+        base_cell,
+        value_cell,
         _fmt_pct(_pct(value, base)),
         threshold,
         _verdict(_pct(value, base), frac),
@@ -603,16 +646,189 @@ def verdict_table(card, wall, baseline=None):
     Billed tokens and parts are compared exactly. Active wall is compared
     only when the baseline build-to-solve window is derivable the same way
     (and this run's window is measurable); otherwise the wall row is
-    marked informational.
+    marked informational. `baseline` is any index row (`choose_baseline`);
+    None means the `silent-engine` seed.
     """
     b = BASELINE if baseline is None else baseline
     header = ["Metric", "baseline", "run", "delta", "threshold", "verdict"]
     rows = [
-        _cmp_row("billed tokens", b["billed"], card["billed"], ">=50% lower", 0.50),
-        _cmp_row("parts", b["parts"], card["parts"], ">=40% lower", 0.40),
+        _cmp_row("billed tokens", b.get("billed"), card.get("billed"), ">=50% lower", 0.50),
+        _cmp_row("parts", b.get("parts"), card.get("parts"), ">=40% lower", 0.40),
         _wall_row(wall, b),
     ]
     return _markdown_table(header, rows)
+
+
+# -- the runs index (run logging, ticket 07) ---------------------------------
+#
+# `docs/runs/index.jsonl`: one JSON object per line, one line per run, the
+# headline columns below. `scripts/run_report.py` appends (or replaces, by
+# `run_id`) a line every time it writes a report and rebuilds the whole file
+# from every `workspaces/*/run-report.json` with `--reindex`; the reports are
+# the source, the index is derived. The two historical baselines above are
+# its seed rows, so the file never lacks something to compare against.
+
+INDEX_PATH = REPO / "docs" / "runs" / "index.jsonl"
+INDEX_COLUMNS = ("run_id", "workspace", "recipe", "skill_commit", "host", "outcome",
+                 "completions", "billed", "billed_per_completion", "parts", "raw_wall_ms",
+                 "active_wall_ms", "started", "tokens_by_phase", "findings_high",
+                 "top_finding_kind", "report_path")
+SEED_COLUMNS = INDEX_COLUMNS + ("seed", "source")
+
+
+def seed_rows():
+    """The index lines for `silent-engine` and `shiny-canyon`, in that order,
+    in the columns every row has; `seed: true` and `source` mark them."""
+    rows = []
+    for spec in (BASELINE, PILOT):
+        outcome = Outcome(None, outcome=spec["outcome"], completions=spec["completions"])
+        row = {column: None for column in SEED_COLUMNS}
+        row.update({
+            "run_id": spec["label"], "workspace": spec["workspace"], "recipe": spec["recipe"],
+            "skill_commit": UNKNOWN_OUTCOME, "host": HOST_OPENCODE,
+            "outcome": spec["outcome"], "completions": spec["completions"],
+            "billed": spec["billed"], "billed_per_completion": outcome.cost_label(spec["billed"]),
+            "parts": spec["parts"], "raw_wall_ms": None, "active_wall_ms": spec["active_wall_ms"],
+            "started": spec["started"], "tokens_by_phase": None, "findings_high": None,
+            "top_finding_kind": None, "report_path": None,
+            "seed": True, "source": SEED_SOURCE[spec["label"]],
+        })
+        rows.append(row)
+    return rows
+
+
+def ordered_row(row):
+    """A row with the index columns first, in order; anything else after,
+    sorted by name; every nested dict (`tokens_by_phase`) with its keys
+    sorted, as `run-report.json` stores it. Same run in, same line out,
+    whether the row came from memory or was read back from the report."""
+    out = {column: _canonical(row.get(column)) for column in INDEX_COLUMNS}
+    for key in sorted(k for k in row if k not in INDEX_COLUMNS):
+        out[key] = _canonical(row[key])
+    return out
+
+
+def _canonical(value):
+    if isinstance(value, dict):
+        return {k: _canonical(value[k]) for k in sorted(value)}
+    if isinstance(value, list):
+        return [_canonical(v) for v in value]
+    return value
+
+
+def index_sort_key(row):
+    """Oldest first: by `started`, seeds before a report that starts at the
+    same instant (the pilot's seed and its report are one session), then by
+    `run_id`. A row with no start sorts first, never in the middle."""
+    return (str(row.get("started") or ""), 0 if row.get("seed") else 1, str(row.get("run_id") or ""))
+
+
+def read_index(path):
+    """The index file's rows, in file order; None when there is no file.
+    A line that is not a JSON object is skipped, never guessed at."""
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    rows = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("run_id"):
+            rows.append(row)
+    return rows
+
+
+def index_rows(path=None):
+    """Every row the index holds (or would hold) plus the seeds, oldest first.
+
+    The seeds come from this module's constants, never from the file: a
+    hand-edited seed line is overridden, so `--reindex` and an append agree
+    byte for byte. A missing file gives the seeds alone.
+    """
+    by_id = {}
+    for row in read_index(INDEX_PATH if path is None else path) or []:
+        by_id[row["run_id"]] = row
+    for row in seed_rows():
+        by_id[row["run_id"]] = row
+    return sorted(by_id.values(), key=index_sort_key)
+
+
+RECIPE_RE = re.compile(r"(?m)^-\s*Recipe:\s*`?([A-Za-z0-9][A-Za-z0-9_-]*)")
+
+
+def recipe_of(workspace):
+    """The recipe the ledger's Session 1 block names, or None."""
+    if workspace is None:
+        return None
+    try:
+        text = (Path(workspace) / "state.md").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    m = RECIPE_RE.search(text)
+    return m.group(1) if m else None
+
+
+def choose_baseline(rows, recipe=None, workspace=None, run_id=None, index_path=None):
+    """(row, how) — the baseline the verdict table is scored against.
+
+    `run_id` (the `--baseline` flag) names a row outright. Otherwise the
+    newest completed run of `recipe` in the index, this workspace's own row
+    excluded (one report per workspace directory; a re-entry is a new
+    directory, ADR 0001). When nothing comparable exists the `silent-engine`
+    seed is used and `how` says why, so a verdict is never silently scored
+    against the wrong thing. (None, reason) only for an unknown `run_id`.
+    """
+    index_name = _index_name(index_path)
+    if run_id:
+        row = next((r for r in rows if r.get("run_id") == run_id), None)
+        if row is None:
+            return None, f"no run '{run_id}' in {index_name} or among the seed rows"
+        return row, "--baseline" + ("; seed row" if row.get("seed") else f"; from {index_name}")
+    if recipe in (None, UNKNOWN_OUTCOME):
+        reason = "recipe unrecorded, nothing comparable in " + index_name
+    else:
+        mine = [r for r in rows
+                if r.get("recipe") == recipe and r.get("workspace") != workspace
+                and str(r.get("outcome") or "").startswith(OUTCOME_COMPLETED)]
+        if mine:
+            row = mine[-1]
+            return row, (f"newest completed {recipe} run in {index_name}"
+                         + ("; seed row" if row.get("seed") else ""))
+        reason = f"no completed {recipe} run in {index_name}" + (
+            f" besides {workspace}" if workspace else "")
+    seed = next((r for r in rows if r.get("run_id") == BASELINE["label"]), seed_rows()[0])
+    return seed, f"seed; {reason}"
+
+
+def _index_name(index_path):
+    path = Path(INDEX_PATH if index_path is None else index_path)
+    try:
+        return path.resolve().relative_to(REPO.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def print_verdict(card, wall, workspace, args):
+    """The `baseline: <run_id> (<how>)` line and the verdict table; 1 when
+    `--baseline` names a run the index does not hold."""
+    index_path = getattr(args, "index", None) or INDEX_PATH
+    rows = index_rows(index_path)
+    base, how = choose_baseline(rows, recipe_of(workspace),
+                                Path(workspace).name if workspace else None,
+                                getattr(args, "baseline", None), index_path)
+    if base is None:
+        print(f"error: {how}", file=sys.stderr)
+        return 1
+    print()
+    print(f"baseline: {base['run_id']} ({how})")
+    print(verdict_table(card, wall, base))
+    return 0
 
 
 # -- the run: every declared session, plus subagents, plus a total -----------
@@ -960,7 +1176,14 @@ def main(argv=None):
                         help="workspace dir (state.md + results/state/); "
                              "defaults to the --summary path's parent")
     parser.add_argument("--verdict", action="store_true",
-                        help="also print the acceptance-verdict table vs the baseline")
+                        help="also print the acceptance-verdict table vs the baseline "
+                             "(default: the newest completed run of the same recipe in "
+                             "the runs index, else the silent-engine seed)")
+    parser.add_argument("--baseline", metavar="RUN_ID",
+                        help="index row to score --verdict against (a run_id from "
+                             "docs/runs/index.jsonl, or silent-engine / shiny-canyon)")
+    parser.add_argument("--index",
+                        help="runs index to read baselines from (default docs/runs/index.jsonl)")
     parser.add_argument("--outcome", choices=OUTCOMES,
                         help="what the run delivered; overrides "
                              "results/state/outcome.txt")
@@ -1000,9 +1223,8 @@ def main(argv=None):
             print(f"run card written to {args.summary}")
             card_written(workspace, args.summary, run["total"], outcome,
                          sessions=len(run["entries"]))
-        if args.verdict:
-            print()
-            print(verdict_table(run["total"], wall))
+        if args.verdict and print_verdict(run["total"], wall, workspace, args):
+            return 1
         unresolved = [e for e in run["entries"] if e["card"] is None]
         if unresolved and not run["cards"]:
             print("error: none of the declared sessions could be carded: "
@@ -1033,9 +1255,8 @@ def main(argv=None):
             return 1
         print(f"run card written to {args.summary}")
         card_written(workspace, args.summary, card, outcome, sessions=1)
-    if args.verdict:
-        print()
-        print(verdict_table(card, wall))
+    if args.verdict and print_verdict(card, wall, workspace, args):
+        return 1
     return 0
 
 

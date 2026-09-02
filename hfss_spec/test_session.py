@@ -199,6 +199,64 @@ class TestHistory(unittest.TestCase):
             self.assertEqual(len(S.history(state)), 1)
 
 
+class TestSessionMap(unittest.TestCase):
+    """The per-machine map the Claude Code tool hook reads (ticket 08):
+    `~/.hfss-agent/sessions.json`, session id -> workspace + phase."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, ignore_errors=True))
+        self.env = {S.ENV_AGENT_HOME: os.path.join(self.tmp, "home")}
+
+    def test_the_map_lives_outside_the_checkout_and_is_relocatable(self):
+        real = S.sessions_map_path({})
+        self.assertFalse(real.startswith(S.REPO_ROOT))
+        self.assertTrue(real.replace("\\", "/").endswith("/.hfss-agent/sessions.json"))
+        self.assertEqual(S.sessions_map_path(self.env),
+                         os.path.join(self.tmp, "home", "sessions.json"))
+
+    def test_register_keeps_other_sessions_and_overwrites_a_redeclaration(self):
+        ws_a = os.path.join(self.tmp, "a")
+        ws_b = os.path.join(self.tmp, "b")
+        path = S.register_session("sid-a", ws_a, S.CLARIFY, host="claude-code",
+                                  now_ms=1_756_800_000_000, environ=self.env)
+        self.assertEqual(path, S.sessions_map_path(self.env))
+        S.register_session("sid-b", ws_b, S.BUILD, environ=self.env)
+        S.register_session("sid-a", ws_a, S.SOLVE, environ=self.env)
+        data = S.load_sessions_map(self.env)
+        self.assertEqual(set(data), {"sid-a", "sid-b"})
+        self.assertEqual(data["sid-a"]["phase"], S.SOLVE)
+        self.assertEqual(data["sid-a"]["workspace"], os.path.abspath(ws_a))
+        self.assertEqual(data["sid-b"]["phase"], S.BUILD)
+        for key in ("workspace", "phase", "host", "ts", "ts_ms"):
+            self.assertIn(key, data["sid-b"])
+        self.assertEqual(os.listdir(os.path.join(self.tmp, "home")), ["sessions.json"])
+
+    def test_a_corrupt_map_is_replaced_and_an_empty_id_ignored(self):
+        os.makedirs(os.path.join(self.tmp, "home"))
+        with open(S.sessions_map_path(self.env), "w", encoding="utf-8") as fh:
+            fh.write("{not json")
+        self.assertEqual(S.load_sessions_map(self.env), {})
+        self.assertIsNone(S.register_session("", self.tmp, S.BUILD, environ=self.env))
+        S.register_session("sid", self.tmp, S.BUILD, environ=self.env)
+        self.assertEqual(set(S.load_sessions_map(self.env)), {"sid"})
+
+    def test_an_unwritable_home_returns_none_not_an_error(self):
+        blocker = os.path.join(self.tmp, "file")
+        with open(blocker, "w", encoding="utf-8") as fh:
+            fh.write("a file, not a dir")
+        env = {S.ENV_AGENT_HOME: os.path.join(blocker, "home")}
+        self.assertIsNone(S.register_session("sid", self.tmp, S.BUILD, environ=env))
+
+    def test_start_itself_does_not_register(self):
+        """Every suite declares sessions through `start()`; only the CLI
+        maps the live harness session, so a test run never points the hook
+        at a temp dir."""
+        S.start(S.BUILD, state_dir=os.path.join(self.tmp, "ws", "results", "state"),
+                host="claude-code", host_session_id="sid-start")
+        self.assertEqual(S.load_sessions_map(self.env), {})
+
+
 class TestBudget(unittest.TestCase):
     def test_the_default_matches_the_documented_escalation(self):
         self.assertEqual(S.DEFAULT_CALL_BUDGET, 60)

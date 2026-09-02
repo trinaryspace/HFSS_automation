@@ -78,6 +78,10 @@ CONTRACT_MARKERS = {
                       "install_skill.py", "10 minutes"],
     "analyze-papers is per host": ["~/.agents/skills/", "~/.claude/skills/",
                                    "ask the user to run the installer"],
+    # Run logging 02/09: the outcome is recorded by script, the report is
+    # written at the end of every run after the card, and the retro reads it.
+    "run report": ["run_report.py", "run-report.md", "run-report.json",
+                   "record_outcome.py", "docs/agents/run-retro.md"],
 }
 
 DESIGN_SPEC_REFERENCE = REFERENCE.parent / "design-spec.md"
@@ -125,7 +129,30 @@ REFERENCE_MARKERS = {
                       "session.json", "verify_agents.py"],
     # Run logging 03: every PASS:/FAIL: line is also an event, machine-written.
     "event log": ["events.jsonl", "also an event", "hfss_spec/events.py"],
+    # Run logging 02/09: gate verdicts and the outcome are recorded by script
+    # at the moment they happen; the report is the Summary step's last act;
+    # the harness table carries the step trace row for both stores.
+    "gate and outcome recorded": ["record_gate.py", "review_gate.txt",
+                                  "record_outcome.py", "outcome.txt"],
+    "run report step": ["run_report.py", "run-report.md", "run-report.json",
+                        "run-retro.md"],
+    "step trace row": ["run_trace.py", "steps.jsonl", "subagents/"],
 }
+
+# Run logging 09: the workspace template names the end-of-run order and the
+# report, so a fresh workspace cannot close out without producing it.
+TEMPLATE_MARKERS = {
+    "README.md": {"end-of-run checklist": ["record_outcome.py", "run_card.py",
+                                           "run_report.py", "run-report.md"]},
+    "summary.md": {"report pointer": ["run-report.md", "run_report.py"]},
+    "state.md": {"report pointer": ["run_report.py"]},
+}
+
+# The retro doc and the `runcard` subagent's contract (both hosts, verbatim
+# per scripts/verify_agents.py; the Claude Code copy is checked here).
+RUN_RETRO = REPO / "docs" / "agents" / "run-retro.md"
+AGENTS_MD = REPO / "AGENTS.md"
+RUNCARD_AGENT = REPO / ".claude" / "agents" / "runcard.md"
 
 ADRS = {
     "0001": "copy",
@@ -220,6 +247,32 @@ def main() -> int:
     for f in TEMPLATE_SRC_FILES:
         if not check(f"template src has {f}", (TEMPLATE / "src" / f).is_file()):
             failures += 1
+    for f, groups in TEMPLATE_MARKERS.items():
+        target = TEMPLATE / f
+        body = target.read_text(encoding="utf-8").lower() if target.is_file() else ""
+        for label, markers in groups.items():
+            missing = [m for m in markers if m.lower() not in body]
+            if not check(f"template {f}: {label}", not missing, f"missing: {missing}"):
+                failures += 1
+
+    # Run logging 09: the retro is reachable from AGENTS.md, and the runcard
+    # subagent narrates run-report.json rather than computing a number.
+    if not check("run retro doc exists", RUN_RETRO.is_file()):
+        failures += 1
+    else:
+        retro = RUN_RETRO.read_text(encoding="utf-8")
+        missing = [m for m in ("sections 1–2", "`high` finding", "tool defect",
+                               "campaign log") if m not in retro]
+        if not check("run retro names its three steps", not missing, f"missing: {missing}"):
+            failures += 1
+    agents_md = AGENTS_MD.read_text(encoding="utf-8") if AGENTS_MD.is_file() else ""
+    if not check("AGENTS.md links the run retro", "docs/agents/run-retro.md" in agents_md):
+        failures += 1
+    runcard = RUNCARD_AGENT.read_text(encoding="utf-8") if RUNCARD_AGENT.is_file() else ""
+    missing = [m for m in ("run-report.json", "never compute") if m not in runcard]
+    if not check("runcard subagent narrates run-report.json", not missing,
+                 f"missing: {missing}"):
+        failures += 1
 
     gi = GITIGNORE.read_text(encoding="utf-8") if GITIGNORE.is_file() else ""
     for pat in ["workspaces", "aedt", "results", "__pycache__"]:

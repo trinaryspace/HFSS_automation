@@ -396,8 +396,10 @@ class CardPrintTest(unittest.TestCase):
             ws = write_workspace(td)
             code, text, _ = self.run_cli(
                 db, ["--slug", "silent-engine", "--workspace", str(ws),
-                     "--verdict"])
+                     "--verdict", "--baseline", "silent-engine",
+                     "--index", str(Path(td) / "no-index.jsonl")])
         self.assertEqual(code, 0)
+        self.assertIn("baseline: silent-engine (--baseline; seed row)", text)
         self.assertIn("| Metric", text)
         self.assertIn("| billed tokens", text)
         self.assertIn("| parts", text)
@@ -1054,7 +1056,9 @@ class TestRunFromHistory(unittest.TestCase):
     def test_verdict_table_scores_the_run_total(self):
         self._declare("clarify", "id-clarify")
         self._declare("build", "id-build")
-        code, text, _ = self.run_cli(["--workspace", str(self.ws), "--verdict"])
+        code, text, _ = self.run_cli(["--workspace", str(self.ws), "--verdict",
+                                      "--baseline", "silent-engine",
+                                      "--index", str(Path(self.tmp) / "no-index.jsonl")])
         self.assertEqual(code, 0)
         self.assertIn("| billed tokens", text)
         row = [ln for ln in text.splitlines() if ln.startswith("| billed tokens")][0]
@@ -1216,6 +1220,133 @@ class TestPatchArrayRecord(unittest.TestCase):
         self.assertIn("active_wall_start_source: state.md", text)
         self.assertIn("solve_submissions: 0", text)
         self.assertIn("active_wall: unmeasurable: no solve_gate timestamp", text)
+
+
+# -- the runs index as the verdict's baseline (run logging, ticket 07) --------
+
+class TestRunsIndexBaseline(unittest.TestCase):
+    """`--verdict` scores against a row of `docs/runs/index.jsonl`: the one
+    `--baseline` names, else the newest completed run of the same recipe
+    (this workspace excluded), else the `silent-engine` seed — and always
+    says which. The two historical baselines are the index's seed rows,
+    built from the module's literals."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.db = Path(self.tmp) / "opencode.db"
+        make_db(self.db, [BASELINE])
+        self.ws = write_workspace(self.tmp)          # recipe bowtie-5g-baseline, name "ws"
+        self.index = Path(self.tmp) / "index.jsonl"
+
+    def _row(self, run_id, recipe, outcome, started, billed=1000, parts=100, workspace=None,
+             active_wall_ms=None):
+        return {"run_id": run_id, "workspace": workspace or run_id, "recipe": recipe,
+                "outcome": outcome, "completions": 1 if outcome == "completed" else 0,
+                "billed": billed, "parts": parts, "active_wall_ms": active_wall_ms,
+                "started": started}
+
+    def _write_index(self, rows):
+        self.index.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+
+    def run_cli(self, args):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = run_card.main(["--db", str(self.db), "--index", str(self.index)] + args)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_seed_rows_carry_the_literals_and_say_where_they_came_from(self):
+        rows = run_card.seed_rows()
+        self.assertEqual([r["run_id"] for r in rows], ["silent-engine", "shiny-canyon"])
+        for row, spec in zip(rows, (run_card.BASELINE, run_card.PILOT)):
+            self.assertEqual(list(row), list(run_card.SEED_COLUMNS))
+            for key in ("billed", "parts", "outcome", "completions", "recipe", "workspace", "started"):
+                self.assertEqual(row[key], spec[key], key)
+            self.assertIsNone(row["active_wall_ms"])
+            self.assertIs(row["seed"], True)
+            self.assertEqual(row["host"], "opencode")
+        self.assertIn("docs/hfss-agent-performance-analysis.md", rows[0]["source"])
+        self.assertEqual(rows[0]["billed_per_completion"], "398,130")
+        self.assertEqual(rows[1]["billed_per_completion"], "infinite (1,579,333 billed, 0 completed)")
+        self.assertIn("pilot-retrospective.md", rows[1]["source"])
+
+    def test_index_rows_add_the_seeds_override_a_hand_edited_seed_and_sort_oldest_first(self):
+        self._write_index([
+            self._row("silent-engine", "bowtie-5g-baseline", "completed", "2026-08-03T04:43:14Z", billed=1),
+            self._row("late", "x", "completed", "2026-09-01T00:00:00Z"),
+            self._row("early", "x", "completed", "2026-01-01T00:00:00Z"),
+            self._row("undated", "x", "completed", None),
+        ])
+        rows = run_card.index_rows(self.index)
+        self.assertEqual([r["run_id"] for r in rows],
+                         ["undated", "early", "silent-engine", "shiny-canyon", "late"])
+        self.assertEqual(rows[2]["billed"], run_card.BASELINE["billed"])      # the file's 1 lost
+        self.assertEqual([r["run_id"] for r in run_card.index_rows(Path(self.tmp) / "none.jsonl")],
+                         ["silent-engine", "shiny-canyon"])
+
+    def test_default_is_the_newest_completed_run_of_the_recipe_not_this_workspace(self):
+        self._write_index([
+            self._row("older-ok", "bowtie-5g-baseline", "completed", "2026-08-10T00:00:00Z", billed=100, parts=10),
+            self._row("newer-ok", "bowtie-5g-baseline", "completed", "2026-08-11T00:00:00Z", billed=200, parts=20),
+            self._row("newest-abandoned", "bowtie-5g-baseline", "abandoned", "2026-08-12T00:00:00Z"),
+            self._row("mine", "bowtie-5g-baseline", "completed", "2026-08-15T00:00:00Z", workspace="ws"),
+            self._row("other-recipe", "horn-x", "completed", "2026-08-20T00:00:00Z"),
+        ])
+        code, text, _ = self.run_cli(["--slug", "silent-engine", "--workspace", str(self.ws), "--verdict"])
+        self.assertEqual(code, 0)
+        self.assertIn(f"baseline: newer-ok (newest completed bowtie-5g-baseline run in {self.index.as_posix()})",
+                      text)
+        row = [ln for ln in text.splitlines() if ln.startswith("| billed tokens")][0]
+        cells = [c.strip() for c in row.strip().strip("|").split("|")]
+        self.assertEqual(cells[1:3], ["200", "398,130"])
+        self.assertEqual(cells[5], "FAIL")
+
+    def test_without_a_comparable_run_the_seed_is_used_and_said(self):
+        ledger = (self.ws / "state.md").read_text(encoding="utf-8")
+        (self.ws / "state.md").write_text(ledger.replace("bowtie-5g-baseline", "horn-x"), encoding="utf-8")
+        self._write_index([self._row("mine", "horn-x", "completed", "2026-08-15T00:00:00Z", workspace="ws")])
+        code, text, _ = self.run_cli(["--slug", "silent-engine", "--workspace", str(self.ws), "--verdict"])
+        self.assertEqual(code, 0)
+        self.assertIn(f"baseline: silent-engine (seed; no completed horn-x run in {self.index.as_posix()} "
+                      "besides ws)", text)
+        self.assertIn("| 398,130 ", text)
+        # No workspace at all: the recipe is unknown and the seed is the baseline.
+        code, text, _ = self.run_cli(["--slug", "silent-engine", "--verdict"])
+        self.assertEqual(code, 0)
+        self.assertIn("baseline: silent-engine (seed; recipe unrecorded", text)
+
+    def test_baseline_flag_names_a_row_and_an_unknown_one_fails(self):
+        code, text, _ = self.run_cli(["--slug", "silent-engine", "--workspace", str(self.ws),
+                                      "--verdict", "--baseline", "shiny-canyon"])
+        self.assertEqual(code, 0)
+        self.assertIn("baseline: shiny-canyon (--baseline; seed row)", text)
+        row = [ln for ln in text.splitlines() if ln.startswith("| billed tokens")][0]
+        self.assertIn("| 1,579,333 ", row)
+        self.assertIn("**-75%**", row)
+        self.assertIn("PASS", row)
+        self._write_index([self._row("r1", "horn-x", "completed", "2026-08-15T00:00:00Z", billed=500, parts=50)])
+        code, text, _ = self.run_cli(["--slug", "silent-engine", "--verdict", "--baseline", "r1"])
+        self.assertEqual(code, 0)
+        self.assertIn(f"baseline: r1 (--baseline; from {self.index.as_posix()})", text)
+        code, _, err = self.run_cli(["--slug", "silent-engine", "--verdict", "--baseline", "nope"])
+        self.assertEqual(code, 1)
+        self.assertIn("no run 'nope' in", err)
+
+    def test_a_baseline_without_parts_makes_that_row_informational(self):
+        card = {"billed": 100, "parts": 10}
+        table = run_card.verdict_table(card, run_card.Wall(None),
+                                       baseline={"run_id": "trace-only", "billed": 200, "parts": None})
+        parts_row = [ln for ln in table.splitlines() if ln.startswith("| parts")][0]
+        cells = [c.strip() for c in parts_row.strip().strip("|").split("|")]
+        self.assertEqual(cells[1], "n/a")
+        self.assertEqual(cells[3], "informational - baseline has no parts")
+        self.assertEqual(cells[5], "-")
+        self.assertIn("**-50%**", table)                       # billed is still compared
+
+    def test_recipe_of_reads_the_ledger(self):
+        self.assertEqual(run_card.recipe_of(self.ws), "bowtie-5g-baseline")
+        self.assertIsNone(run_card.recipe_of(Path(self.tmp) / "none"))
+        self.assertIsNone(run_card.recipe_of(None))
 
 
 if __name__ == "__main__":

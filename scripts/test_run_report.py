@@ -49,7 +49,8 @@ NO_DB = "Z:/nonexistent/opencode.db"
 # this box's real transcripts (which do hold the 09-01 readout session).
 NO_PROJECTS = tempfile.mkdtemp(prefix="no-projects-")
 PASS_RE = re.compile(r"^PASS: run_report workspace=(\S+) sessions=(\d+)/(\d+) steps=(\d+) "
-                     r"findings=(\d+) high=(\d+) trace=(\w+)$")
+                     r"findings=(\d+) high=(\d+) trace=(\w+) index=(\d+)$")
+REINDEX_RE = re.compile(r"^PASS: run_report reindex reports=(\d+) rows=(\d+) index=(\S+) changed=(yes|no)$")
 REASONS = {run_card.REASON_NO_WORKSPACE, run_card.REASON_NO_START, run_card.REASON_NO_GATE,
            run_card.REASON_GATE_BEFORE_START, run_report.REASON_NO_TRACE,
            run_report.REASON_NO_STORE, run_report.REASON_NO_STATE}
@@ -74,8 +75,13 @@ def materialize(root, trace=True, state=True, ledger=True):
 
 
 def run_main(argv):
+    """Drive main with an empty projects dir and, unless the test gives one,
+    a throwaway index: a test must never append to docs/runs/index.jsonl."""
+    argv = list(argv)
     if "--projects-dir" not in argv:
-        argv = list(argv) + ["--projects-dir", NO_PROJECTS]
+        argv += ["--projects-dir", NO_PROJECTS]
+    if "--index" not in argv:
+        argv += ["--index", os.path.join(tempfile.mkdtemp(prefix="no-index-"), "index.jsonl")]
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         code = run_report.main(argv)
@@ -211,10 +217,14 @@ class TestReportOnTheFixtures(unittest.TestCase):
         self.assertTrue(all(r["stage_source"] == "commands" for r in rows))
         self.assertIn("`*` stage read off the command", self.md)
 
-    def test_previous_runs_says_no_index_yet(self):
-        self.assertEqual(self.js["previous"]["rows"], [])
-        self.assertTrue(self.js["previous"]["note"].startswith("no index yet (docs/runs/index.jsonl not found"))
-        self.assertIn("\n## 10. Versus previous runs\n\nno index yet", self.md)
+    def test_section_10_holds_this_run_last_and_only_its_recipe(self):
+        rows = self.js["previous"]["rows"]
+        self.assertIsNone(self.js["previous"]["note"])
+        self.assertEqual([r["run_id"] for r in rows], ["patch-array-5800-2026-08-18"])   # the seeds are bowtie
+        self.assertEqual(rows[-1]["delta"], {k: {"abs": None, "pct": None} for k in run_report.DELTA_KEYS})
+        self.assertIn("\n## 10. Versus previous runs\n\n| " + " | ".join(run_report.COMPARE_HEADER) + " |\n", self.md)
+        self.assertIn("| patch-array-5800-2026-08-18 | 2026-08-18T", self.md)
+        self.assertIn("first of its recipe in the index", self.md)
 
     def test_run_card_is_the_last_section_in_run_card_wording(self):
         card = self.js["run_card"]
@@ -229,10 +239,15 @@ class TestReportOnTheFixtures(unittest.TestCase):
         row = self.js["index_row"]
         self.assertEqual(set(row), {"run_id", "workspace", "recipe", "skill_commit", "host", "outcome",
                                     "completions", "billed", "billed_per_completion", "parts", "raw_wall_ms",
-                                    "active_wall_ms", "tokens_by_phase", "findings_high", "top_finding_kind",
-                                    "report_path"})
+                                    "active_wall_ms", "started", "tokens_by_phase", "findings_high",
+                                    "top_finding_kind", "report_path"})
+        self.assertEqual(set(row), set(run_card.INDEX_COLUMNS))
         self.assertEqual(row["billed"], self.js["headline"]["billed"])
         self.assertIsNone(row["active_wall_ms"])
+        self.assertIsNone(row["parts"])                        # trace only: the store's count is unknown
+        self.assertTrue(row["started"].startswith("2026-08-18T"))
+        self.assertEqual(row["started"], self.js["headline"]["started"])
+        self.assertIn(f"- started: {row['started']} (first traced step)\n", self.md)
         self.assertTrue(row["report_path"].endswith("patch-array-5800/run-report.md"))
 
     def test_sessions_line_names_how_each_was_found(self):
@@ -306,21 +321,43 @@ class TestDegradedInputs(unittest.TestCase):
     def test_previous_runs_from_an_index(self):
         ws = materialize(self.tmp)
         index = Path(self.tmp) / "index.jsonl"
-        rows = [{"run_id": f"patch-array-5800-2026-07-0{i}", "recipe": "corporate-patch-array",
-                 "outcome": "completed", "completions": 1, "billed": 1000 * i,
-                 "billed_per_completion": str(1000 * i), "raw_wall_ms": 60_000 * i,
+        rows = [{"run_id": f"patch-array-5800-2026-07-0{i}", "workspace": f"pa-{i}", "recipe": "corporate-patch-array",
+                 "outcome": "completed", "completions": 1, "billed": 1000 * i, "parts": 10 * i,
+                 "billed_per_completion": str(1000 * i), "raw_wall_ms": 60_000 * i, "started": f"2026-07-0{i}T00:00:00Z",
                  "active_wall_ms": None, "findings_high": i, "top_finding_kind": "idle_gap"} for i in range(1, 8)]
         rows.append({"run_id": "bowtie-1", "recipe": "bowtie-5g-baseline", "outcome": "abandoned"})
-        rows.append({"run_id": "patch-array-5800-2026-08-18", "recipe": "corporate-patch-array"})   # this run
+        rows.append({"run_id": "patch-array-5800-2026-08-18", "workspace": "patch-array-5800",
+                     "recipe": "corporate-patch-array", "billed": 1})                      # this run, stale
+        rows.append({"run_id": "patch-array-5800-2026-09-09", "workspace": "pa-later",
+                     "recipe": "corporate-patch-array", "started": "2026-09-09T00:00:00Z"})  # newer: not "previous"
         index.write_text("".join(json.dumps(r) + "\n" for r in rows) + "not json\n", encoding="utf-8")
         code, _, _ = run_main(["--workspace", str(ws), "--no-trace", "--db", NO_DB, "--index", str(index)])
         self.assertEqual(code, 0)
         js = json.loads((ws / run_report.REPORT_JSON).read_text(encoding="utf-8"))
         shown = [r["run_id"] for r in js["previous"]["rows"]]
-        self.assertEqual(shown, [f"patch-array-5800-2026-07-0{i}" for i in range(3, 8)])   # last five, same recipe
+        self.assertEqual(shown, [f"patch-array-5800-2026-07-0{i}" for i in range(3, 8)]
+                         + ["patch-array-5800-2026-08-18"])                         # last five before it, then itself
         self.assertIsNone(js["previous"]["note"])
+        mine = js["previous"]["rows"][-1]
+        self.assertEqual(mine["billed"], js["headline"]["billed"])                  # the fresh row, not the stale line
+        self.assertEqual(mine["delta"]["billed"]["abs"], js["headline"]["billed"] - 7000)
+        self.assertAlmostEqual(mine["delta"]["billed"]["pct"], (js["headline"]["billed"] - 7000) / 70.0)
+        self.assertEqual(mine["delta"]["parts"], {"abs": None, "pct": None})
         md = (ws / run_report.REPORT_MD).read_text(encoding="utf-8")
-        self.assertIn("| patch-array-5800-2026-07-07 | completed | 1 | 7000 | 7000 | 0 h 7 min 0 s | n/a | 7 | idle_gap |", md)
+        self.assertIn("| patch-array-5800-2026-07-07 | 2026-07-07T00:00:00Z | completed | 1 | 7,000 | +1,000 (+17%) "
+                      "| 70 | +10 (+17%) | n/a | n/a | 7 | idle_gap |", md)
+        self.assertIn("Deltas are against the row above; the last row is this run.", md)
+        # The index now holds the fresh row in place of the stale one, plus the seeds.
+        after = run_card.read_index(index)
+        self.assertEqual(sum(1 for r in after if r["run_id"] == "patch-array-5800-2026-08-18"), 1)
+        self.assertEqual(next(r for r in after if r["run_id"] == "patch-array-5800-2026-08-18")["billed"],
+                         js["headline"]["billed"])
+        ids = [r["run_id"] for r in after]
+        self.assertEqual(ids[0], "bowtie-1")                                       # undated sorts first
+        self.assertEqual(ids[-1], "patch-array-5800-2026-09-09")                   # oldest first, newest last
+        self.assertLess(ids.index("silent-engine"), ids.index("shiny-canyon"))
+        self.assertLess(ids.index("patch-array-5800-2026-07-07"), ids.index("silent-engine"))
+        self.assertEqual(len(ids), 12)                                             # 7 + bowtie-1 + this + later + 2 seeds
 
     def test_top_limits_the_findings_shown(self):
         ws = materialize(self.tmp)
@@ -330,6 +367,111 @@ class TestDegradedInputs(unittest.TestCase):
         self.assertEqual(len(js["top"]), 3)
         md = (ws / run_report.REPORT_MD).read_text(encoding="utf-8")
         self.assertIn("more not shown (all in run-report.json)", md)
+
+
+class TestRunsIndex(unittest.TestCase):
+    """`docs/runs/index.jsonl` (ticket 07): appended idempotently by every
+    report, rebuilt byte-identically by `--reindex`, read by `--compare`."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.index = Path(self.tmp) / "runs" / "index.jsonl"
+
+    def _render(self, ws, index=None):
+        return run_main(["--workspace", str(ws), "--no-trace", "--db", NO_DB, "--index", str(index or self.index)])
+
+    def test_report_appends_its_row_once_after_the_seeds(self):
+        ws = materialize(self.tmp)
+        code, out, _ = self._render(ws)
+        self.assertEqual(code, 0)
+        self.assertEqual(PASS_RE.match(out.strip()).group(8), "3")
+        first = self.index.read_bytes()
+        rows = [json.loads(ln) for ln in first.decode("utf-8").splitlines()]
+        self.assertEqual([r["run_id"] for r in rows], ["silent-engine", "shiny-canyon", "patch-array-5800-2026-08-18"])
+        self.assertEqual([list(r) for r in rows[:2]], [list(run_card.SEED_COLUMNS)] * 2)
+        self.assertEqual(list(rows[2]), list(run_card.INDEX_COLUMNS))
+        self.assertEqual(rows[2], json.loads((ws / run_report.REPORT_JSON).read_text(encoding="utf-8"))["index_row"])
+        self.assertTrue(first.endswith(b"\n"))
+        self.assertNotIn(b"\r", first)
+        code, out, _ = self._render(ws)
+        self.assertEqual(code, 0)
+        self.assertEqual(self.index.read_bytes(), first)                      # replaced, not appended
+        self.assertEqual(PASS_RE.match(out.strip()).group(8), "3")
+
+    def test_reindex_rebuilds_the_index_byte_identically(self):
+        root = Path(self.tmp) / "workspaces"
+        root.mkdir()
+        ws = materialize(root)
+        (root / "no-report").mkdir()
+        (root / "broken").mkdir()
+        (root / "broken" / run_report.REPORT_JSON).write_text("{not json", encoding="utf-8")
+        self.assertEqual(self._render(ws)[0], 0)
+        appended = self.index.read_bytes()
+        self.index.unlink()
+        code, out, err = run_main(["--reindex", "--index", str(self.index), "--workspaces", str(root)])
+        self.assertEqual(code, 0, err)
+        m = REINDEX_RE.match(out.strip())
+        self.assertIsNotNone(m, out)
+        self.assertEqual((m.group(1), m.group(2), m.group(4)), ("1", "3", "yes"))
+        self.assertIn("warning: skipped", err)
+        self.assertIn("broken", err)
+        self.assertEqual(self.index.read_bytes(), appended)
+        code, out, _ = run_main(["--reindex", "--index", str(self.index), "--workspaces", str(root)])
+        self.assertEqual(code, 0)
+        self.assertEqual(REINDEX_RE.match(out.strip()).group(4), "no")
+        self.assertEqual(self.index.read_bytes(), appended)
+        # A hand-edited seed line does not survive either path.
+        text = self.index.read_text(encoding="utf-8").replace('"billed": 398130', '"billed": 1')
+        self.index.write_text(text, encoding="utf-8")
+        self.assertEqual(self._render(ws)[0], 0)
+        self.assertEqual(self.index.read_bytes(), appended)
+
+    def test_compare_prints_the_recipe_rows_newest_last_with_deltas(self):
+        ws = materialize(self.tmp)
+        rows = [{"run_id": "pa-b", "workspace": "pa-b", "recipe": "corporate-patch-array", "outcome": "completed",
+                 "completions": 1, "billed": 2000, "parts": 300, "active_wall_ms": 1_800_000,
+                 "started": "2026-07-02T00:00:00Z", "findings_high": 2, "top_finding_kind": "retry_same_command"},
+                {"run_id": "pa-a", "workspace": "pa-a", "recipe": "corporate-patch-array", "outcome": "completed",
+                 "completions": 1, "billed": 1000, "parts": 200, "active_wall_ms": 1_200_000,
+                 "started": "2026-07-01T00:00:00Z", "findings_high": 1, "top_finding_kind": "idle_gap"}]
+        self.index.parent.mkdir(parents=True)
+        self.index.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        code, out, err = run_main(["--workspace", str(ws), "--compare", "--index", str(self.index)])
+        self.assertEqual(code, 0, err)
+        lines = out.splitlines()
+        self.assertEqual(lines[0], "| " + " | ".join(run_report.COMPARE_HEADER) + " |")
+        self.assertEqual(lines[2], "| pa-a | 2026-07-01T00:00:00Z | completed | 1 | 1,000 | - | 200 | - "
+                                   "| 0 h 20 min 0 s | - | 1 | idle_gap |")
+        self.assertEqual(lines[3], "| pa-b | 2026-07-02T00:00:00Z | completed | 1 | 2,000 | +1,000 (+100%) | 300 "
+                                   "| +100 (+50%) | 0 h 30 min 0 s | +0 h 10 min 0 s (+50%) | 2 | retry_same_command |")
+        self.assertEqual(len(lines), 4)                                          # the seeds are another recipe
+        # Named runs, any recipe: the two seeds, newest last, the pilot's deltas vs the baseline.
+        code, out, _ = run_main(["--compare", "shiny-canyon", "silent-engine", "--index", str(self.index)])
+        self.assertEqual(code, 0)
+        lines = out.splitlines()
+        self.assertTrue(lines[2].startswith("| silent-engine (seed) | 2026-08-03T04:43:14Z | completed | 1 | 398,130 | - | 424 | - | n/a | - |"))
+        self.assertTrue(lines[3].startswith("| shiny-canyon (seed) | 2026-08-06T03:56:43Z | abandoned | 0 | 1,579,333 "
+                                            "| +1,181,203 (+297%) | 1,392 | +968 (+228%) | n/a | n/a |"))
+        code, _, err = run_main(["--compare", "nope", "--index", str(self.index)])
+        self.assertEqual(code, 1)
+        self.assertIn("no run nope in", err)
+        (ws / "state.md").write_text("# no recipe here\n", encoding="utf-8")
+        code, _, err = run_main(["--workspace", str(ws), "--compare", "--index", str(self.index)])
+        self.assertEqual(code, 1)
+        self.assertIn("no `- Recipe:` line", err)
+
+    def test_section_10_and_the_index_agree_after_the_report(self):
+        ws = materialize(self.tmp)
+        self.assertEqual(self._render(ws)[0], 0)
+        js = json.loads((ws / run_report.REPORT_JSON).read_text(encoding="utf-8"))
+        indexed = next(r for r in run_card.read_index(self.index) if r["run_id"] == js["index_row"]["run_id"])
+        shown = dict(js["previous"]["rows"][-1])
+        shown.pop("delta")
+        self.assertEqual(shown, indexed)
+        code, out, _ = run_main(["--workspace", str(ws), "--compare", "--index", str(self.index)])
+        self.assertEqual(code, 0)
+        self.assertEqual(out, run_report.render_compare(js["previous"]["rows"]))
 
 
 class TestSessionDiscovery(unittest.TestCase):

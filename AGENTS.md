@@ -24,6 +24,10 @@ Test fixtures are captured from real artifacts, never written from memory; a syn
 
 The `hfss-agent` skill runs under both opencode and Claude Code from one source tree: links for locations, a tier-0 verbatim check for the one thing that cannot be linked (subagent prompts), and `scripts/run_card.py` reading either session store. See `docs/agents/harnesses.md`.
 
+### Run retro
+
+Every Tier-2 run ends with `scripts/run_report.py` writing `workspaces/<name>/run-report.md`; the retro reads its sections 1–2, files one issue per `high` finding that is a tool defect, and appends the row to the campaign log. See `docs/agents/run-retro.md`.
+
 ### Verification tiers
 
 `scripts/tier0.py` (seconds, no license) before any AEDT launch; `scripts/tier1.py` builds on the live desktop but never solves; Tier 2 is the full end-to-end run.

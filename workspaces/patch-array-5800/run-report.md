@@ -10,6 +10,7 @@
 - completions: unrecorded
 - billed: 2,758,554
 - billed_per_completed_sim: unrecorded
+- started: 2026-08-18T19:20:40Z (first traced step)
 - raw_wall: 344 h 32 min 0 s
 - active_wall: unmeasurable: no solve_gate timestamp
 - active_wall_start: 2026-08-18T09:27:37Z (state.md)
@@ -240,7 +241,11 @@ Readout routes:
 
 ## 10. Versus previous runs
 
-no index yet (docs/runs/index.jsonl not found; ticket 07)
+| run_id | started | outcome | completions | billed | billed delta | parts | parts delta | active_wall | active_wall delta | findings_high | top_finding_kind |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| patch-array-5800-2026-08-18 | 2026-08-18T19:20:40Z | unrecorded (outcome.txt is not key=value: completed - user verdict: tuning issue (element resonance 5.6 GHz, ~7 dB in both designs), not a feed defeat; solves #1b + #2 banked Normal Completion) | unrecorded | 2,758,554 | - | n/a | - | n/a | - | 35 | long_reasoning |
+
+This run is the first of its recipe in the index; deltas need a previous run.
 
 ## 11. The run card
 

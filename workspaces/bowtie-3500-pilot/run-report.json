@@ -2904,6 +2904,7 @@
     "skill_commit": "unrecorded",
     "solve_gate": "n/a",
     "solve_submissions": 0,
+    "started": "2026-08-06T03:56:43Z",
     "steps": 1449,
     "steps_by_phase": {
       "undeclared": 1449
@@ -2959,6 +2960,7 @@
     "report_path": "workspaces/bowtie-3500-pilot/run-report.md",
     "run_id": "bowtie-3500-pilot-2026-08-06",
     "skill_commit": "unrecorded",
+    "started": "2026-08-06T03:56:43Z",
     "tokens_by_phase": {
       "undeclared": 2581078
     },
@@ -2966,8 +2968,114 @@
     "workspace": "bowtie-3500-pilot"
   },
   "previous": {
-    "note": "no index yet (docs/runs/index.jsonl not found; ticket 07)",
-    "rows": []
+    "note": null,
+    "rows": [
+      {
+        "active_wall_ms": null,
+        "billed": 398130,
+        "billed_per_completion": "398,130",
+        "completions": 1,
+        "delta": {
+          "active_wall_ms": {
+            "abs": null,
+            "pct": null
+          },
+          "billed": {
+            "abs": null,
+            "pct": null
+          },
+          "parts": {
+            "abs": null,
+            "pct": null
+          }
+        },
+        "findings_high": null,
+        "host": "opencode",
+        "outcome": "completed",
+        "parts": 424,
+        "raw_wall_ms": null,
+        "recipe": "bowtie-5g-baseline",
+        "report_path": null,
+        "run_id": "silent-engine",
+        "seed": true,
+        "skill_commit": "unrecorded",
+        "source": "docs/hfss-agent-performance-analysis.md section 1 (billed, parts; the session 'bowtie-3500', created 2026-08-03T04:43:14Z per the reference SQL of section 10, pinned in scripts/test_run_card.py); outcome and completions re-scored by scripts/run_card.py BASELINE",
+        "started": "2026-08-03T04:43:14Z",
+        "tokens_by_phase": null,
+        "top_finding_kind": null,
+        "workspace": "bowtie-3500"
+      },
+      {
+        "active_wall_ms": null,
+        "billed": 1579333,
+        "billed_per_completion": "infinite (1,579,333 billed, 0 completed)",
+        "completions": 0,
+        "delta": {
+          "active_wall_ms": {
+            "abs": null,
+            "pct": null
+          },
+          "billed": {
+            "abs": 1181203,
+            "pct": 296.6877653027905
+          },
+          "parts": {
+            "abs": 968,
+            "pct": 228.30188679245285
+          }
+        },
+        "findings_high": null,
+        "host": "opencode",
+        "outcome": "abandoned",
+        "parts": 1392,
+        "raw_wall_ms": null,
+        "recipe": "bowtie-5g-baseline",
+        "report_path": null,
+        "run_id": "shiny-canyon",
+        "seed": true,
+        "skill_commit": "unrecorded",
+        "source": ".scratch/hfss-agent-perf-refactor/pilot-retrospective.md verdict table (billed, parts) as scripts/run_card.py PILOT; started = the session's first traced step in workspaces/bowtie-3500-pilot/run-report.json",
+        "started": "2026-08-06T03:56:43Z",
+        "tokens_by_phase": null,
+        "top_finding_kind": null,
+        "workspace": "bowtie-3500-pilot"
+      },
+      {
+        "active_wall_ms": null,
+        "billed": 2581078,
+        "billed_per_completion": "unrecorded",
+        "completions": "unrecorded",
+        "delta": {
+          "active_wall_ms": {
+            "abs": null,
+            "pct": null
+          },
+          "billed": {
+            "abs": 1001745,
+            "pct": 63.428358680531595
+          },
+          "parts": {
+            "abs": null,
+            "pct": null
+          }
+        },
+        "findings_high": 17,
+        "host": "opencode",
+        "outcome": "unrecorded",
+        "parts": null,
+        "raw_wall_ms": 127611821,
+        "recipe": "bowtie-5g-baseline",
+        "report_path": "workspaces/bowtie-3500-pilot/run-report.md",
+        "run_id": "bowtie-3500-pilot-2026-08-06",
+        "skill_commit": "unrecorded",
+        "started": "2026-08-06T03:56:43Z",
+        "tokens_by_phase": {
+          "undeclared": 2581078
+        },
+        "top_finding_kind": "undeclared_session",
+        "workspace": "bowtie-3500-pilot"
+      }
+    ]
   },
   "retries": [
     {

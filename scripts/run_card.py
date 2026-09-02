@@ -1,4 +1,22 @@
-"""Print the opencode run card for a session, from the session database.
+"""Print the run card for a session, from the harness's own session store.
+
+Two harnesses run the skill, and each keeps sessions differently:
+
+- **opencode** — the session database (`~/.local/share/opencode/opencode.db`,
+  `session` / `part` / `project` tables). The reference backend; the card's
+  metrics were defined against it.
+- **Claude Code** — one JSONL transcript per session under
+  `~/.claude/projects/`; read through `scripts/claude_transcript.py`, which
+  states how every metric maps. Selected by `--host claude-code`, by
+  `--session-id` / `--transcript`, by a workspace whose declared session
+  (`results/state/session.json`, written by `scripts/session.py`) says it
+  ran under Claude Code, or by the `CLAUDE_CODE_SESSION_ID` variable that
+  Claude Code exports to every shell command. An explicit `--db` (or the
+  `OPENCODE_DB` variable) always means opencode. Otherwise opencode is
+  assumed, exactly as before.
+
+The card always names its `host`, so a number from one harness is never
+mistaken for the other's.
 
 Part of the hfss-agent-perf-refactor measurement harness (ticket 01): every
 optimization is judged against the numbers this card emits, so the card is
@@ -25,14 +43,21 @@ Usage:
     python scripts/run_card.py --latest [--db PATH] [--verdict]
     python scripts/run_card.py --slug <slug> --summary <path>/summary.md
     python scripts/run_card.py --latest --summary <path>/summary.md --verdict
+    python scripts/run_card.py --summary <path>/summary.md      # Claude Code:
+        # the workspace's declared session id, recorded by scripts/session.py
+    python scripts/run_card.py --host claude-code --session-id <id> ...
+    python scripts/run_card.py --transcript <path>.jsonl ...
 
 --workspace DIR points at a workspace directory (state.md + results/state/);
 when --summary is given and --workspace is not, the summary's parent
 directory is used. The database path resolves in order: --db flag,
-OPENCODE_DB env var, default ~/.local/share/opencode/opencode.db.
+OPENCODE_DB env var, default ~/.local/share/opencode/opencode.db. The
+Claude Code projects dir resolves: --projects-dir, CLAUDE_PROJECTS_DIR,
+default ~/.claude/projects.
 """
 
 import argparse
+import json
 import os
 import re
 import sqlite3
@@ -40,9 +65,17 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import claude_transcript  # noqa: E402
+
 DEFAULT_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
 ENV_DB = "OPENCODE_DB"
 PROJECT_MARKER = "HFSS_automation"
+
+HOST_OPENCODE = "opencode"
+HOST_CLAUDE_CODE = claude_transcript.HOST
+HOSTS = (HOST_OPENCODE, HOST_CLAUDE_CODE)
+SESSION_STATE_FILE = "session.json"       # hfss_spec.session.STATE_FILE
 
 SOLVE_SUBMITTED_FILE = "solve_submitted_at.txt"
 UNMEASURABLE = "unmeasurable"
@@ -349,6 +382,7 @@ def _metric_pairs(card, wall=None, outcome=None):
         outcome = Outcome(None)
     return [
         ("slug", card["slug"]),
+        ("host", card.get("host", HOST_OPENCODE)),
         ("created", _iso(card["time_created"])),
         ("updated", _iso(card["time_updated"])),
         ("duration", _duration(card["duration_ms"])),
@@ -486,12 +520,123 @@ def verdict_table(card, wall, baseline=None):
     return _markdown_table(header, rows)
 
 
+def declared_session(workspace):
+    """(host, session_id) the workspace's declared phase session recorded.
+
+    Written by `scripts/session.py --phase ...` into results/state/session.json;
+    ("", "") when absent or unrecorded, so the caller falls back cleanly.
+    """
+    if workspace is None:
+        return "", ""
+    path = Path(workspace) / "results" / "state" / SESSION_STATE_FILE
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "", ""
+    if not isinstance(data, dict):
+        return "", ""
+    return (str(data.get("host") or ""), str(data.get("host_session_id") or ""))
+
+
+def resolve_host(args, workspace):
+    """Which backend to read, and the Claude session id if one is implied."""
+    host, declared_id = declared_session(workspace)
+    if args.host:
+        chosen = args.host
+    elif args.transcript or args.session_id:
+        chosen = HOST_CLAUDE_CODE
+    elif args.db or os.environ.get(ENV_DB):
+        chosen = HOST_OPENCODE          # an explicit database is an opencode ask
+    elif host in HOSTS:
+        chosen = host
+    elif os.environ.get(claude_transcript.ENV_SESSION_ID):
+        chosen = HOST_CLAUDE_CODE
+    else:
+        chosen = HOST_OPENCODE
+    implied_id = ""
+    if chosen == HOST_CLAUDE_CODE:
+        implied_id = (args.session_id
+                      or (declared_id if host == HOST_CLAUDE_CODE else "")
+                      or os.environ.get(claude_transcript.ENV_SESSION_ID, ""))
+    return chosen, implied_id
+
+
+def load_opencode_card(args):
+    """The opencode card, or (None, error-message)."""
+    db_path = args.db or os.environ.get(ENV_DB) or DEFAULT_DB
+    if not Path(db_path).is_file():
+        return None, f"database not found: {db_path}"
+    try:
+        con = connect(db_path)
+    except sqlite3.Error as exc:
+        return None, f"cannot open database {db_path}: {exc}"
+    try:
+        card = load_card(con, slug=args.slug or None, latest=args.latest,
+                         worktree=args.worktree)
+    except sqlite3.Error as exc:
+        return None, f"query failed: {exc}"
+    finally:
+        con.close()
+    if card is None:
+        subject = f"whose slug is '{args.slug}' " if args.slug else ""
+        scope = (f"worktree '{args.worktree}'" if args.worktree
+                 else "the HFSS_automation project")
+        return None, f"no session {subject}in {scope}"
+    card["host"] = HOST_OPENCODE
+    return card, None
+
+
+def load_claude_card(args, session_id):
+    """The Claude Code card, or (None, error-message).
+
+    Precedence: --transcript, then --slug / --latest (searched over the
+    project's transcripts), then the session id implied by --session-id, the
+    workspace's declared session, or the environment.
+    """
+    if args.transcript:
+        path = Path(args.transcript)
+        if not path.is_file():
+            return None, f"transcript not found: {path}"
+        card = claude_transcript.load_card(path)
+        return (card, None) if card else (None, f"no session in {path}")
+    if args.slug or args.latest:
+        card = claude_transcript.select(slug=args.slug or None, latest=args.latest,
+                                        root=args.projects_dir,
+                                        worktree=args.worktree)
+        if card is None:
+            subject = f"titled '{args.slug}' " if args.slug else ""
+            return None, (f"no Claude Code transcript {subject}for the "
+                          f"HFSS_automation project under "
+                          f"{claude_transcript.projects_dir(args.projects_dir)}")
+        return card, None
+    if session_id:
+        card = claude_transcript.select(session_id=session_id, root=args.projects_dir)
+        if card is None:
+            return None, (f"no Claude Code transcript for session {session_id} "
+                          f"under {claude_transcript.projects_dir(args.projects_dir)}")
+        return card, None
+    return None, ("no Claude Code session to card: give --session-id, "
+                  "--transcript, --slug or --latest, or declare the phase with "
+                  "scripts/session.py so the workspace records its session id")
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Print the opencode run card.")
+    parser = argparse.ArgumentParser(
+        description="Print the run card for a session (opencode or Claude Code).")
+    parser.add_argument("--host", choices=HOSTS,
+                        help="which harness's session store to read (default: "
+                             "detected — see the module docstring)")
     parser.add_argument("--db", help="path to opencode.db (default: %r)" % DEFAULT_DB)
-    parser.add_argument("--slug", help="session slug to card")
+    parser.add_argument("--slug", help="session slug (opencode) or title (Claude Code) to card")
     parser.add_argument("--latest", action="store_true",
                         help="card the latest HFSS-project session")
+    parser.add_argument("--session-id",
+                        help="Claude Code session id to card (implies --host claude-code)")
+    parser.add_argument("--transcript",
+                        help="Claude Code transcript .jsonl to card directly")
+    parser.add_argument("--projects-dir",
+                        help="Claude Code projects dir (default: "
+                             "$CLAUDE_PROJECTS_DIR or ~/.claude/projects)")
     parser.add_argument("--summary", help="append/replace the Run card section in this summary.md")
     parser.add_argument("--workspace",
                         help="workspace dir (state.md + results/state/); "
@@ -511,33 +656,20 @@ def main(argv=None):
                              "run from separate worktrees (parallel campaigns)")
     args = parser.parse_args(argv)
 
-    if args.latest == (args.slug is not None):
-        parser.error("give exactly one of --slug <slug> or --latest")
-    db_path = args.db or os.environ.get(ENV_DB) or DEFAULT_DB
-    if not Path(db_path).is_file():
-        print(f"error: database not found: {db_path}", file=sys.stderr)
-        return 1
-    try:
-        con = connect(db_path)
-    except sqlite3.Error as exc:
-        print(f"error: cannot open database {db_path}: {exc}", file=sys.stderr)
-        return 1
-    try:
-        card = load_card(con, slug=args.slug or None, latest=args.latest,
-                         worktree=args.worktree)
-    except sqlite3.Error as exc:
-        print(f"error: query failed: {exc}", file=sys.stderr)
-        return 1
-    finally:
-        con.close()
-    if card is None:
-        subject = f"whose slug is '{args.slug}' " if args.slug else ""
-        scope = (f"worktree '{args.worktree}'" if args.worktree
-                 else "the HFSS_automation project")
-        print(f"error: no session {subject}in {scope}", file=sys.stderr)
-        return 1
+    if args.latest and args.slug is not None:
+        parser.error("give at most one of --slug <slug> or --latest")
     summary_path = Path(args.summary) if args.summary else None
     workspace = args.workspace or (str(summary_path.parent) if summary_path else None)
+    host, session_id = resolve_host(args, workspace)
+    if host == HOST_OPENCODE:
+        if args.latest == (args.slug is not None):
+            parser.error("give exactly one of --slug <slug> or --latest")
+        card, error = load_opencode_card(args)
+    else:
+        card, error = load_claude_card(args, session_id)
+    if card is None:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     wall = Wall(workspace)
     outcome = Outcome(workspace, outcome=args.outcome,
                       completions=args.completions,

@@ -520,5 +520,290 @@ class TestOutcome(unittest.TestCase):
         self.assertIn("billed_per_completed_sim: infinite", text)
 
 
+# -- Claude Code backend -----------------------------------------------------
+
+import json  # noqa: E402
+
+import claude_transcript  # noqa: E402
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "claude-code"
+REAL_SESSION = "f0c832a3-cb36-4168-ac07-70c2793c74a2"
+REAL_TRANSCRIPT = FIXTURES / f"{REAL_SESSION}.jsonl"
+
+
+def real_card():
+    """The card captured from the FULL original transcript, at capture time."""
+    index = json.loads((FIXTURES / claude_transcript.INDEX_FILE).read_text(encoding="utf-8"))
+    return index[REAL_SESSION]["card"]
+
+
+def make_projects_dir(root, transcripts):
+    """A fake ~/.claude/projects: {project-dir-name: [(session_id, lines)]}.
+
+    `lines` is a list of dicts written as JSONL; mtimes are set increasing
+    in insertion order so "newest" is deterministic.
+    """
+    root = Path(root)
+    tick = 1_700_000_000
+    for project, sessions in transcripts.items():
+        pdir = root / project
+        pdir.mkdir(parents=True, exist_ok=True)
+        for session_id, lines in sessions:
+            path = pdir / f"{session_id}.jsonl"
+            path.write_text("\n".join(json.dumps(l) for l in lines) + "\n",
+                            encoding="utf-8")
+            tick += 10
+            os.utime(path, (tick, tick))
+    return root
+
+
+def synthetic_session(session_id, title, requests, blocks_per_request=2,
+                      input_tokens=100, output_tokens=50, cache_read=1000,
+                      cache_write=10, thinking=5, t0_ms=1_786_754_213_017):
+    """A transcript in the real fixture's shape, varied by the arguments.
+
+    Every API request is written as `blocks_per_request` assistant records
+    sharing one requestId and one usage, exactly as Claude Code writes them;
+    the test below asserts this shape parses identically to the real one.
+    """
+    lines = [{"type": "ai-title", "aiTitle": title, "sessionId": session_id}]
+    ts = t0_ms
+    for i in range(requests):
+        ts += 1000
+        lines.append({"type": "user", "uuid": f"u{i}", "sessionId": session_id,
+                      "timestamp": _iso_ms(ts), "message": {"role": "user"}})
+        usage = {"input_tokens": input_tokens, "output_tokens": output_tokens,
+                 "cache_read_input_tokens": cache_read,
+                 "cache_creation_input_tokens": cache_write,
+                 "output_tokens_details": {"thinking_tokens": thinking}}
+        for b in range(blocks_per_request):
+            ts += 1000
+            lines.append({"type": "assistant", "uuid": f"a{i}-{b}",
+                          "sessionId": session_id, "requestId": f"req_{i}",
+                          "timestamp": _iso_ms(ts),
+                          "message": {"id": f"msg_{i}", "role": "assistant",
+                                      "model": "claude-x", "usage": usage}})
+    return lines
+
+
+def _iso_ms(epoch_ms):
+    return datetime.fromtimestamp(epoch_ms / 1000.0, timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%S.%fZ")[:-4] + "Z"
+
+
+class TestClaudeTranscript(unittest.TestCase):
+    """The Claude Code backend reads the real captured slice and agrees with
+    the card computed from the full original (fixture-fidelity rule 3)."""
+
+    def test_corpus_is_present(self):
+        self.assertTrue(REAL_TRANSCRIPT.is_file(), REAL_TRANSCRIPT)
+        self.assertTrue((FIXTURES / claude_transcript.INDEX_FILE).is_file())
+
+    def test_real_slice_reduces_to_the_captured_card(self):
+        card = claude_transcript.load_card(REAL_TRANSCRIPT)
+        expected = real_card()
+        for key in claude_transcript.CARD_KEYS:
+            if key == "storesize":
+                continue
+            self.assertEqual(card[key], expected[key], key)
+        self.assertEqual(card["host"], "claude-code")
+        self.assertEqual(card["session_id"], REAL_SESSION)
+
+    def test_usage_is_counted_once_per_request_not_per_record(self):
+        # The real slice has 24 assistant records but 10 API requests.
+        card = claude_transcript.load_card(REAL_TRANSCRIPT)
+        self.assertEqual(card["requests"], 10)
+        self.assertEqual(card["parts"], 40)          # 16 user + 24 assistant
+        self.assertEqual(card["billed"], card["tokens_input"] + card["tokens_output"])
+
+    def test_synthetic_shape_matches_real_shape(self):
+        """A synthetic transcript is valid only if it parses like the real one:
+        same duplication of usage across blocks, same title precedence."""
+        with tempfile.TemporaryDirectory() as td:
+            lines = synthetic_session("syn", "Synthetic", requests=10,
+                                      blocks_per_request=3)
+            path = Path(td) / "syn.jsonl"
+            path.write_text("\n".join(json.dumps(l) for l in lines) + "\n",
+                            encoding="utf-8")
+            card = claude_transcript.load_card(path)
+        real = claude_transcript.load_card(REAL_TRANSCRIPT)
+        self.assertEqual(set(card), set(real))
+        self.assertEqual(card["requests"], 10)
+        self.assertEqual(card["tokens_input"], 1000)      # 10 requests, not 30 blocks
+        self.assertEqual(card["tokens_output"], 500)
+        self.assertEqual(card["tokens_reasoning"], 50)
+        self.assertEqual(card["parts"], 10 + 30)
+        self.assertEqual(card["slug"], "Synthetic")
+
+    def test_custom_title_beats_ai_title(self):
+        lines = synthetic_session("syn", "generated", requests=1)
+        lines.append({"type": "custom-title", "customTitle": "patch-solve",
+                      "sessionId": "syn"})
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "syn.jsonl"
+            path.write_text("\n".join(json.dumps(l) for l in lines) + "\n",
+                            encoding="utf-8")
+            self.assertEqual(claude_transcript.load_card(path)["slug"], "patch-solve")
+
+    def test_torn_tail_line_is_ignored_while_session_is_live(self):
+        lines = synthetic_session("syn", "t", requests=2)
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "syn.jsonl"
+            path.write_text("\n".join(json.dumps(l) for l in lines)
+                            + '\n{"type": "assistant", "mess', encoding="utf-8")
+            self.assertEqual(claude_transcript.load_card(path)["requests"], 2)
+
+    def test_project_dir_encoding_matches_claude_code(self):
+        self.assertEqual(claude_transcript.encoded_marker("HFSS_automation"),
+                         "HFSS-automation")
+        self.assertEqual(
+            claude_transcript.encoded_marker(r"C:\Users\me\Repos\HFSS_automation"),
+            "C--Users-me-Repos-HFSS-automation")
+
+    def test_capture_refuses_a_slice_that_parses_differently(self):
+        """Fixture-fidelity rule 5: the capture verifies its own slice."""
+        lines = synthetic_session("syn", "t", requests=2)
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "syn.jsonl"
+            src.write_text("\n".join(json.dumps(l) for l in lines) + "\n",
+                            encoding="utf-8")
+            out = Path(td) / "out"
+            target = claude_transcript.capture(src, out)
+            self.assertTrue(target.is_file())
+            index = json.loads((out / claude_transcript.INDEX_FILE).read_text())
+            self.assertEqual(index["syn"]["card"]["billed"], 300)
+            # Now break the slicer so the slice drops usage: capture must refuse.
+            original = claude_transcript.slice_record
+            def broken(record):
+                kept = original(record)
+                if kept and kept.get("type") == "assistant":
+                    kept["message"].pop("usage", None)
+                return kept
+            claude_transcript.slice_record = broken
+            try:
+                with self.assertRaises(ValueError):
+                    claude_transcript.capture(src, Path(td) / "out2")
+                self.assertFalse((Path(td) / "out2" / "syn.jsonl").exists())
+            finally:
+                claude_transcript.slice_record = original
+
+
+class TestRunCardClaudeHost(unittest.TestCase):
+    """run_card's host switch: how it decides which store to read, and what
+    the Claude Code card looks like on the way out."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.projects = make_projects_dir(Path(self.tmp) / "projects", {
+            "C--Users-me-Repos-Other": [
+                ("other", synthetic_session("other", "unrelated", 3)),
+            ],
+            "C--Users-me-Repos-HFSS-automation": [
+                ("old", synthetic_session("old", "patch-clarify", 2)),
+                ("new", synthetic_session("new", "patch-solve", 4)),
+            ],
+            "C--Users-me-Repos-HFSS-automation--claude-worktrees-cell-s7": [
+                ("wt", synthetic_session("wt", "s7-solve", 1)),
+            ],
+        })
+        self._env = dict(os.environ)
+        os.environ.pop(claude_transcript.ENV_SESSION_ID, None)
+        os.environ.pop(run_card.ENV_DB, None)
+        self.addCleanup(self._restore_env)
+
+    def _restore_env(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+
+    def run_cli(self, args):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = run_card.main(["--projects-dir", str(self.projects)] + args)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_transcript_flag_cards_the_file_and_names_the_host(self):
+        code, text, _ = self.run_cli(["--transcript", str(REAL_TRANSCRIPT)])
+        self.assertEqual(code, 0)
+        expected = real_card()
+        self.assertIn("host: claude-code", text)
+        self.assertIn(f"slug: {expected['slug']}", text)
+        self.assertIn(f"billed: {expected['billed']}", text)
+        self.assertIn(f"parts: {expected['parts']}", text)
+        self.assertIn("created: 2026-08-15T00:36:53Z", text)
+
+    def test_opencode_card_names_its_host_too(self):
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "opencode.db"
+            make_db(db, [BASELINE])
+            code, text, _ = self.run_cli(["--db", str(db), "--slug", "silent-engine"])
+        self.assertEqual(code, 0)
+        self.assertIn("host: opencode", text)
+
+    def test_explicit_db_wins_over_claude_environment(self):
+        os.environ[claude_transcript.ENV_SESSION_ID] = "new"
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "opencode.db"
+            make_db(db, [BASELINE])
+            code, text, _ = self.run_cli(["--db", str(db), "--slug", "silent-engine"])
+        self.assertEqual(code, 0)
+        self.assertIn("host: opencode", text)
+        self.assertIn("slug: silent-engine", text)
+
+    def test_environment_session_id_is_used_when_nothing_else_is_given(self):
+        os.environ[claude_transcript.ENV_SESSION_ID] = "old"
+        code, text, _ = self.run_cli([])
+        self.assertEqual(code, 0)
+        self.assertIn("host: claude-code", text)
+        self.assertIn("slug: patch-clarify", text)
+
+    def test_latest_picks_newest_hfss_transcript_across_worktrees(self):
+        code, text, _ = self.run_cli(["--host", "claude-code", "--latest"])
+        self.assertEqual(code, 0)
+        self.assertIn("slug: s7-solve", text)       # newest mtime, worktree dir
+
+    def test_latest_ignores_other_projects(self):
+        code, text, _ = self.run_cli(["--host", "claude-code", "--latest"])
+        self.assertNotIn("unrelated", text)
+
+    def test_slug_matches_title(self):
+        code, text, _ = self.run_cli(["--host", "claude-code", "--slug", "patch-solve"])
+        self.assertEqual(code, 0)
+        self.assertIn("slug: patch-solve", text)
+        self.assertIn("billed: 600", text)            # 4 requests x 150
+
+    def test_worktree_narrows_the_search(self):
+        code, text, _ = self.run_cli(
+            ["--host", "claude-code", "--latest",
+             "--worktree", r"C:\Users\me\Repos\HFSS_automation"])
+        self.assertEqual(code, 0)
+        self.assertIn("slug: patch-solve", text)
+
+    def test_declared_session_in_workspace_selects_the_transcript(self):
+        ws = write_workspace(self.tmp)
+        (ws / "results" / "state" / "session.json").write_text(json.dumps(
+            {"phase": "solve", "name": "patch", "host": "claude-code",
+             "host_session_id": "new"}), encoding="utf-8")
+        summary = ws / "summary.md"
+        summary.write_text("# Summary\n", encoding="utf-8")
+        code, text, _ = self.run_cli(["--summary", str(summary)])
+        self.assertEqual(code, 0)
+        self.assertIn("host: claude-code", text)
+        self.assertIn("slug: patch-solve", text)
+        self.assertIn("active_wall: 1 h 40 min 0 s", text)
+        self.assertIn("## Run card", summary.read_text(encoding="utf-8"))
+        self.assertIn("- host: claude-code", summary.read_text(encoding="utf-8"))
+
+    def test_unknown_session_fails_cleanly(self):
+        code, _, err = self.run_cli(["--session-id", "nope"])
+        self.assertEqual(code, 1)
+        self.assertIn("no Claude Code transcript for session nope", err)
+
+    def test_claude_host_with_nothing_to_select_explains_itself(self):
+        code, _, err = self.run_cli(["--host", "claude-code"])
+        self.assertEqual(code, 1)
+        self.assertIn("scripts/session.py", err)
+
+
 if __name__ == "__main__":
     raise SystemExit(unittest.main())

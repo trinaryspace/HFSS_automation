@@ -33,6 +33,23 @@ Session state lives in the AEDT project — never in a Python process. Each scri
 - No full recursive directory listings: use count/size summaries, `tail`, and `results/state/*.txt` — never `dir /s`-style scans of the project or corpus.
 - Final agent messages ≤ ~250 words (verbosity cap), including after each stage.
 
+## Harness notes (opencode and Claude Code)
+
+The skill is one artifact — `skill/hfss-agent/` — read by two harnesses. Everything above is host-neutral; the table is the whole of what differs. Do not adapt anything else.
+
+| Concern | opencode | Claude Code |
+|---|---|---|
+| Where the skill is read from | `~/.agents/skills/hfss-agent` (link) | `<repo>/.claude/skills/hfss-agent` (link) — both made by `python scripts/install_skill.py`; tier 0 fails on a copy |
+| Project instructions | `AGENTS.md` | `CLAUDE.md`, which imports `AGENTS.md` — same text, never a second copy |
+| `kb-lookup` / `runcard` subagents | `agent:` entries in `opencode.json`; invoke by name (`@kb-lookup`) or the task tool | `.claude/agents/<name>.md`; invoke with the Agent tool, `subagent_type: kb-lookup` / `runcard`. The prompts are verbatim-identical on both hosts (`scripts/verify_agents.py`, tier 0) |
+| Cheap-tier model for subagents | the `fireworks-ai/hfss-subagent` alias in `opencode.json` (single swap point) | `model:` in each `.claude/agents/*.md` (defaults to `haiku`; edit both files together) |
+| `analyze-papers` skill | `~/.agents/skills/analyze-papers` | `~/.claude/skills/analyze-papers`, a link the installer makes when the opencode copy exists; if absent, report it and ask for the installer |
+| Naming the phase sessions | the session slug `<name>-clarify` / `-build` / `-solve` | `/rename <name>-clarify` etc.; `scripts/session.py --phase` also records the host and session id in `results/state/session.json` (Claude Code exports `CLAUDE_CODE_SESSION_ID`) |
+| Run card (measurement harness) | `scripts/run_card.py --slug <slug> --summary …` reads the opencode DB | the same command; the host is detected from the workspace's declared session or the environment, and the card names its `host`. `--transcript` / `--session-id` for a session declared elsewhere |
+| Bash timeout | explicit `timeout` per call (default ~120 s) | explicit `timeout` in ms, **hard cap 600 000 ms (10 min)** — a call that can outlast it belongs to the detached watchdog, never to a bash call |
+| KB discovery (`rg -l`) | `rg -l` in bash | `rg -l` in bash, or the Grep tool in files-with-matches mode — same rule: filenames first, never a full recursive listing |
+| Context compaction | `compaction` in `opencode.json` | automatic; still never a substitute for the three phase sessions (ADR 0007 rejected one session with `/compact` at the gates) |
+
 ## Per-stage checklist
 
 1. **Clarification** — deliver one block: request minimums, missing critical setup features, proposed Recipe + Assumptions, proposed Result QA signals; lock the parameters/variables. Record the confirmation verbatim in the summary, then **write the State ledger**. If `knowledge/reference-papers/` holds user PDFs, run the `analyze-papers` skill on the folder first and read the resulting agent notes before drafting the block (SKILL.md "Read first" #6) — the notes are context for the Recipe and QA signals, never automatic playbook material.

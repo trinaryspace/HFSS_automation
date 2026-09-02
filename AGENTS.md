@@ -20,6 +20,10 @@ Single-context: `CONTEXT.md` at the repo root is the domain glossary; decisions 
 
 Test fixtures are captured from real artifacts, never written from memory; a synthetic fixture is valid only alongside a real one it provably matches. Two P0 bugs passed a green suite because this was not enforced. See `docs/agents/fixture-fidelity.md`.
 
+### Harnesses
+
+The `hfss-agent` skill runs under both opencode and Claude Code from one source tree: links for locations, a tier-0 verbatim check for the one thing that cannot be linked (subagent prompts), and `scripts/run_card.py` reading either session store. See `docs/agents/harnesses.md`.
+
 ### Verification tiers
 
 `scripts/tier0.py` (seconds, no license) before any AEDT launch; `scripts/tier1.py` builds on the live desktop but never solves; Tier 2 is the full end-to-end run.

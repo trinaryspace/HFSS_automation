@@ -80,6 +80,24 @@ class UnknownAction(KeyError):
     """Raised for an action name not in ACTIONS - a typo must not pass silently."""
 
 
+# The harness a session runs under, and its id there, so the run card can
+# find the session afterwards without a slug. Claude Code exports its id to
+# every shell command; opencode does not export one this module knows of, so
+# a session there records nothing and the card falls back to its slug lookup.
+HOST_CLAUDE_CODE = "claude-code"
+HOST_OPENCODE = "opencode"
+ENV_CLAUDE_SESSION_ID = "CLAUDE_CODE_SESSION_ID"
+
+
+def detect_host(environ=None) -> tuple:
+    """(host, session_id) from the environment; ("", "") when unrecognised."""
+    env = os.environ if environ is None else environ
+    claude_id = env.get(ENV_CLAUDE_SESSION_ID, "").strip()
+    if claude_id:
+        return HOST_CLAUDE_CODE, claude_id
+    return "", ""
+
+
 @dataclass
 class Session:
     phase: str
@@ -88,6 +106,8 @@ class Session:
     calls: int = 0
     call_budget: int = DEFAULT_CALL_BUDGET
     escalations: list = field(default_factory=list)
+    host: str = ""
+    host_session_id: str = ""
 
     # -- persistence -------------------------------------------------------
     @staticmethod
@@ -151,13 +171,24 @@ class Session:
 
 
 def start(phase: str, name: str = "", state_dir=None,
-          call_budget: int = DEFAULT_CALL_BUDGET) -> Session:
-    """Begin a phase session, persisting it when a state dir is given."""
+          call_budget: int = DEFAULT_CALL_BUDGET,
+          host: Optional[str] = None,
+          host_session_id: Optional[str] = None) -> Session:
+    """Begin a phase session, persisting it when a state dir is given.
+
+    `host` / `host_session_id` default to what `detect_host()` sees in the
+    environment; pass them explicitly to override or to record an opencode
+    slug by hand.
+    """
     if phase not in PHASES:
         raise ValueError(f"phase must be one of {PHASES}, got {phase!r}")
+    detected_host, detected_id = detect_host()
     session = Session(phase=phase, name=name,
                       started_ms=int(time.time() * 1000),
-                      call_budget=call_budget)
+                      call_budget=call_budget,
+                      host=detected_host if host is None else host,
+                      host_session_id=(detected_id if host_session_id is None
+                                       else host_session_id))
     if state_dir is not None:
         session.save(state_dir)
     return session

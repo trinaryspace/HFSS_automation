@@ -85,6 +85,21 @@ invalid — and could reasonably be two-tier: warn below λ₀/3, error below a 
 floor. `port_geometry`'s ~1.5× really is a rule of thumb; a flared port can be
 right, and it should stay a warning. Offered as an option, not a settled call.
 
+**A third candidate appeared 2026-09-01, and it is a stronger one than either.**
+The 2×2 array's feed excites its two E-plane element pairs 180° out of phase —
+confirmed from the radiation pattern of the banked solve — while passing every
+offline gate with `errors=0`. No length error exists (all four paths are
+56.0323 mm), no impedance error exists (`feed_check.walk` passes, correctly),
+and S11 does not show it. The 180° comes from mirrored elements being fed by a
+mirror-symmetric network, which inverts one element's resonant mode. Filed as
+ticket 18; evidence in `antiphase-mirror-feed-2026-09-01.md`.
+
+It matters for *this* section because a feed-sense mismatch is **discrete**, not
+a rule of thumb with a fuzzy threshold: two elements' net excitation either
+agrees in sign or it does not. The argument that shipped clearance and port
+geometry as warnings — that an ERROR on a heuristic blocks legitimate designs —
+does not apply to it. If any member of this family should block, it is that one.
+
 ## Do now — small, certain, high yield
 
 These are cheap and each is justified by a measured defect. In order.

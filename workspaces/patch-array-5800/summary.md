@@ -135,13 +135,46 @@ the AEDT UI is the authoritative surface on this box):
 - Broadside gain: pending UI read (fed array; expected 12-13 dBi; the
   run's element balance check is the near-field symmetry read, likewise
   UI-arbitrated).
-- Feed verdict: NOT the outright defect shape (no -9..-10 dB in-band
-  mismatch); a tuning issue: element resonance is 5.6 GHz and the feed was
-  synthesised for 5.8. Human-hand correction path: retune patch_L (and
-  re-derive q_x) for 5.6 GHz, or set f0 = 5.6 GHz and rebuild; re-check the
-  dip depth afterwards — the -25 dB band is the feed's acceptance test, and
-  the Z_act extraction (UI-arbitrated or with a recovered channel) remains
-  the proper match target at half-wave spacing.
+- Feed verdict, **OVERTURNED 2026-09-01. The feed IS broken.** The verdict
+  below was written from S11 alone, because the radiation pattern was never
+  read. It was wrong.
+
+  The pattern shows a **split beam with a null on boresight** in the E-plane:
+  lobes at -36 deg / +6.85 dBi and +36 deg / +9.25 dBi, with a local minimum of
+  -8.97 dBi at theta = -2 deg, ~18 dB down. At 5.00 GHz the two lobes match to
+  within 0.05 dB, so the amplitude split is fine and the error is purely phase.
+  Two symmetric lobes with a boresight null is an **antiphase pair**, not a
+  squint.
+
+  Cause, traced by walking the network: every line is the right impedance, both
+  transformers are lambda_g/4, and all four port-to-patch paths are the same
+  length (56.0323 mm) — there is no length error. The 180 degrees comes from
+  geometry: the feed is mirror-symmetric about y=0 and so are the elements, so
+  `DownL` enters P1 at its HIGH-y edge while `UpL` enters P2 at its LOW-y edge.
+  Feeding a patch from the opposite radiating edge inverts its resonant mode.
+  The network is symmetric; the excitation is antisymmetric. The same mechanism
+  predicts the H-plane correctly (x is the non-resonant axis, so no inversion —
+  one modest squinted lobe at -28 deg).
+
+  This is why S11 looked fine: an antiphase pair still presents a sensible
+  input impedance, so the -7.4 dB in-band dip read as a tuning issue. It is
+  also why every offline gate passed — `feed_check.walk` checks impedances and
+  chain closure, both correct here. Full working, the proposed gate, and its
+  caveats: `.scratch/hfss-agent-parallel-tests/antiphase-mirror-feed-2026-09-01.md`.
+
+  Correction path (any one): route both +/-y branches to enter their patches
+  from the same sense; add lambda_g/2 to one branch to undo the mirror; or move
+  one patch's inset to the opposite edge.
+
+  Caveat carried forward: this solve adapted its mesh at 5 GHz rather than
+  f0 = 5.8 GHz (compiler defect, recorded separately), so the dB values will
+  move after a correct re-solve. The diagnosis will not — the split-beam
+  structure holds at both 5.00 and 5.66 GHz and follows from the feed topology
+  by inspection.
+
+- Feed verdict as originally written 2026-08-18, retained for provenance:
+  NOT the outright defect shape (no -9..-10 dB in-band mismatch); a tuning
+  issue: element resonance is 5.6 GHz and the feed was synthesised for 5.8.
 
 ## Learning-loop notes
 

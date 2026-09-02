@@ -1,0 +1,19 @@
+{
+  "captured": "2026-09-02",
+  "captured_from_workspace": "C:\\Users\\afpim\\Repos\\HFSS_automation\\workspaces\\patch-array-5800",
+  "note": "Capture the patch-array-5800 run-record fixtures, byte for byte.",
+  "files": {
+    "state.session1.md": {
+      "source": "state.md",
+      "slice": "bytes [0, index of '## Session 2')",
+      "bytes": 4231,
+      "sha256": "6b40168598476264d2d2c7ddb091e2ebde782f52a89c1b23f0b7183d59a1ba4d"
+    },
+    "outcome.txt": {
+      "source": "results/state/outcome.txt",
+      "slice": "whole file",
+      "bytes": 155,
+      "sha256": "4204e6b3a677e2d274e47a503cadace4ac29370393c95ad09132f3ad7a7a4b11"
+    }
+  }
+}

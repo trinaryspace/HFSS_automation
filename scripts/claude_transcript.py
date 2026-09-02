@@ -15,8 +15,10 @@ reader never has to guess):
   `tokens_cache_write`: summed over the session's API requests from each
   assistant record's `message.usage`. One API response is written as
   several `assistant` records (one per content block) that all carry the
-  same `requestId` and the same usage, so usage is counted **once per
-  requestId**, never once per record.
+  same `requestId`, so usage is counted **once per requestId**, never once
+  per record -- and the LAST record's usage is the one kept: on 2.1.258 the
+  earlier records of a request hold a running count (output 36 on the
+  first record, 2356 on the last, in the a0e9c38f fixture).
 - `tokens_reasoning`: the summed `output_tokens_details.thinking_tokens`
   when the record carries it; otherwise 0, exactly as opencode reports 0
   for providers that do not break it out.
@@ -41,18 +43,37 @@ Usage:
     python scripts/claude_transcript.py --latest                  # newest HFSS session
     python scripts/claude_transcript.py --capture <id> --out DIR  # fixture slice
 
-Fixture capture writes `<id>.jsonl` (usage and title records only, message
-content dropped) plus `index.json` holding the card computed from the FULL
-original. The slice is written only if it reduces to that same card
-(`storesize` aside, which is the slice's own size by construction), so a
-fixture can never drift from the artifact it stands for
-(docs/agents/fixture-fidelity.md). Stdlib only, Python 3.10 compatible.
+Fixture capture writes `<id>.jsonl` plus `index.json` holding the card
+computed from the FULL original. The slice keeps every user/assistant
+record's bookkeeping (ids, timestamps, requestId, the usage keys the card
+reads) and the title records, and reduces each content block to its
+evidence with the content itself dropped:
+
+- `thinking`    -> `{"type": "thinking", "thinking_bytes": N}`
+- `text`        -> `{"type": "text", "text_bytes": N}`
+- `tool_use`    -> `{"type": "tool_use", "id", "name", "input_bytes": N,
+                     "command": <first 200 chars of the command / path>}`
+- `tool_result` -> `{"type": "tool_result", "tool_use_id", "is_error",
+                     "content_bytes": N}`
+- a string `content` -> `"content_bytes": N` on the message
+
+`N` is the UTF-8 byte length of the text, or of the block's JSON for
+non-text values (`byte_size`). `scripts/run_trace.py` reads either form,
+so a slice traces exactly like its source. The slice is written only if it
+reduces to the same card (`storesize` aside, which is the slice's own size
+by construction) and passes the caller's extra `verify` check, so a fixture
+can never drift from the artifact it stands for
+(docs/agents/fixture-fidelity.md). Subagent transcripts beside the source
+(`<id>/subagents/agent-*.jsonl`) are sliced the same way into the same
+layout under the fixture dir, each verified against its own card.
+Stdlib only, Python 3.10 compatible.
 """
 
 import argparse
 import json
 import os
 import re
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -239,8 +260,62 @@ def select(session_id=None, slug=None, latest=False, root=None, worktree=None):
 # -- fixture capture ---------------------------------------------------------
 
 KEEP_TOP = ("type", "uuid", "parentUuid", "timestamp", "sessionId",
-            "requestId", "cwd", "version", "isSidechain")
-KEEP_MESSAGE = ("id", "model", "role", "usage")
+            "requestId", "cwd", "version", "isSidechain", "agentId")
+KEEP_MESSAGE = ("id", "model", "role")
+# The usage keys the card reads; the rest (iterations, cache_creation,
+# server_tool_use, ...) is dropped, which the capture check proves is safe.
+KEEP_USAGE = ("input_tokens", "output_tokens", "cache_read_input_tokens",
+              "cache_creation_input_tokens", "output_tokens_details")
+SUBAGENTS_DIR = "subagents"
+SUBAGENT_GLOB = "agent-*.jsonl"
+COMMAND_CHARS = 200
+# The tool_use input key that names what the call acted on, in precedence
+# order: a shell command, a file path, a search pattern, an agent prompt.
+COMMAND_KEYS = ("command", "file_path", "filePath", "notebook_path", "pattern",
+                "path", "url", "skill", "query", "description", "prompt")
+
+
+def byte_size(value):
+    """UTF-8 length of a text, or of the JSON of anything else."""
+    if isinstance(value, str):
+        return len(value.encode("utf-8"))
+    return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+
+
+def command_of(tool_input):
+    """The first 200 chars of what a tool call acted on, or None."""
+    if not isinstance(tool_input, dict):
+        return None
+    for key in COMMAND_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            return value[:COMMAND_CHARS]
+    return None
+
+
+def slice_block(block):
+    """A content block reduced to its evidence (see the module docstring)."""
+    if not isinstance(block, dict):
+        return {"type": "text", "text_bytes": byte_size(block)}
+    if any(k.endswith("_bytes") for k in block):
+        return dict(block)              # already reduced: a slice re-slices to itself
+    btype = block.get("type")
+    if btype == "thinking":
+        return {"type": btype, "thinking_bytes": byte_size(block.get("thinking", ""))}
+    if btype == "text":
+        return {"type": btype, "text_bytes": byte_size(block.get("text", ""))}
+    if btype == "tool_use":
+        out = {"type": btype, "id": block.get("id"), "name": block.get("name"),
+               "input_bytes": byte_size(block.get("input", {}))}
+        command = command_of(block.get("input"))
+        if command is not None:
+            out["command"] = command
+        return out
+    if btype == "tool_result":
+        return {"type": btype, "tool_use_id": block.get("tool_use_id"),
+                "is_error": bool(block.get("is_error", False)),
+                "content_bytes": byte_size(block.get("content", ""))}
+    return {"type": btype}
 
 
 def slice_record(record):
@@ -250,7 +325,18 @@ def slice_record(record):
         out = {k: record[k] for k in KEEP_TOP if k in record}
         message = record.get("message")
         if isinstance(message, dict):
-            out["message"] = {k: message[k] for k in KEEP_MESSAGE if k in message}
+            kept = {k: message[k] for k in KEEP_MESSAGE if k in message}
+            usage = message.get("usage")
+            if isinstance(usage, dict):
+                kept["usage"] = {k: usage[k] for k in KEEP_USAGE if k in usage}
+            content = message.get("content")
+            if isinstance(content, list):
+                kept["content"] = [slice_block(b) for b in content]
+            elif isinstance(content, str):
+                kept["content_bytes"] = byte_size(content)
+            elif "content_bytes" in message:            # already reduced
+                kept["content_bytes"] = message["content_bytes"]
+            out["message"] = kept
         return out
     for title_type, key in TITLE_KEYS:
         if rtype == title_type:
@@ -263,15 +349,23 @@ def comparable(card):
     return {k: card[k] for k in CARD_KEYS if k != "storesize"}
 
 
-def capture(source, out_dir):
-    """Write `<id>.jsonl` + index entry; refuse a slice that parses differently."""
-    source = Path(source)
+def subagent_transcripts(path):
+    """The subagent transcripts Claude Code keeps beside a session file, in
+    `<session-id>/subagents/agent-<id>.jsonl` (a `.meta.json` sits next to
+    each, naming the agent type and the spawning tool_use). Sorted by name."""
+    path = Path(path)
+    folder = path.parent / path.stem / SUBAGENTS_DIR
+    if not folder.is_dir():
+        return []
+    return sorted(p for p in folder.glob(SUBAGENT_GLOB) if p.is_file())
+
+
+def _write_slice(source, target):
+    """Slice `source` into `target`; refuse (and unlink) on a card mismatch."""
     full = load_card(source)
     if full is None:
         raise ValueError(f"{source} holds no session")
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    target = out_dir / f"{full['session_id']}.jsonl"
+    target.parent.mkdir(parents=True, exist_ok=True)
     lines = []
     for record in _records(source):
         kept = slice_record(record)
@@ -283,15 +377,55 @@ def capture(source, out_dir):
         target.unlink()
         raise ValueError("slice of %s does not reduce to the same card as the "
                          "original; not written" % source.name)
+    return full
+
+
+def _discard(target):
+    """Remove a refused slice and its subagent slices."""
+    if target.is_file():
+        target.unlink()
+    shutil.rmtree(target.parent / target.stem, ignore_errors=True)
+
+
+def capture(source, out_dir, verify=None):
+    """Write `<id>.jsonl` (+ its subagent slices) and the index entry;
+    refuse a slice that parses differently.
+
+    `verify(source, target)` is an extra check run after the slices are
+    written and before the index is; it raises ValueError to refuse
+    (`run_trace.capture_claude` uses it to demand an identical trace).
+    """
+    source = Path(source)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    full = load_card(source)
+    if full is None:
+        raise ValueError(f"{source} holds no session")
+    target = out_dir / f"{full['session_id']}.jsonl"
+    _write_slice(source, target)
+    subagents = {}
+    try:
+        for agent in subagent_transcripts(source):
+            agent_target = out_dir / full["session_id"] / SUBAGENTS_DIR / agent.name
+            agent_card = _write_slice(agent, agent_target)
+            subagents[agent.stem] = {k: agent_card[k] for k in CARD_KEYS}
+        if verify is not None:
+            verify(source, target)
+    except ValueError:
+        _discard(target)
+        raise
     index_path = out_dir / INDEX_FILE
     index = {}
     if index_path.is_file():
         index = json.loads(index_path.read_text(encoding="utf-8"))
-    index[full["session_id"]] = {
+    entry = {
         "captured_from": source.name,
         "captured_from_dir": source.parent.name,
         "card": {k: full[k] for k in CARD_KEYS},
     }
+    if subagents:
+        entry["subagents"] = subagents
+    index[full["session_id"]] = entry
     index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n",
                           encoding="utf-8")
     return target

@@ -25,6 +25,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import run_card  # noqa: E402
@@ -102,6 +103,10 @@ LEDGER_GATE = "2026-08-05T15:40:00Z"  # started + 1 h 40 min
 
 def _gate_epoch():
     return datetime(2026, 8, 5, 15, 40, tzinfo=timezone.utc).timestamp()
+
+
+def _started_epoch():
+    return datetime(2026, 8, 5, 14, 0, tzinfo=timezone.utc).timestamp()
 
 
 def write_workspace(root, started=True, gate=True):
@@ -803,6 +808,414 @@ class TestRunCardClaudeHost(unittest.TestCase):
         code, _, err = self.run_cli(["--host", "claude-code"])
         self.assertEqual(code, 1)
         self.assertIn("scripts/session.py", err)
+
+
+# -- the run: session history, subagents, run total (run logging, ticket 01) --
+
+import claude_subagents  # noqa: E402
+
+REPO = Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from hfss_spec import session as phase_session  # noqa: E402
+
+# Captured 2026-09-02 from ~/.claude/projects/C--Users-afpim-Repos-HFSS-automation:
+# the parent transcript and its `<id>/subagents/` directory, two subagents.
+PARENT_SESSION = "a0e9c38f-3117-4d93-8086-9b4f16ee0d52"
+PARENT_TRANSCRIPT = FIXTURES / f"{PARENT_SESSION}.jsonl"
+SUBAGENTS_DIR = FIXTURES / PARENT_SESSION / claude_subagents.SUBAGENTS_DIR
+
+
+def subagent_index():
+    return json.loads((SUBAGENTS_DIR / claude_subagents.INDEX_FILE).read_text(encoding="utf-8"))
+
+
+class TestClaudeSubagents(unittest.TestCase):
+    """Subagent transcripts are found from the parent, in the shape Claude
+    Code actually writes: `<session-id>/subagents/agent-<id>.jsonl` plus an
+    `agent-<id>.meta.json` beside each, records carrying the PARENT's
+    sessionId. The fixture is that tree, captured and verified slice by slice."""
+
+    def test_corpus_is_present_in_the_real_shape(self):
+        self.assertTrue(PARENT_TRANSCRIPT.is_file(), PARENT_TRANSCRIPT)
+        self.assertTrue(SUBAGENTS_DIR.is_dir(), SUBAGENTS_DIR)
+        names = sorted(p.name for p in SUBAGENTS_DIR.iterdir())
+        self.assertTrue(any(n.startswith("agent-") and n.endswith(".jsonl") for n in names))
+        self.assertTrue(any(n.endswith(".meta.json") for n in names))
+
+    def test_discovery_finds_every_subagent_and_nothing_else(self):
+        cards = claude_subagents.discover(PARENT_TRANSCRIPT)
+        expected = subagent_index()
+        self.assertEqual(sorted(c["agent_id"] for c in cards), sorted(expected))
+        self.assertEqual(len(cards), 2)
+
+    def test_each_slice_reduces_to_the_captured_card(self):
+        expected = subagent_index()
+        for card in claude_subagents.discover(PARENT_TRANSCRIPT):
+            full = expected[card["agent_id"]]["card"]
+            for key in claude_transcript.CARD_KEYS:
+                if key == "storesize":
+                    continue
+                self.assertEqual(card[key], full[key], (card["agent_id"], key))
+
+    def test_records_carry_the_parents_session_id_not_their_own(self):
+        """Observed, not assumed: a subagent transcript's sessionId is the
+        parent's. The agent's own id lives only in the filename and meta."""
+        for card in claude_subagents.discover(PARENT_TRANSCRIPT):
+            self.assertEqual(card["session_id"], PARENT_SESSION)
+            self.assertEqual(card["parent_session_id"], PARENT_SESSION)
+            self.assertNotEqual(card["agent_id"], PARENT_SESSION)
+
+    def test_meta_gives_type_and_description_and_the_slug(self):
+        expected = subagent_index()
+        for card in claude_subagents.discover(PARENT_TRANSCRIPT):
+            meta = expected[card["agent_id"]]["meta"]
+            self.assertEqual(card["agent_type"], meta["agentType"])
+            self.assertEqual(card["description"], meta["description"])
+            self.assertEqual(card["slug"], meta["description"])
+            self.assertEqual(card["host"], "claude-code")
+
+    def test_a_parent_without_a_directory_has_no_subagents(self):
+        self.assertEqual(claude_subagents.discover(REAL_TRANSCRIPT), [])
+
+    def test_the_parent_card_does_not_fold_subagents_in(self):
+        """`claude_transcript` reads only the parent (as opencode does);
+        the subagents are added by the run, visibly, never silently."""
+        parent = claude_transcript.load_card(PARENT_TRANSCRIPT)
+        index = json.loads((FIXTURES / claude_transcript.INDEX_FILE).read_text(encoding="utf-8"))
+        self.assertEqual(parent["billed"], index[PARENT_SESSION]["card"]["billed"])
+        self.assertNotIn("subagents", parent)
+
+    def test_capture_tree_reproduces_the_shape_and_refuses_a_bad_slice(self):
+        """Fixture-fidelity rule 5, for the tree: every subagent slice goes
+        through the verifying capture, and lands where Claude Code puts it."""
+        with tempfile.TemporaryDirectory() as td:
+            src_root = Path(td) / "projects" / "C--x-HFSS-automation"
+            (src_root / "p" / "subagents").mkdir(parents=True)
+            parent_lines = synthetic_session("p", "parent", requests=2)
+            (src_root / "p.jsonl").write_text(
+                "\n".join(json.dumps(l) for l in parent_lines) + "\n", encoding="utf-8")
+            sub_lines = synthetic_session("p", "", requests=3)
+            sub_lines = [l for l in sub_lines if l.get("type") != "ai-title"]
+            for l in sub_lines:
+                l["isSidechain"] = True
+                l["agentId"] = "abc"
+            (src_root / "p" / "subagents" / "agent-abc.jsonl").write_text(
+                "\n".join(json.dumps(l) for l in sub_lines) + "\n", encoding="utf-8")
+            (src_root / "p" / "subagents" / "agent-abc.meta.json").write_text(
+                json.dumps({"agentType": "Explore", "description": "look",
+                            "toolUseId": "toolu_1", "spawnDepth": 1}), encoding="utf-8")
+            out = Path(td) / "out"
+            parent, written = claude_subagents.capture_tree(src_root / "p.jsonl", out)
+            self.assertEqual(parent, out / "p.jsonl")
+            self.assertEqual(written, [out / "p" / "subagents" / "agent-abc.jsonl"])
+            self.assertTrue((out / "p" / "subagents" / "agent-abc.meta.json").is_file())
+            self.assertFalse((out / "p" / ".capture").exists())
+            cards = claude_subagents.discover(out / "p.jsonl")
+            self.assertEqual([c["agent_id"] for c in cards], ["abc"])
+            self.assertEqual(cards[0]["billed"], 450)            # 3 requests x 150
+            self.assertEqual(cards[0]["slug"], "look")
+            original = claude_transcript.slice_record
+            def broken(record):
+                kept = original(record)
+                if kept and kept.get("type") == "assistant":
+                    kept["message"].pop("usage", None)
+                return kept
+            claude_transcript.slice_record = broken
+            try:
+                with self.assertRaises(ValueError):
+                    claude_subagents.capture_tree(src_root / "p.jsonl", Path(td) / "out2")
+            finally:
+                claude_transcript.slice_record = original
+
+
+class TestRunFromHistory(unittest.TestCase):
+    """`run_card.py --workspace` over a workspace whose sessions.jsonl names
+    three phase sessions: one card each, plus a `## Run total`."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.projects = make_projects_dir(Path(self.tmp) / "projects", {
+            "C--Users-me-Repos-HFSS-automation": [
+                ("id-clarify", synthetic_session("id-clarify", "patch-clarify", 2)),
+                ("id-build", synthetic_session("id-build", "patch-build", 4)),
+                ("id-solve", synthetic_session("id-solve", "patch-solve", 1)),
+            ],
+        })
+        self._env = dict(os.environ)
+        os.environ.pop(claude_transcript.ENV_SESSION_ID, None)
+        os.environ.pop(run_card.ENV_DB, None)
+        self.addCleanup(self._restore_env)
+        self.ws = write_workspace(self.tmp)
+        self.state = self.ws / "results" / "state"
+
+    def _restore_env(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+
+    def _declare(self, phase, session_id, host="claude-code", name="patch"):
+        """Through the real writer, never a hand-written sessions.jsonl.
+
+        The clock is pinned to the fixture ledger's session-1 start: the
+        clarify declaration is now the wall axis's start boundary (ticket
+        02), so it has to precede the fixture's solve gate.
+        """
+        with mock.patch.object(phase_session.time, "time",
+                               return_value=_started_epoch()):
+            phase_session.start(phase, name=name, state_dir=self.state, host=host,
+                                host_session_id=session_id)
+
+    def run_cli(self, args, projects=None):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = run_card.main(["--projects-dir", str(projects or self.projects)] + args)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_three_declared_sessions_card_three_times_plus_a_total(self):
+        self._declare("clarify", "id-clarify")
+        self._declare("build", "id-build")
+        self._declare("solve", "id-solve")
+        code, text, err = self.run_cli(["--workspace", str(self.ws)])
+        self.assertEqual(code, 0, err)
+        self.assertIn("## clarify — patch-clarify", text)
+        self.assertIn("## build — patch-build", text)
+        self.assertIn("## solve — patch-solve", text)
+        self.assertIn("## Run total", text)
+        total = text[text.index("## Run total"):]
+        self.assertIn("billed: 1050", total)                     # 300 + 600 + 150
+        self.assertIn("parts: 21", total)                        # 6 + 12 + 3
+        self.assertIn("sessions: 3 (clarify, build, solve)", total)
+        self.assertIn("unresolved: 0", total)
+        self.assertIn("subagents: 0", total)
+        self.assertIn("run_id: ws-", total)
+        self.assertIn(f"active_wall_start: {LEDGER_STARTED}", total)
+        self.assertIn("active_wall_start_source: sessions.jsonl", total)
+        self.assertIn("solve_submissions: 1", total)
+        self.assertIn("active_wall: 1 h 40 min 0 s", total)
+        self.assertEqual(text.count("- host: claude-code"), 3)
+
+    def test_a_re_declared_session_is_one_card_with_both_phases(self):
+        self._declare("build", "id-build")
+        self._declare("solve", "id-build")                 # same session, re-declared
+        code, text, _ = self.run_cli(["--workspace", str(self.ws)])
+        self.assertEqual(code, 0)
+        self.assertIn("## build+solve — patch-build", text)
+        self.assertEqual(text.count("- host: claude-code"), 1)
+        self.assertIn("sessions: 1 (build+solve)", text)
+
+    def test_an_unrecorded_session_is_reported_not_dropped(self):
+        self._declare("clarify", "id-clarify")
+        self._declare("build", "", host="")                # declared with nothing to find
+        code, text, _ = self.run_cli(["--workspace", str(self.ws)])
+        self.assertEqual(code, 0)
+        self.assertIn("## build — unresolved", text)
+        self.assertIn("unresolved: 1 (build: no session id was recorded", text)
+        self.assertIn("sessions: 1 (clarify)", text)
+        self.assertIn("billed: 300", text[text.index("## Run total"):])
+
+    def test_nothing_cardable_is_an_error(self):
+        self._declare("solve", "id-missing")
+        code, text, err = self.run_cli(["--workspace", str(self.ws)])
+        self.assertEqual(code, 1)
+        self.assertIn("none of the declared sessions could be carded", err)
+        self.assertIn("no Claude Code transcript for session id-missing", text)
+
+    def test_explicit_selection_still_cards_one_session(self):
+        self._declare("clarify", "id-clarify")
+        self._declare("solve", "id-solve")
+        code, text, _ = self.run_cli(["--workspace", str(self.ws), "--session-id", "id-build"])
+        self.assertEqual(code, 0)
+        self.assertIn("slug: patch-build", text)
+        self.assertNotIn("Run total", text)
+
+    def test_summary_holds_the_whole_run_under_one_run_card_heading(self):
+        self._declare("clarify", "id-clarify")
+        self._declare("build", "id-build")
+        self._declare("solve", "id-solve")
+        summary = self.ws / "summary.md"
+        summary.write_text(CardPrintTest.BODY, encoding="utf-8")
+        code, _, _ = self.run_cli(["--summary", str(summary)])
+        first = summary.read_text(encoding="utf-8")
+        self.run_cli(["--summary", str(summary)])
+        second = summary.read_text(encoding="utf-8")
+        self.assertEqual(code, 0)
+        self.assertEqual(first, second)
+        self.assertEqual(first.count("## Run card"), 1)
+        self.assertIn("### clarify — patch-clarify", first)
+        self.assertIn("### Run total", first)
+        self.assertIn("- billed: 1050", first)
+        self.assertIn("## What the Model is", first)
+        self.assertIn("## Results", first)
+        # The whole run stays one section: no `## ` heading of ours splits it.
+        card = first[first.index("## Run card"):first.index("## Results")]
+        self.assertNotIn("\n## Run total", card)
+
+    def test_verdict_table_scores_the_run_total(self):
+        self._declare("clarify", "id-clarify")
+        self._declare("build", "id-build")
+        code, text, _ = self.run_cli(["--workspace", str(self.ws), "--verdict"])
+        self.assertEqual(code, 0)
+        self.assertIn("| billed tokens", text)
+        row = [ln for ln in text.splitlines() if ln.startswith("| billed tokens")][0]
+        self.assertIn("| 900 ", row)                            # 300 + 600
+
+    def test_subagents_of_a_real_session_are_folded_into_the_total(self):
+        """The captured tree: the parent plus its two subagents, read from a
+        projects dir that is the fixture directory's parent."""
+        self._declare("solve", PARENT_SESSION)
+        code, text, err = self.run_cli(["--workspace", str(self.ws)],
+                                       projects=FIXTURES.parent)
+        self.assertEqual(code, 0, err)
+        parent = claude_transcript.load_card(PARENT_TRANSCRIPT)
+        subs = subagent_index()
+        expected_billed = parent["billed"] + sum(s["card"]["billed"] for s in subs.values())
+        expected_parts = parent["parts"] + sum(s["card"]["parts"] for s in subs.values())
+        self.assertIn("- subagents: 2", text)
+        for sub in subs.values():
+            self.assertIn(f"\"{sub['meta']['description']}\" billed={sub['card']['billed']}", text)
+        total = text[text.index("## Run total"):]
+        self.assertIn(f"billed: {expected_billed}", total)
+        self.assertIn(f"billed_sessions: {parent['billed']}", total)
+        self.assertIn(f"billed_subagents: {expected_billed - parent['billed']}", total)
+        self.assertIn(f"parts: {expected_parts}", total)
+        self.assertIn("subagents: 2", total)
+
+
+# -- the last run's real record (run logging, ticket 02) ---------------------
+
+import hashlib  # noqa: E402
+
+RECORD_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "patch-array-5800"
+# The Session-1 start the real ledger names, on a line with trailing text.
+PATCH_ARRAY_STARTED = "2026-08-18T09:27:37Z"
+PATCH_ARRAY_STARTED_MS = int(datetime(2026, 8, 18, 9, 27, 37,
+                                      tzinfo=timezone.utc).timestamp() * 1000)
+
+
+class TestPatchArrayRecord(unittest.TestCase):
+    """The boundaries the last run could not report, on its real files.
+
+    `scripts/fixtures/patch-array-5800/` holds the run's Session-1 ledger
+    block and its `outcome.txt`, captured byte for byte (`capture.py` there).
+    The ledger's `- Started:` line has trailing text and the outcome is free
+    text with a BOM: both were rejected silently, so the card read
+    `active_wall: unmeasurable` and `outcome: unrecorded`.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.ws = Path(self.tmp) / "patch-array-5800"
+        self.state = self.ws / "results" / "state"
+        self.state.mkdir(parents=True)
+        shutil.copyfile(RECORD_FIXTURES / "state.session1.md", self.ws / "state.md")
+
+    def _gate(self, *stamps):
+        (self.state / run_card.SOLVE_SUBMITTED_FILE).write_text(
+            "".join(f"{s}\n" for s in stamps), encoding="utf-8")
+
+    def test_fixtures_are_present_and_match_their_index(self):
+        index = json.loads((RECORD_FIXTURES / "index.json").read_text(encoding="utf-8"))
+        for name, entry in index["files"].items():
+            data = (RECORD_FIXTURES / name).read_bytes()
+            self.assertEqual(len(data), entry["bytes"], name)
+            self.assertEqual(hashlib.sha256(data).hexdigest(), entry["sha256"], name)
+
+    def test_the_real_started_line_has_trailing_text_and_still_parses(self):
+        text = (self.ws / "state.md").read_text(encoding="utf-8")
+        self.assertIn(f"- Started: {PATCH_ARRAY_STARTED} (", text)   # the real defect
+        self.assertEqual(run_card.ledger_start_ms(self.ws / "state.md"),
+                         PATCH_ARRAY_STARTED_MS)
+
+    def test_active_wall_is_measured_once_a_gate_exists(self):
+        self._gate(PATCH_ARRAY_STARTED_MS / 1000.0 + 3 * 3600)
+        wall = run_card.Wall(self.ws)
+        self.assertTrue(wall.measurable, wall.reason)
+        self.assertEqual(wall.start_ms, PATCH_ARRAY_STARTED_MS)
+        self.assertEqual(wall.start_source, run_card.START_SOURCE_LEDGER)
+        self.assertEqual(wall.submissions, 1)
+        self.assertEqual(wall.label, "3 h 0 min 0 s")
+
+    def test_without_a_gate_only_the_gate_is_missing(self):
+        wall = run_card.Wall(self.ws)
+        self.assertEqual(wall.start_ms, PATCH_ARRAY_STARTED_MS)
+        self.assertEqual(wall.reason, run_card.REASON_NO_GATE)
+        self.assertEqual(wall.submissions, 0)
+
+    def test_a_re_submission_counts_but_the_first_line_is_the_gate(self):
+        first = PATCH_ARRAY_STARTED_MS / 1000.0 + 3600
+        self._gate(first, first + 7200)
+        wall = run_card.Wall(self.ws)
+        self.assertEqual(wall.gate_ms, int(first * 1000))
+        self.assertEqual(wall.submissions, 2)
+        self.assertEqual(wall.label, "1 h 0 min 0 s")
+
+    def test_a_garbage_gate_line_is_skipped_never_guessed(self):
+        (self.state / run_card.SOLVE_SUBMITTED_FILE).write_text("\n", encoding="utf-8")
+        self.assertEqual(run_card.Wall(self.ws).reason, run_card.REASON_NO_GATE)
+        (self.state / run_card.SOLVE_SUBMITTED_FILE).write_text(
+            f"soon\n{PATCH_ARRAY_STARTED_MS / 1000.0 + 60}\n", encoding="utf-8")
+        wall = run_card.Wall(self.ws)
+        self.assertEqual(wall.submissions, 1)
+        self.assertEqual(wall.label, "0 h 1 min 0 s")
+
+    def test_the_clarify_declaration_beats_the_ledger(self):
+        phase_session.start("clarify", state_dir=self.state, host="claude-code",
+                            host_session_id="id-clarify")
+        declared = phase_session.history(self.state)[0]["ts_ms"]
+        self._gate(declared / 1000.0 + 600)
+        wall = run_card.Wall(self.ws)
+        self.assertEqual(wall.start_source, run_card.START_SOURCE_HISTORY)
+        self.assertEqual(wall.start_ms, declared)
+        self.assertEqual(wall.label, "0 h 10 min 0 s")
+
+    def test_a_history_without_a_clarify_declaration_falls_back_to_the_ledger(self):
+        phase_session.start("solve", state_dir=self.state, host="claude-code",
+                            host_session_id="id-solve")
+        wall = run_card.Wall(self.ws)
+        self.assertEqual(wall.start_source, run_card.START_SOURCE_LEDGER)
+        self.assertEqual(wall.start_ms, PATCH_ARRAY_STARTED_MS)
+
+    def test_the_last_runs_outcome_file_triggers_the_warning(self):
+        shutil.copyfile(RECORD_FIXTURES / "outcome.txt", self.state / run_card.OUTCOME_FILE)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            outcome = run_card.Outcome(self.ws)
+        self.assertIsNone(outcome.outcome)                        # never guessed
+        self.assertTrue(outcome.warning.startswith(
+            "outcome.txt is not key=value: completed - user verdict: tuning issue"),
+            outcome.warning)
+        self.assertNotIn("﻿", outcome.warning)               # the BOM is not text
+        self.assertIn(f"warning: {outcome.warning}", err.getvalue())
+        self.assertTrue(outcome.label.startswith("unrecorded (outcome.txt is not key=value"))
+        self.assertEqual(outcome.cost_label(100), run_card.UNKNOWN_OUTCOME)
+
+    def test_a_key_value_file_behind_a_bom_is_read_without_a_warning(self):
+        (self.state / run_card.OUTCOME_FILE).write_text(
+            "﻿outcome=completed\ncompletions=2\n", encoding="utf-8")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            outcome = run_card.Outcome(self.ws)
+        self.assertIsNone(outcome.warning)
+        self.assertEqual(err.getvalue(), "")
+        self.assertEqual(outcome.completions, 2)
+
+    def test_the_warning_reaches_the_card(self):
+        shutil.copyfile(RECORD_FIXTURES / "outcome.txt", self.state / run_card.OUTCOME_FILE)
+        card = {"slug": "hidden-falcon", "time_created": None, "time_updated": None,
+                "duration_ms": None, "tokens_input": 0, "tokens_output": 0,
+                "tokens_reasoning": 0, "tokens_cache_read": 0,
+                "tokens_cache_write": 0, "billed": 1, "parts": 1, "storesize": 0}
+        with contextlib.redirect_stderr(io.StringIO()):
+            text = run_card.render_card(card, run_card.Wall(self.ws),
+                                        run_card.Outcome(self.ws))
+        self.assertIn("outcome: unrecorded (outcome.txt is not key=value: completed - user "
+                      "verdict", text)
+        self.assertIn(f"active_wall_start: {PATCH_ARRAY_STARTED}", text)
+        self.assertIn("active_wall_start_source: state.md", text)
+        self.assertIn("solve_submissions: 0", text)
+        self.assertIn("active_wall: unmeasurable: no solve_gate timestamp", text)
 
 
 if __name__ == "__main__":

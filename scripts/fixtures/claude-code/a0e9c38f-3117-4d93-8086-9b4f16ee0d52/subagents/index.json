@@ -1,0 +1,48 @@
+{
+  "a7c9f335c3a8f10e1": {
+    "captured_from": "agent-a7c9f335c3a8f10e1.jsonl",
+    "captured_from_dir": "a0e9c38f-3117-4d93-8086-9b4f16ee0d52/subagents",
+    "card": {
+      "billed": 2378,
+      "parts": 52,
+      "slug": "Survey hfss-agent skill wiring",
+      "storesize": 371247,
+      "time_created": 1788320114888,
+      "time_updated": 1788320308730,
+      "tokens_cache_read": 463940,
+      "tokens_cache_write": 75607,
+      "tokens_input": 22,
+      "tokens_output": 2356,
+      "tokens_reasoning": 684
+    },
+    "meta": {
+      "agentType": "Explore",
+      "description": "Survey hfss-agent skill wiring",
+      "spawnDepth": 1,
+      "toolUseId": "toolu_015bAWfoUPzVgDkDBQvyKHzV"
+    }
+  },
+  "aee86fa4fd776a43f": {
+    "captured_from": "agent-aee86fa4fd776a43f.jsonl",
+    "captured_from_dir": "a0e9c38f-3117-4d93-8086-9b4f16ee0d52/subagents",
+    "card": {
+      "billed": 292,
+      "parts": 47,
+      "slug": "Claude Code skill/agent packaging facts",
+      "storesize": 497582,
+      "time_created": 1788320131481,
+      "time_updated": 1788320298987,
+      "tokens_cache_read": 230616,
+      "tokens_cache_write": 57254,
+      "tokens_input": 74,
+      "tokens_output": 218,
+      "tokens_reasoning": 106
+    },
+    "meta": {
+      "agentType": "claude-code-guide",
+      "description": "Claude Code skill/agent packaging facts",
+      "spawnDepth": 1,
+      "toolUseId": "toolu_01G2HZa7wmCDUS4xojzWGo7u"
+    }
+  }
+}

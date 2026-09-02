@@ -46,6 +46,14 @@ SUITES = [
     # milliseconds instead of after a solve.
     ("readout", [sys.executable, os.path.join(SRC, "test_read_results.py")]),
     ("run-card", [sys.executable, os.path.join(REPO, "scripts", "test_run_card.py")]),
+    # The two run-record writers (run logging, ticket 02): the outcome file
+    # the card parses and the append-only Review-gate log, each refusing the
+    # free text that made the last run's card read `unrecorded`.
+    ("record-state", [sys.executable, os.path.join(REPO, "scripts", "test_record.py")]),
+    # The step trace extractor over both harness stores (run-logging 04):
+    # the same steps.jsonl shape from a captured Claude Code transcript and a
+    # captured opencode family, usage once per request, subagents linked.
+    ("run-trace", [sys.executable, os.path.join(REPO, "scripts", "test_run_trace.py")]),
     ("static-gate", [sys.executable, os.path.join(SRC, "00_static_gate.py")]),
     ("skill-markers", [sys.executable, os.path.join(REPO, "skill", "hfss-agent", "verify_skill.py")]),
     ("kb-checks", [sys.executable, os.path.join(REPO, "scraping", "verify_kb.py")]),

@@ -58,6 +58,19 @@ def write_state(key, value):
         f.write(str(value))
 
 
+def append_state(key, value):
+    """Append one line to `results/state/<key>.txt`; never rewrites a line.
+
+    For boundaries that can legitimately happen more than once — a solve
+    re-submitted after a user-approved model change — where the record has
+    to keep every occurrence: the first line is the boundary, the line count
+    is the number of occurrences (run logging, ticket 02).
+    """
+    os.makedirs(STATE, exist_ok=True)
+    with open(os.path.join(STATE, key + ".txt"), "a") as f:
+        f.write(str(value) + "\n")
+
+
 def read_state(key):
     """Read one machine-state file; None when absent."""
     try:

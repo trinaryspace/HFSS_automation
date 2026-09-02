@@ -1,4 +1,21 @@
 {
+  "a0e9c38f-3117-4d93-8086-9b4f16ee0d52": {
+    "captured_from": "a0e9c38f-3117-4d93-8086-9b4f16ee0d52.jsonl",
+    "captured_from_dir": "C--Users-afpim-Repos-HFSS-automation",
+    "card": {
+      "billed": 88953,
+      "parts": 329,
+      "slug": "claude code skill integration",
+      "storesize": 1610071,
+      "time_created": 1788320069234,
+      "time_updated": 1788355058665,
+      "tokens_cache_read": 8045016,
+      "tokens_cache_write": 383882,
+      "tokens_input": 7868,
+      "tokens_output": 81085,
+      "tokens_reasoning": 22296
+    }
+  },
   "f0c832a3-cb36-4168-ac07-70c2793c74a2": {
     "captured_from": "f0c832a3-cb36-4168-ac07-70c2793c74a2.jsonl",
     "captured_from_dir": "C--Users-afpim-Repos-HFSS-automation",

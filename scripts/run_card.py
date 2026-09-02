@@ -18,6 +18,16 @@ Two harnesses run the skill, and each keeps sessions differently:
 The card always names its `host`, so a number from one harness is never
 mistaken for the other's.
 
+A run is three phase sessions plus their subagents (run logging, ticket 01).
+When a workspace's `results/state/sessions.jsonl` — appended by every
+`scripts/session.py --phase` declaration — lists the sessions, `--workspace`
+(or `--summary`) with no explicit session selection cards **every** declared
+session, one card each, folds in the subagent transcripts of each Claude Code
+session (`scripts/claude_subagents.py`), and closes with a `## Run total`
+block carrying the run's identity (`run.json`), the wall axis, the outcome
+and the summed cost. A workspace that only has the older single
+`session.json` cards that one session exactly as before.
+
 Part of the hfss-agent-perf-refactor measurement harness (ticket 01): every
 optimization is judged against the numbers this card emits, so the card is
 derived from the reference SQL in
@@ -66,7 +76,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+REPO = Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+import claude_subagents  # noqa: E402
 import claude_transcript  # noqa: E402
+from hfss_spec import session as phase_session  # noqa: E402
 
 DEFAULT_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
 ENV_DB = "OPENCODE_DB"
@@ -75,12 +90,21 @@ PROJECT_MARKER = "HFSS_automation"
 HOST_OPENCODE = "opencode"
 HOST_CLAUDE_CODE = claude_transcript.HOST
 HOSTS = (HOST_OPENCODE, HOST_CLAUDE_CODE)
-SESSION_STATE_FILE = "session.json"       # hfss_spec.session.STATE_FILE
+SESSION_STATE_FILE = phase_session.STATE_FILE        # session.json
+SESSIONS_HISTORY_FILE = phase_session.HISTORY_FILE   # sessions.jsonl
+RUN_FILE = phase_session.RUN_FILE                    # run.json
+TOKEN_KEYS = ("tokens_input", "tokens_output", "tokens_reasoning",
+              "tokens_cache_read", "tokens_cache_write")
+SUM_KEYS = TOKEN_KEYS + ("billed", "parts", "storesize")
 
 SOLVE_SUBMITTED_FILE = "solve_submitted_at.txt"
 UNMEASURABLE = "unmeasurable"
 REASON_NO_WORKSPACE = "no workspace state (no --workspace/--summary)"
 REASON_NO_START = "no session-1 start in state.md"
+# Where the session-1 start came from: the machine record first (the clarify
+# declaration in sessions.jsonl, ticket 01), the hand-written ledger second.
+START_SOURCE_HISTORY = SESSIONS_HISTORY_FILE
+START_SOURCE_LEDGER = "state.md"
 REASON_NO_GATE = "no solve_gate timestamp"
 REASON_GATE_BEFORE_START = "solve gate precedes session start"
 
@@ -136,16 +160,28 @@ class Wall:
 
     def __init__(self, workspace=None):
         self.start_ms = None
+        self.start_source = None
         self.gate_ms = None
+        self.submissions = 0
         self.active_ms = None
         self.reason = None
         if workspace is None:
             self.reason = REASON_NO_WORKSPACE
             return
-        self.start_ms = ledger_start_ms(Path(workspace) / "state.md")
-        self.gate_ms = epoch_ms_file(
-            Path(workspace) / "results" / "state" / SOLVE_SUBMITTED_FILE
-        )
+        state = Path(workspace) / "results" / "state"
+        self.start_ms = history_start_ms(state)
+        if self.start_ms is not None:
+            self.start_source = START_SOURCE_HISTORY
+        else:
+            self.start_ms = ledger_start_ms(Path(workspace) / "state.md")
+            if self.start_ms is not None:
+                self.start_source = START_SOURCE_LEDGER
+        # The gate file is append-only (ticket 02): the first line is the
+        # user-gated submission the wall axis ends at; every line is one
+        # submission, so a re-submitted solve is visible as a count.
+        gates = epoch_ms_lines(state / SOLVE_SUBMITTED_FILE)
+        self.submissions = len(gates)
+        self.gate_ms = gates[0] if gates else None
         if self.start_ms is None:
             self.reason = REASON_NO_START
         elif self.gate_ms is None:
@@ -198,6 +234,7 @@ class Outcome:
         self.completions = None
         self.escape_hatch = None
         self.note = None
+        self.warning = None
         if workspace is not None:
             self._read(Path(workspace) / "results" / "state" / OUTCOME_FILE)
         if outcome is not None:
@@ -210,10 +247,22 @@ class Outcome:
             self.completions = 1 if self.outcome == OUTCOME_COMPLETED else 0
 
     def _read(self, path):
+        """Parse `outcome.txt`; loud when it is not the key=value form.
+
+        The last run wrote `completed - user verdict: ...` by hand (a UTF-8
+        BOM in front of it, too) and the parser read it as nothing: the card
+        said `unrecorded` and nobody noticed. A file that exists but does not
+        start with `<key>=` is now reported on stderr and on the card, and
+        `scripts/record_outcome.py` is the writer that cannot get it wrong.
+        """
         try:
-            text = path.read_text(encoding="utf-8")
+            text = path.read_text(encoding="utf-8-sig")
         except OSError:
             return
+        first = next((ln for ln in text.splitlines() if ln.strip()), "")
+        if not re.match(r"^\s*\w+\s*=", first):
+            self.warning = f"{OUTCOME_FILE} is not key=value: {first.strip()}"
+            print(f"warning: {self.warning}", file=sys.stderr)
         for line in text.splitlines():
             key, _, value = line.partition("=")
             key, value = key.strip(), value.strip()
@@ -229,6 +278,8 @@ class Outcome:
     @property
     def label(self):
         if self.outcome is None:
+            if self.warning:
+                return f"{UNKNOWN_OUTCOME} ({self.warning})"
             return UNKNOWN_OUTCOME
         if self.note:
             return f"{self.outcome} ({self.note})"
@@ -259,11 +310,31 @@ def _int_or_none(raw):
         return None
 
 
+def history_start_ms(state_dir):
+    """Session-1 start (epoch ms) from `sessions.jsonl`, or None.
+
+    The earliest `clarify` declaration is the Clarification session's start,
+    written by `scripts/session.py --phase clarify` at the instant it
+    happened (ticket 01). Machine-written, so it is consulted before the
+    hand-written ledger. A history with no clarify declaration gives None
+    rather than the start of some other phase.
+    """
+    starts = [r["ts_ms"] for r in phase_session.history(state_dir)
+              if r.get("phase") == phase_session.CLARIFY
+              and isinstance(r.get("ts_ms"), int) and r["ts_ms"] > 0]
+    return min(starts) if starts else None
+
+
 def ledger_start_ms(path):
     """Session-1 start (epoch ms) from a workspace state.md, or None.
 
     Only the Session 1 header block is consulted -- the timestamp lives in
     the header area only, written there once by the Clarification session.
+    The line is hand-written, so only the timestamp token is required: the
+    real patch-array-5800 ledger reads `- Started: 2026-08-18T09:27:37Z
+    (\\`session.json\\`); task: ...` and the strict end-of-line match that
+    used to live here rejected it, which is why that run's active wall read
+    unmeasurable.
     """
     try:
         text = path.read_text(encoding="utf-8")
@@ -272,22 +343,39 @@ def ledger_start_ms(path):
     section = _session1_section(text)
     if section is None:
         return None
-    m = re.search(r"(?m)^-\s*Started:\s*(\S+)\s*$", section)
+    m = re.search(r"(?m)^-\s*Started:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\b",
+                  section)
     if m is None:
         return None
     return _parse_iso_ms(m.group(1))
 
 
-def epoch_ms_file(path):
-    """Epoch-seconds float state file as epoch ms; None if absent/garbage."""
+def epoch_ms_lines(path):
+    """Every parseable epoch-seconds line of a state file, as epoch ms.
+
+    The solve gate is append-only: one line per submission. A blank or
+    garbage line is skipped, never guessed; an absent file is [].
+    """
     try:
-        text = path.read_text(encoding="utf-8").strip()
+        text = path.read_text(encoding="utf-8")
     except OSError:
-        return None
-    try:
-        return int(float(text) * 1000)
-    except ValueError:
-        return None
+        return []
+    stamps = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            stamps.append(int(float(line) * 1000))
+        except ValueError:
+            continue
+    return stamps
+
+
+def epoch_ms_file(path):
+    """The first epoch-seconds line of a state file as epoch ms; None if none."""
+    stamps = epoch_ms_lines(path)
+    return stamps[0] if stamps else None
 
 
 def _session1_section(text):
@@ -387,7 +475,9 @@ def _metric_pairs(card, wall=None, outcome=None):
         ("updated", _iso(card["time_updated"])),
         ("duration", _duration(card["duration_ms"])),
         ("active_wall_start", _iso(wall.start_ms)),
+        ("active_wall_start_source", wall.start_source or "n/a"),
         ("solve_gate", _iso(wall.gate_ms)),
+        ("solve_submissions", wall.submissions),
         ("active_wall", wall.label),
         ("tokens_input", card["tokens_input"]),
         ("tokens_output", card["tokens_output"]),
@@ -410,11 +500,16 @@ def summary_section(card, wall=None, outcome=None):
 
 
 def upsert_summary(path, card, wall=None, outcome=None):
-    """Insert the Run card section into summary.md; replace any old one.
+    """Insert the Run card section into summary.md; replace any old one."""
+    upsert_section(path, summary_section(card, wall, outcome))
+
+
+def upsert_section(path, section):
+    """Write `section` (a `## Run card` block) into summary.md in place.
 
     The section is the block under a `## Run card` heading (a whole line)
-    up to the next `## ` heading (or end of file). Idempotent: writing
-    twice yields the same file.
+    up to the next `## ` heading (or end of file); `### ` sub-headings inside
+    the block belong to it. Idempotent: writing twice yields the same file.
     """
     text = path.read_text(encoding="utf-8")
     match = re.search(r"(?m)^## Run card\s*$", text)
@@ -431,8 +526,7 @@ def upsert_summary(path, card, wall=None, outcome=None):
         head = text.rstrip()
         head = head + "\n\n" if head else ""
         tail = ""
-    path.write_text(head + summary_section(card, wall, outcome) + tail,
-                    encoding="utf-8")
+    path.write_text(head + section + tail, encoding="utf-8")
 
 
 def render_card(card, wall=None, outcome=None):
@@ -518,6 +612,229 @@ def verdict_table(card, wall, baseline=None):
         _wall_row(wall, b),
     ]
     return _markdown_table(header, rows)
+
+
+# -- the run: every declared session, plus subagents, plus a total -----------
+
+UNRESOLVED = "unresolved"
+
+
+def declared_sessions(workspace):
+    """The run's sessions from `sessions.jsonl`, one entry per distinct
+    (host, session id), oldest first; [] when the workspace has no history.
+
+    A session that declared twice (a solve session re-declaring after a
+    desktop recycle) is one entry carrying both phases; a declaration with
+    no session id stays its own entry so the report can say it is
+    unresolved rather than silently dropping a session that cost tokens.
+    """
+    if workspace is None:
+        return []
+    entries = []
+    by_key = {}
+    for record in phase_session.history(Path(workspace) / "results" / "state"):
+        host = str(record.get("host") or "")
+        session_id = str(record.get("host_session_id") or "")
+        key = (host, session_id) if session_id else None
+        if key is not None and key in by_key:
+            entry = by_key[key]
+            if record["phase"] not in entry["phases"]:
+                entry["phases"].append(record["phase"])
+            entry["declarations"] += 1
+            continue
+        entry = {"host": host, "session_id": session_id,
+                 "phases": [record["phase"]], "name": str(record.get("name") or ""),
+                 "ts": record.get("ts"), "skill_commit": record.get("skill_commit", ""),
+                 "declarations": 1}
+        entries.append(entry)
+        if key is not None:
+            by_key[key] = entry
+    return entries
+
+
+def load_session_card(entry, args):
+    """(card, error) for one declared session, read from its own host's store.
+
+    A Claude Code card is annotated with `subagents`: the cards of the
+    transcripts under `<session-id>/subagents/` beside it.
+    """
+    host, session_id = entry["host"], entry["session_id"]
+    if not session_id:
+        return None, "no session id was recorded at declaration"
+    if host == HOST_CLAUDE_CODE:
+        card = claude_transcript.select(session_id=session_id,
+                                        root=getattr(args, "projects_dir", None))
+        if card is None:
+            return None, (f"no Claude Code transcript for session {session_id} under "
+                          f"{claude_transcript.projects_dir(getattr(args, 'projects_dir', None))}")
+        card["subagents"] = claude_subagents.discover(Path(card["transcript"]))
+        return card, None
+    if host == HOST_OPENCODE:
+        db_path = getattr(args, "db", None) or os.environ.get(ENV_DB) or DEFAULT_DB
+        if not Path(db_path).is_file():
+            return None, f"database not found: {db_path}"
+        try:
+            con = connect(db_path)
+        except sqlite3.Error as exc:
+            return None, f"cannot open database {db_path}: {exc}"
+        try:
+            card = load_card(con, slug=session_id, worktree=getattr(args, "worktree", None))
+        except sqlite3.Error as exc:
+            return None, f"query failed: {exc}"
+        finally:
+            con.close()
+        if card is None:
+            return None, f"no opencode session whose slug is '{session_id}'"
+        card["host"] = HOST_OPENCODE
+        card["subagents"] = []
+        return card, None
+    return None, f"unknown host {host!r}"
+
+
+def run_total(cards):
+    """One card summing the resolved session cards and their subagents.
+
+    `time_created` / `time_updated` span the earliest and latest session;
+    `duration_ms` is that span (idle gaps between sessions included, as it
+    is for one session). Per-source sums are kept beside the totals so the
+    subagents' share is visible.
+    """
+    total = {k: 0 for k in SUM_KEYS}
+    sessions_billed = subagents_billed = 0
+    subagent_count = 0
+    first = last = None
+    for card in cards:
+        for key in SUM_KEYS:
+            total[key] += int(card.get(key) or 0)
+        sessions_billed += int(card.get("billed") or 0)
+        for sub in card.get("subagents") or []:
+            subagent_count += 1
+            subagents_billed += int(sub.get("billed") or 0)
+            for key in SUM_KEYS:
+                total[key] += int(sub.get(key) or 0)
+        for bound in ("time_created", "time_updated"):
+            value = card.get(bound)
+            if value is None:
+                continue
+            first = value if first is None else min(first, value)
+            last = value if last is None else max(last, value)
+    total.update({
+        "slug": "run total", "host": "run",
+        "time_created": first, "time_updated": last,
+        "duration_ms": None if first is None or last is None else last - first,
+        "sessions": len(cards), "subagents": subagent_count,
+        "billed_sessions": sessions_billed, "billed_subagents": subagents_billed,
+    })
+    return total
+
+
+def _session_pairs(card):
+    """A session's own metrics, subagent lines included; no run-level axes."""
+    pairs = [
+        ("slug", card["slug"]),
+        ("host", card.get("host", HOST_OPENCODE)),
+        ("created", _iso(card["time_created"])),
+        ("updated", _iso(card["time_updated"])),
+        ("duration", _duration(card["duration_ms"])),
+    ]
+    pairs += [(k, card[k]) for k in TOKEN_KEYS]
+    pairs += [("billed", card["billed"]), ("parts", card["parts"]),
+              ("store_bytes", card["storesize"])]
+    subagents = card.get("subagents") or []
+    if card.get("host") == HOST_CLAUDE_CODE:
+        pairs.append(("subagents", len(subagents)))
+    for sub in subagents:
+        pairs.append(("subagent", f"{sub.get('agent_type') or '-'} "
+                                  f"\"{sub['slug']}\" billed={sub['billed']} "
+                                  f"parts={sub['parts']} "
+                                  f"duration={_duration(sub['duration_ms'])}"))
+    return pairs
+
+
+def _run_pairs(total, run, wall, outcome, entries):
+    """The `Run total` block: identity, span, wall axis, cost, outcome."""
+    resolved = [e for e in entries if e.get("card") is not None]
+    unresolved = [e for e in entries if e.get("card") is None]
+    pairs = [
+        ("run_id", (run or {}).get("run_id") or UNKNOWN_OUTCOME),
+        ("skill_commit", (run or {}).get("skill_commit") or UNKNOWN_OUTCOME),
+        ("sessions", f"{len(resolved)} ("
+                     + ", ".join("+".join(e["phases"]) for e in resolved) + ")"
+                     if resolved else "0"),
+        ("unresolved", f"{len(unresolved)} ("
+                       + "; ".join(f"{'+'.join(e['phases'])}: {e['error']}"
+                                   for e in unresolved) + ")"
+                       if unresolved else "0"),
+        ("subagents", total["subagents"]),
+        ("created", _iso(total["time_created"])),
+        ("updated", _iso(total["time_updated"])),
+        ("duration", _duration(total["duration_ms"])),
+        ("active_wall_start", _iso(wall.start_ms)),
+        ("active_wall_start_source", wall.start_source or "n/a"),
+        ("solve_gate", _iso(wall.gate_ms)),
+        ("solve_submissions", wall.submissions),
+        ("active_wall", wall.label),
+    ]
+    pairs += [(k, total[k]) for k in TOKEN_KEYS]
+    pairs += [
+        ("billed", total["billed"]),
+        ("billed_sessions", total["billed_sessions"]),
+        ("billed_subagents", total["billed_subagents"]),
+        ("parts", total["parts"]),
+        ("store_bytes", total["storesize"]),
+        ("outcome", outcome.label),
+        ("escape_hatch_scripts", outcome.escape_hatch_label),
+        ("billed_per_completed_sim", outcome.cost_label(total["billed"])),
+    ]
+    return pairs
+
+
+def _entry_title(entry):
+    slug = entry["card"]["slug"] if entry.get("card") else UNRESOLVED
+    return f"{'+'.join(entry['phases'])} — {slug}"
+
+
+def render_run(entries, total, run, wall, outcome, level="## "):
+    """One card per declared session, then the `Run total` block.
+
+    `level` is the heading level: `## ` on stdout, `### ` inside the
+    summary's `## Run card` section so the whole run stays one section.
+    """
+    blocks = []
+    for entry in entries:
+        head = f"{level}{_entry_title(entry)}"
+        if entry.get("card") is None:
+            blocks.append(f"{head}\n\n- host: {entry['host'] or '-'}\n"
+                          f"- session_id: {entry['session_id'] or '-'}\n"
+                          f"- {UNRESOLVED}: {entry['error']}\n")
+            continue
+        body = "\n".join(f"- {k}: {v}" for k, v in _session_pairs(entry["card"]))
+        blocks.append(f"{head}\n\n{body}\n")
+    body = "\n".join(f"- {k}: {v}" for k, v in _run_pairs(total, run, wall, outcome, entries))
+    blocks.append(f"{level}Run total\n\n{body}\n")
+    return "\n".join(blocks)
+
+
+def run_summary_section(entries, total, run, wall, outcome):
+    """The `## Run card` section for a whole run (sub-blocks are `###`)."""
+    return "## Run card\n\n" + render_run(entries, total, run, wall, outcome,
+                                          level="### ")
+
+
+def load_run(workspace, args):
+    """Every declared session carded, with a total; None without a history."""
+    entries = declared_sessions(workspace)
+    if not entries:
+        return None
+    for entry in entries:
+        card, error = load_session_card(entry, args)
+        entry["card"], entry["error"] = card, error
+    cards = [e["card"] for e in entries if e["card"] is not None]
+    run = phase_session.run_info(Path(workspace) / "results" / "state") or {}
+    commits = [e["skill_commit"] for e in entries if e.get("skill_commit")]
+    if commits and "skill_commit" not in run:
+        run = dict(run, skill_commit=" -> ".join(dict.fromkeys(commits)))
+    return {"entries": entries, "cards": cards, "total": run_total(cards), "run": run}
 
 
 def declared_session(workspace):
@@ -660,6 +977,36 @@ def main(argv=None):
         parser.error("give at most one of --slug <slug> or --latest")
     summary_path = Path(args.summary) if args.summary else None
     workspace = args.workspace or (str(summary_path.parent) if summary_path else None)
+
+    # The run: a workspace with a declaration history and no explicit
+    # session selection cards every session it declared, plus a total.
+    explicit = args.slug is not None or args.latest or args.session_id or args.transcript
+    run = None if explicit else load_run(workspace, args)
+    if run is not None:
+        wall = Wall(workspace)
+        outcome = Outcome(workspace, outcome=args.outcome,
+                          completions=args.completions,
+                          escape_hatch=args.escape_hatch)
+        print(render_run(run["entries"], run["total"], run["run"], wall, outcome),
+              end="")
+        if summary_path:
+            try:
+                upsert_section(summary_path, run_summary_section(
+                    run["entries"], run["total"], run["run"], wall, outcome))
+            except (OSError, ValueError, UnicodeError) as exc:
+                print(f"error: cannot write '{args.summary}': {exc}", file=sys.stderr)
+                return 1
+            print(f"run card written to {args.summary}")
+        if args.verdict:
+            print()
+            print(verdict_table(run["total"], wall))
+        unresolved = [e for e in run["entries"] if e["card"] is None]
+        if unresolved and not run["cards"]:
+            print("error: none of the declared sessions could be carded: "
+                  + "; ".join(e["error"] for e in unresolved), file=sys.stderr)
+            return 1
+        return 0
+
     host, session_id = resolve_host(args, workspace)
     if host == HOST_OPENCODE:
         if args.latest == (args.slug is not None):

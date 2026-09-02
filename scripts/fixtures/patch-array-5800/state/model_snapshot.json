@@ -1,0 +1,158 @@
+{
+ "bboxes": {
+  "AirBox": [
+   -52.2295,
+   -35.0,
+   -17.2645,
+   52.2295,
+   52.2295,
+   18.0265
+  ],
+  "GroundPlane": [
+   -35.0,
+   -35.0,
+   -0.035,
+   35.0,
+   35.0,
+   0.0
+  ],
+  "P1": [
+   -21.55605,
+   -35.0,
+   0.762,
+   21.55605,
+   19.734,
+   0.797
+  ],
+  "PortSheet": [
+   -4.0,
+   -35.0,
+   -0.035,
+   4.0,
+   -35.0,
+   18.0265
+  ],
+  "Substrate": [
+   -35.0,
+   -35.0,
+   0.0,
+   35.0,
+   35.0,
+   0.762
+  ]
+ },
+ "boundaries": {
+  "Port1": "Wave Port",
+  "Rad": "Radiation"
+ },
+ "excitations": {},
+ "materials": {
+  "AirBox": "air",
+  "GroundPlane": "pec",
+  "P1": "pec",
+  "PortSheet": "",
+  "Substrate": "ro4350b"
+ },
+ "model_units": "mm",
+ "object_kinds": {
+  "AirBox": "solid",
+  "GroundPlane": "solid",
+  "P1": "solid",
+  "PortSheet": "sheet",
+  "Substrate": "solid"
+ },
+ "objects": [
+  "AirBox",
+  "GroundPlane",
+  "P1",
+  "PortSheet",
+  "Substrate"
+ ],
+ "ports": {
+  "Port1": "Wave Port"
+ },
+ "setups": {
+  "Setup1": {
+   "BasisOrder": 1,
+   "DoLambdaRefine": true,
+   "DoMaterialLambda": true,
+   "DrivenSolverType": "Direct Solver",
+   "EnhancedLowFreqAccuracy": false,
+   "Frequency": "5GHz",
+   "ID": 1,
+   "IE Solver Accuracy": "Balanced",
+   "IESolverType": "Auto",
+   "InfiniteSphereSetup": -1,
+   "IsEnabled": true,
+   "LambdaTargetForIESolver": 0.15,
+   "MaxDeltaS": 0.02,
+   "MaxPass": 10,
+   "MaximumPasses": 15,
+   "MeshLink": {
+    "ImportMesh": false
+   },
+   "MinConvPass": 1,
+   "MinPass": 1,
+   "MinimumConvergedPasses": 1,
+   "MinimumPasses": 1,
+   "PerError": 1,
+   "PerRefine": 30,
+   "PercentRefinement": 30,
+   "PortAccuracy": 2,
+   "PortMaxTri": 500,
+   "PortMinTri": 100,
+   "SaveAnyFields": true,
+   "SaveRadFieldsOnly": false,
+   "SetLambdaTarget": false,
+   "SetPortMinMaxTri": false,
+   "SetupType": "HfssDriven",
+   "SolveType": "Single",
+   "Sweeps": {
+    "MoveBackwards": false,
+    "NextUniqueID": 1,
+    "Sweep1_BZ5US7": {
+     "ID": 0,
+     "IsEnabled": true,
+     "RangeCount": 151,
+     "RangeEnd": "6.5GHz",
+     "RangeStart": "5GHz",
+     "RangeType": "LinearCount",
+     "SaveFields": true,
+     "SaveRadFields": false,
+     "Type": "Discrete"
+    }
+   },
+   "Target": 0.3333,
+   "UseABCOnPort": false,
+   "UseDefaultLambdaTgtForIESolver": true,
+   "UseMatrixConv": false,
+   "UseMaxTetIncrease": false
+  }
+ },
+ "snapshot_version": 3,
+ "sweeps": [
+  "Setup1 - air_pad='17.229500000000002mm' cu_t='0.035000000000000003mm' er='3.48' f0='5.7999999999999998GHz' feed50_W='1.7426999999999999mm' h='0.76200000000000001mm' inset_d='2mm' inset_g='1mm' patch_L='13.623799999999999mm' patch_W='17.267900000000001mm' port_w='8mm' q_x='7.6555999999999997mm' S='25.844200000000001mm' sub_L='70mm' sub_W='70mm' tand='0.0037000000000000002' xfmr_W='2.9083999999999999mm' : Table",
+  "Setup1 : LastAdaptive",
+  "Setup1 : Sweep1"
+ ],
+ "terminals": {},
+ "variables": {
+  "S": "25.8442mm",
+  "air_pad": "17.2295mm",
+  "cu_t": "0.035mm",
+  "er": "3.48",
+  "f0": "5.8GHz",
+  "feed50_W": "1.7427mm",
+  "h": "0.762mm",
+  "inset_d": "2mm",
+  "inset_g": "1mm",
+  "patch_L": "13.6238mm",
+  "patch_W": "17.2679mm",
+  "port_w": "8mm",
+  "q_x": "7.6556mm",
+  "sub_L": "70mm",
+  "sub_W": "70mm",
+  "tand": "0.0037",
+  "xfmr_W": "2.9084mm"
+ }
+}

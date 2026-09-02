@@ -14,6 +14,78 @@
       "slice": "whole file",
       "bytes": 155,
       "sha256": "4204e6b3a677e2d274e47a503cadace4ac29370393c95ad09132f3ad7a7a4b11"
+    },
+    "state/aedt_port.txt": {
+      "source": "results/state/aedt_port.txt",
+      "slice": "whole file",
+      "bytes": 5,
+      "sha256": "4e64bcf9afe4bc21e5518714c5bae8cd873bc5406df3c8cce812eff1ac708542"
+    },
+    "state/aedt_process_id.txt": {
+      "source": "results/state/aedt_process_id.txt",
+      "slice": "whole file",
+      "bytes": 5,
+      "sha256": "9716394c2d8c06a582402cfc194b5bb264810b4b7daee4beebde068e0a99085b"
+    },
+    "state/completions.txt": {
+      "source": "results/state/completions.txt",
+      "slice": "whole file",
+      "bytes": 6,
+      "sha256": "24c813cb6f9bade379034e39a4665bf3be056293a53543502481e4f3db7e9291"
+    },
+    "state/model_snapshot.json": {
+      "source": "results/state/model_snapshot.json",
+      "slice": "whole file",
+      "bytes": 3333,
+      "sha256": "9600d5bb593023d7dfe6244964c467271e7c88a91c7e94e81637a2b0377bac29"
+    },
+    "state/outcome.txt": {
+      "source": "results/state/outcome.txt",
+      "slice": "whole file",
+      "bytes": 155,
+      "sha256": "4204e6b3a677e2d274e47a503cadace4ac29370393c95ad09132f3ad7a7a4b11"
+    },
+    "state/readouts.txt": {
+      "source": "results/state/readouts.txt",
+      "slice": "whole file",
+      "bytes": 2523,
+      "sha256": "55afacb3142c89f55e7cef73f9bee399d41062fca0aae3e49c23f148ed62fcfd"
+    },
+    "state/session.json": {
+      "source": "results/state/session.json",
+      "slice": "whole file",
+      "bytes": 159,
+      "sha256": "6b97b38d7c8e66f86076e0090b86be0efb24c7417ea6ce615a06aa63929c39b6"
+    },
+    "state/solve_progress.txt": {
+      "source": "results/state/solve_progress.txt",
+      "slice": "whole file",
+      "bytes": 18916,
+      "sha256": "4f36ed2928b45d23287cac21a0d7eccc934eaf3b6801cea4021b00c8f554ac0a"
+    },
+    "state/solve_started.txt": {
+      "source": "results/state/solve_started.txt",
+      "slice": "whole file",
+      "bytes": 18,
+      "sha256": "d3dee94d90ded64b78208b09f49b5ef2994a903062e2be2eac02dca6bd6e24e0"
+    },
+    "state/solve_watchdog_pid.txt": {
+      "source": "results/state/solve_watchdog_pid.txt",
+      "slice": "whole file",
+      "bytes": 5,
+      "sha256": "aa9364604f5a6340f9f8dd3fcd2097acf09386b85cd77a75d85637969e43f40e"
+    },
+    "state/solved.txt": {
+      "source": "results/state/solved.txt",
+      "slice": "whole file",
+      "bytes": 66,
+      "sha256": "42314b89f5ff3e51585c4c5b9e0771b13f12892eccedb7b55ad9be17428597d2"
+    },
+    "state/z_act.txt": {
+      "source": "results/state/z_act.txt",
+      "slice": "whole file",
+      "bytes": 108,
+      "sha256": "0c771dafcd8ea2eaafc6187c1f2d9cba70b22960010b22debf9040544ced1a28"
     }
   }
 }

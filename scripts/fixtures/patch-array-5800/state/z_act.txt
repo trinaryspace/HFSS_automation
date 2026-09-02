@@ -1,0 +1,1 @@
+readout=unreadable - create_report raised: GrpcApiError: Failed to execute gRPC AEDT command: GetVariables

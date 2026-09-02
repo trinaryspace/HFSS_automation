@@ -10,6 +10,16 @@ truth for two parsers, and both were written by hand rather than by a script:
 - `outcome.txt` — the whole `results/state/outcome.txt`: free text with a UTF-8
   BOM, which the key=value parser read as nothing, so the card said
   `unrecorded`.
+- `state/*` — every top-level file of `results/state/` (run logging, ticket
+  05): the watchdog tick log `solve_progress.txt` (three watchdog runs, all
+  `complete`), `readouts.txt` (the `route=both-failed` line with its two
+  `GrpcApiError ... GetVariables`, and the 2026-09-01 readout experiment's
+  pin move), `z_act.txt`, the pinned `aedt_port.txt` / `aedt_process_id.txt`,
+  the overwritten `session.json`, `solved.txt`, `solve_started.txt`,
+  `solve_watchdog_pid.txt`, `completions.txt` and `model_snapshot.json`.
+  The pain-point classifiers (`hfss_spec/painpoints.py`) take their machine
+  state from these. Subdirectories (`verify/`, `zact_export/`) are not
+  captured.
 
 The workspace is gitignored, so the fixtures are committed here. Rerunning
 this script against an unchanged workspace is byte-stable; a slice is written
@@ -28,6 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_WORKSPACE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(HERE))), "workspaces", "patch-array-5800")
 SESSION2 = b"## Session 2"
+STATE_SUBDIR = "state"          # <out_dir>/state/<file>, one per results/state/ file
 
 
 def _sha(data):
@@ -42,6 +53,14 @@ def capture(workspace, out_dir=HERE):
     files = {"state.session1.md": (session1, "state.md",
                                    "bytes [0, index of '## Session 2')"),
              "outcome.txt": (outcome, "results/state/outcome.txt", "whole file")}
+    state_dir = os.path.join(workspace, "results", "state")
+    for name in sorted(os.listdir(state_dir)):
+        path = os.path.join(state_dir, name)
+        if not os.path.isfile(path):
+            continue                    # verify/, zact_export/: not machine state
+        files[STATE_SUBDIR + "/" + name] = (open(path, "rb").read(),
+                                            "results/state/" + name, "whole file")
+    os.makedirs(os.path.join(out_dir, STATE_SUBDIR), exist_ok=True)
     index = {
         "captured": "2026-09-02",
         "captured_from_workspace": os.path.abspath(workspace),

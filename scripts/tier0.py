@@ -66,6 +66,13 @@ SUITES = [
     # attach -> submit -> the watchdog's terminal line -> bank -> teardown,
     # in that order, from the actual runner code paths.
     ("run-events", [sys.executable, os.path.join(SRC, "test_run_events.py")]),
+    # The pain-point classifiers (run-logging 05): pure functions over the
+    # step trace, the event log and the machine state, tested against the
+    # real neon-eagle slice (the Aug 18 patch-array-5800 run), a real
+    # undeclared Claude Code session and the captured patch-array-5800
+    # results/state files. Attribution matches a hand count; per-kind costs
+    # never exceed the run.
+    ("painpoints", [sys.executable, os.path.join(REPO, "hfss_spec", "test_painpoints.py")]),
     ("static-gate", [sys.executable, os.path.join(SRC, "00_static_gate.py")]),
     ("skill-markers", [sys.executable, os.path.join(REPO, "skill", "hfss-agent", "verify_skill.py")]),
     ("kb-checks", [sys.executable, os.path.join(REPO, "scraping", "verify_kb.py")]),

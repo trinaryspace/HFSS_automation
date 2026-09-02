@@ -59,3 +59,12 @@ skill and the Literature_analyzer CLI, both present on this machine)
   stale — rule #5 was absent), structural checks in `verify_skill.py` (37 pass),
   and a live CLI end-to-end (cached PDF: manifest + agent note read back,
   `cached: true`, `cost_usd: null`).
+- 2026-09-02: Layout amended. The flat drop folder made every paper apply to
+  every run, so a bowtie paper's dimensions were in context for a U-slot build.
+  Now `knowledge/reference-papers/Global/` holds the general guidance (HFSS
+  fundamentals, ports, geometry tips and tricks, setup guidelines) and is read on
+  every run; each structure family has its own `<Project>/` folder (`Bowtie
+  Patch/`, `U-slot/`, …) and only the folder matching the requested structure is
+  read. `analyze-papers` runs once per folder (its cache makes the `Global/`
+  re-run free). README, SKILL.md rule #6, execution.md step 1 and the
+  `verify_skill.py` markers carry the rule.

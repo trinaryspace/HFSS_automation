@@ -384,8 +384,9 @@ Nothing accidental is tracked. Two deliberate-but-heavy items:
   drop: `scraping/verify_kb.py` reads it, and `verify_kb` is a tier-0 suite. If the
   KB really is demoted to a cold-path fallback under phase 2, this file is the
   first thing to reconsider.
-- `knowledge/reference-papers/*.pdf` — ~13 MB across four PDFs. Deliberate
-  (ticket-10, user-supplied reference papers, with a README). Noted for size only.
+- `knowledge/reference-papers/**/*.pdf` — ~13 MB of user-supplied PDFs, laid out
+  as `Global/` (read every run) plus one folder per structure family (ticket-10,
+  with a README). Noted for size only.
 
 The drop from 8,415 to 4,382 tracked files under `scraping/` between `origin/main`
 and local `main` is **not** a loss: commit `3ac1f86` records a one-off prune of

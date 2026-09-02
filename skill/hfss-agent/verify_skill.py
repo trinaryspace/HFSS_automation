@@ -40,6 +40,10 @@ CONTRACT_MARKERS = {
     "glossary vocabulary": ["Spine", "Stage", "Run", "Workspace", "Recipe", "Assumption", "Model"],
     "reference papers kb": ["knowledge/reference-papers", "analyze-papers", "before Clarification",
                             "playbook amendments"],
+    # Global/ is read every run; only the project folder matching the
+    # requested structure joins it — never the other project folders.
+    "reference papers layout": ["Global/", "every run", "matches the requested structure",
+                                "never on the other project folders"],
     "verification line": ["Verification line", "PASS: <stage>", "assertions"],
     "state ledger": ["State ledger", "state.md", "results/state"],
     "run card": ["Run card", "summary.md"],
@@ -103,6 +107,8 @@ REFERENCE_PAPERS_MARKERS = {
     "drop pdfs here": ["Drop user-provided PDFs", "academic papers, book chapters"],
     "analyze-papers flow": ["analyze-papers", "agent notes", "Clarification"],
     "no automatic playbook writes": ["NOT playbook entries", "Learning-loop", "user-approved"],
+    "global plus project layout": ["Global/", "one folder per structure family", "every time",
+                                   "only the folder that matches"],
 }
 
 REFERENCE_MARKERS = {
@@ -117,7 +123,8 @@ REFERENCE_MARKERS = {
     "bash discipline": ["timeout", "90 s"],
     "idempotency detail": ["delete-then-create", "in place"],
     "kb rules detail": ["spine-api.md", ".rst.md", "rg -l"],
-    "reference papers before clarification": ["reference-papers", "analyze-papers", "before drafting the block"],
+    "reference papers before clarification": ["reference-papers", "analyze-papers", "before drafting the block",
+                                              "Global/", "matches the requested structure"],
     # The one table of per-host differences: subagent invocation, links,
     # session naming, the run card, and the Claude Code bash-timeout ceiling.
     "harness notes": ["Harness notes", "opencode.json", ".claude/agents/",

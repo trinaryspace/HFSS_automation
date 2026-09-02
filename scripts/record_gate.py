@@ -24,6 +24,11 @@ import sys
 import time
 from pathlib import Path
 
+REPO = Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from hfss_spec import events  # noqa: E402
+
 GATE_FILE = "review_gate.txt"
 VERDICT_PASS = "pass"
 VERDICT_FIXES = "fixes"
@@ -101,7 +106,10 @@ def main(argv=None):
     with open(target, "a", encoding="utf-8") as handle:
         handle.write(render(gate, verdict, note))
     recorded = len(read_gates(target))
-    print(f"PASS: record_gate gate={gate} verdict={verdict} recorded={recorded} file={target}")
+    line = f"PASS: record_gate gate={gate} verdict={verdict} recorded={recorded} file={target}"
+    print(line)
+    events.emit(target.parent, "gate.recorded", verdict=line,
+                detail=f"gate={gate} verdict={verdict} note={note}")
     return 0
 
 

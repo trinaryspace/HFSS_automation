@@ -28,7 +28,9 @@ compiler never solves; `scripts/compile_spec.py` says so in its first line).
    CREATE_NEW_PROCESS_GROUP). poll_solve writes
    results/state/solve_watchdog_pid.txt and solve_progress.txt itself.
 6. End with the Verification line; the solve session then READS
-   results/state/solve_progress.txt only.
+   results/state/solve_progress.txt only. The line is also the
+   `solve.submitted` event in `results/state/events.jsonl` (a refusal is
+   `solve.refused` with its `FAIL:` line) — run logging, ticket 03.
 
 The design solved is the one ws_common.DESIGN names — switch the constant
 and re-run for a second design. Run:  python src/08_solve.py [--approved]
@@ -40,6 +42,7 @@ import subprocess
 import sys
 import time
 
+import run_events
 import ws_common
 
 SOLVE_SETUP = "Setup1"
@@ -138,13 +141,14 @@ def main(argv=None, attach=None, probe=None, popen=None, now=None) -> int:
     print("pre-solve in-flight probe: results_age_s = %s, live ansysedt = %d" % (age, procs),
           flush=True)
     if looks_live(age, procs) and not approved:
-        print(
-            "FAIL: solve not submitted — results younger than %d s and %d solver "
-            "process(es) live: a solve may be in flight. Ask the user; re-run "
-            "`python src/08_solve.py --approved` after their explicit go."
-            % (IN_FLIGHT_WINDOW_S, procs),
-            flush=True,
-        )
+        line = ("FAIL: solve not submitted — results younger than %d s and %d solver "
+                "process(es) live: a solve may be in flight. Ask the user; re-run "
+                "`python src/08_solve.py --approved` after their explicit go."
+                % (IN_FLIGHT_WINDOW_S, procs))
+        print(line, flush=True)
+        run_events.emit("solve.refused", stage="solve", verdict=line,
+                        detail="results_age_s=%s live_solvers=%d" % (age, procs),
+                        state_dir=ws_common.STATE)
         return 2
     if approved:
         print("user approval recorded (--approved): submitting over the in-flight evidence",
@@ -155,8 +159,13 @@ def main(argv=None, attach=None, probe=None, popen=None, now=None) -> int:
     submitted = submit(hfss, SOLVE_SETUP, now=now)
     pid = launch_watchdog(popen)
     print("watchdog launched detached pid:", pid, flush=True)
-    print("PASS: solve submitted blocking=False setup=%s submitted_at=%r, "
-          "watchdog detached (poll_solve.py)" % (SOLVE_SETUP, submitted), flush=True)
+    line = ("PASS: solve submitted blocking=False setup=%s submitted_at=%r, "
+            "watchdog detached (poll_solve.py)" % (SOLVE_SETUP, submitted))
+    print(line, flush=True)
+    run_events.emit("solve.submitted", stage="solve", verdict=line,
+                    detail="setup=%s submitted_at=%r watchdog_pid=%s approved=%s"
+                           % (SOLVE_SETUP, submitted, pid, approved),
+                    state_dir=ws_common.STATE)
     return 0
 
 

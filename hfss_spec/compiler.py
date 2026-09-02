@@ -37,9 +37,11 @@ the Tier 0 golden tests do — costs no license check and no AEDT.
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from . import events
 from .schema import Boundary, DesignSpec, Excitation, GeometryOp, MaterialDef, MaterialRef
 from .validate import SpecNotValidated, require_valid
 
@@ -79,10 +81,23 @@ class StageResult:
 
 @dataclass
 class BuildLog:
-    """One line per stage, and nothing else — quiet by default."""
+    """One line per stage, and nothing else — quiet by default.
+
+    With a `state_dir`, every stage is also bracketed by a `stage.start` /
+    `stage.end` event in `<state_dir>/events.jsonl` (run logging, ticket 03),
+    the `stage.end` carrying this stage's own `PASS:` line as its verdict —
+    or a `FAIL: <stage> ...` line when the stage raised. Nothing else is
+    logged; the ledger, the Verification line and the event are one string.
+    """
 
     results: list[StageResult] = field(default_factory=list)
     emit: Optional[Callable[[str], None]] = None
+    state_dir: Optional[str] = None
+
+    def event(self, name: str, **fields) -> None:
+        """Record an event, when the log has a state dir; never raises."""
+        if self.state_dir is not None:
+            events.emit(self.state_dir, name, **fields)
 
     def record(self, stage: str, **assertions) -> StageResult:
         result = StageResult(stage, assertions)
@@ -107,7 +122,19 @@ def build(spec: DesignSpec, hfss, log: Optional[BuildLog] = None,
     require_valid(spec)
     log = log or BuildLog()
     for stage in stages:
-        _STAGE_FUNCS[stage](spec, hfss, log)
+        log.event("stage.start", stage=stage)
+        started = time.monotonic()
+        try:
+            _STAGE_FUNCS[stage](spec, hfss, log)
+        except Exception as exc:
+            log.event("stage.end", stage=stage,
+                      verdict=f"FAIL: {stage} {type(exc).__name__}: {exc}",
+                      duration_ms=(time.monotonic() - started) * 1000)
+            raise
+        result = log.results[-1] if log.results and log.results[-1].stage == stage else None
+        log.event("stage.end", stage=stage,
+                  verdict=result.line if result is not None else None,
+                  duration_ms=(time.monotonic() - started) * 1000)
     return log
 
 

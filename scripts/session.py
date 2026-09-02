@@ -113,7 +113,7 @@ def main(argv=None):
     for record in history(state_dir):
         print(f"  history {record['ts']} {record['phase']:<8} "
               f"{record.get('host') or '-'} {record.get('host_session_id') or '-'}")
-    verdict = session.budget_verdict(trace_calls=traced)
+    verdict = session.budget_verdict(trace_calls=traced, state_dir=state_dir)
     print(verdict if verdict.startswith("ESCALATE") else f"PASS: {verdict}")
     over = session.exceeds(traced) if traced is not None else session.over_budget
     return 2 if over else 0

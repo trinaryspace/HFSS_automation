@@ -29,6 +29,10 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+REPO = Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from hfss_spec import events                                     # noqa: E402
 from run_card import OUTCOME_COMPLETED, OUTCOME_FILE, OUTCOMES  # noqa: E402
 
 
@@ -100,8 +104,11 @@ def main(argv=None):
     os.makedirs(state, exist_ok=True)
     target = state / OUTCOME_FILE
     target.write_text(render(outcome, completions, escape_hatch, note), encoding="utf-8")
-    print(f"PASS: record_outcome outcome={outcome} completions={completions} "
-          f"file={target}")
+    line = (f"PASS: record_outcome outcome={outcome} completions={completions} "
+            f"file={target}")
+    print(line)
+    events.emit(state, "outcome.recorded", verdict=line,
+                detail=f"outcome={outcome} completions={completions} note={note}")
     return 0
 
 

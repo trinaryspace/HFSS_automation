@@ -26,6 +26,9 @@ Usage:
     python scripts/tier0.py            # everything
     python scripts/tier0.py --list     # show the suites without running
     python scripts/tier0.py -v         # stream each suite's own output
+    python scripts/tier0.py --workspace workspaces/<name>
+                                       # also record the summary line as a
+                                       # `gate.tier0` event in that workspace
 """
 
 import argparse
@@ -54,6 +57,15 @@ SUITES = [
     # the same steps.jsonl shape from a captured Claude Code transcript and a
     # captured opencode family, usage once per request, subagents linked.
     ("run-trace", [sys.executable, os.path.join(REPO, "scripts", "test_run_trace.py")]),
+    # The event log (run-logging 03): `hfss_spec/events.py` never raises and
+    # is a no-op without a state dir; the compiler leaves one stage.start /
+    # stage.end pair per Spine stage against the recorder; every script in
+    # the ticket's table emits its event.
+    ("events", [sys.executable, os.path.join(REPO, "hfss_spec", "test_events.py")]),
+    # The template runners' events, driven against the real fixture corpus:
+    # attach -> submit -> the watchdog's terminal line -> bank -> teardown,
+    # in that order, from the actual runner code paths.
+    ("run-events", [sys.executable, os.path.join(SRC, "test_run_events.py")]),
     ("static-gate", [sys.executable, os.path.join(SRC, "00_static_gate.py")]),
     ("skill-markers", [sys.executable, os.path.join(REPO, "skill", "hfss-agent", "verify_skill.py")]),
     ("kb-checks", [sys.executable, os.path.join(REPO, "scraping", "verify_kb.py")]),
@@ -121,6 +133,9 @@ def main(argv=None):
     parser.add_argument("--list", action="store_true", help="list suites and exit")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="stream each suite's own output")
+    parser.add_argument("--workspace",
+                        help="record the summary line as a gate.tier0 event in "
+                             "this workspace's results/state/events.jsonl")
     args = parser.parse_args(argv)
 
     if args.list:
@@ -141,11 +156,26 @@ def main(argv=None):
     elapsed = time.time() - started
     total = len(SUITES) + 1
     if failed:
-        print("FAIL: tier0 suites=%d failed=%d (%s) elapsed=%.1fs"
-              % (total, len(failed), ", ".join(failed), elapsed))
-        return 1
-    print("PASS: tier0 suites=%d failed=0 elapsed=%.1fs" % (total, elapsed))
-    return 0
+        line = ("FAIL: tier0 suites=%d failed=%d (%s) elapsed=%.1fs"
+                % (total, len(failed), ", ".join(failed), elapsed))
+    else:
+        line = "PASS: tier0 suites=%d failed=0 elapsed=%.1fs" % (total, elapsed)
+    print(line)
+    record_gate(args.workspace, line, failed, elapsed)
+    return 1 if failed else 0
+
+
+def record_gate(workspace, line, failed, elapsed):
+    """The `gate.tier0` event (run logging, ticket 03); nothing without a workspace."""
+    if not workspace:
+        return
+    if REPO not in sys.path:
+        sys.path.insert(0, REPO)
+    from hfss_spec import events
+    root = workspace if os.path.isabs(workspace) else os.path.join(REPO, workspace)
+    events.emit(os.path.join(root, "results", "state"), "gate.tier0", verdict=line,
+                detail="failed=%s" % (",".join(failed) or "-"),
+                duration_ms=elapsed * 1000)
 
 
 if __name__ == "__main__":

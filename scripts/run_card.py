@@ -81,6 +81,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 import claude_subagents  # noqa: E402
 import claude_transcript  # noqa: E402
+from hfss_spec import events  # noqa: E402
 from hfss_spec import session as phase_session  # noqa: E402
 
 DEFAULT_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
@@ -997,6 +998,8 @@ def main(argv=None):
                 print(f"error: cannot write '{args.summary}': {exc}", file=sys.stderr)
                 return 1
             print(f"run card written to {args.summary}")
+            card_written(workspace, args.summary, run["total"], outcome,
+                         sessions=len(run["entries"]))
         if args.verdict:
             print()
             print(verdict_table(run["total"], wall))
@@ -1029,10 +1032,23 @@ def main(argv=None):
             print(f"error: cannot write '{args.summary}': {exc}", file=sys.stderr)
             return 1
         print(f"run card written to {args.summary}")
+        card_written(workspace, args.summary, card, outcome, sessions=1)
     if args.verdict:
         print()
         print(verdict_table(card, wall))
     return 0
+
+
+def card_written(workspace, summary, card, outcome, sessions):
+    """The `card.written` event (run logging, ticket 03); no-op without a workspace."""
+    if not workspace:
+        return
+    billed = card.get("billed") if isinstance(card, dict) else None
+    events.emit(Path(workspace) / "results" / "state", "card.written",
+                stage="summary",
+                verdict=f"PASS: run_card written summary={summary}",
+                detail=f"sessions={sessions} billed={billed if billed is not None else '-'} "
+                       f"outcome={outcome.label if outcome else '-'}")
 
 
 if __name__ == "__main__":

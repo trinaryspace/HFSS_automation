@@ -123,6 +123,8 @@ REFERENCE_MARKERS = {
     "harness notes": ["Harness notes", "opencode.json", ".claude/agents/",
                       "subagent_type", "CLAUDE.md", "600 000 ms",
                       "session.json", "verify_agents.py"],
+    # Run logging 03: every PASS:/FAIL: line is also an event, machine-written.
+    "event log": ["events.jsonl", "also an event", "hfss_spec/events.py"],
 }
 
 ADRS = {
@@ -147,7 +149,10 @@ TEMPLATE_FILES = ["README.md", "summary.md", "state.md", "src"]
 TEMPLATE_SRC_FILES = ["ws_common.py", "poll_solve.py", "capture_state.py",
                       "12_verify_sync.py", "verify_spec_replay.py",
                       "00_static_gate.py", "stage_skeleton.py",
-                      "confirm_solve.py", "profile_evidence.py", "real_fixtures.py"]
+                      "confirm_solve.py", "profile_evidence.py", "real_fixtures.py",
+                      # The one submission path (run logging 02) and the
+                      # workspace's hook into the event log (run logging 03).
+                      "08_solve.py", "run_events.py"]
 
 
 def check(label, ok, detail=""):
@@ -200,6 +205,9 @@ def main() -> int:
     if not check("design spec package importable offline",
                  (REPO / "hfss_spec" / "schema.py").is_file()
                  and (REPO / "hfss_spec" / "compiler.py").is_file()):
+        failures += 1
+    # Run logging 03: the event log the template's run_events.py forwards to.
+    if not check("event log module exists", (REPO / "hfss_spec" / "events.py").is_file()):
         failures += 1
 
     if not check("reference file exists", REFERENCE.is_file()):

@@ -24,6 +24,7 @@ Session state lives in the AEDT project — never in a Python process. Each scri
 ## Verification contract (every staged script)
 
 - Every staged script ends with exactly one machine-parseable **Verification line** on success: `PASS: <stage> <assertions>` — e.g. `PASS: geometry object count == 3, bbox sane, all dims variables`. The assertions listed are the checks the script performed (a missing assertion is a script bug).
+- **Every `PASS:` / `FAIL:` line is also an event**: the runner that prints it appends the same string as the `verdict` of one line in `results/state/events.jsonl` (`hfss_spec/events.py`, reached from a workspace through `src/run_events.py`) — stage boundaries, gate verdicts, `desktop.attach` / `desktop.launch` with port and pid, `solve.submitted`, the watchdog's terminal line, `solve.banked`, `teardown` — machine-written at the instant it happens, never hand-edited, and the run report's second input beside the harness step trace.
 - **Static gate before any AEDT launch**: `py_compile` + import check over all `src/*.py` — the template's `00_static_gate.py`. Nothing launches AEDT while the gate is red.
 - **Self-correction reads the Verification line** of the failed Run — not filtered logs — and the stage's own error surfaces; see Self-correction below.
 

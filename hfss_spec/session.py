@@ -50,6 +50,10 @@ So `start()` also appends one line to `sessions.jsonl` — append-only, one
 record per declaration, re-declaring a phase appends rather than replaces —
 and writes `run.json` once, on the first declaration, naming the run. The
 JSONL is the history; `session.json` keeps its role and format unchanged.
+
+Declarations, refusals and budget escalations are also events
+(`hfss_spec.events`, ticket 03): `phase.declared`, `phase.refused` (with the
+action) and `budget.escalate` land in `events.jsonl` beside the history.
 """
 
 from __future__ import annotations
@@ -61,6 +65,8 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
+
+from . import events
 
 CLARIFY, BUILD, SOLVE = "clarify", "build", "solve"
 PHASES = (CLARIFY, BUILD, SOLVE)
@@ -186,13 +192,15 @@ class Session:
     def over_budget(self) -> bool:
         return self.exceeds(self.calls)
 
-    def budget_verdict(self, trace_calls: Optional[int] = None) -> str:
+    def budget_verdict(self, trace_calls: Optional[int] = None,
+                       state_dir=None) -> str:
         """The verdict against the actual call count.
 
         `trace_calls` is the tool-call count from the step trace (see
         `trace_calls()`), or None when no trace has been extracted. With no
         trace and no hand-advanced count the verdict says the calls are
-        unaccounted — it never reports 0 calls as a fact.
+        unaccounted — it never reports 0 calls as a fact. With a `state_dir`,
+        an ESCALATE verdict is also recorded as a `budget.escalate` event.
         """
         if trace_calls is not None:
             calls, source = trace_calls, "trace"
@@ -204,10 +212,15 @@ class Session:
         if not self.exceeds(calls):
             return (f"ok: session phase={self.phase} calls={calls}/"
                     f"{self.call_budget} ({source})")
-        return (f"ESCALATE: session phase={self.phase} calls={calls} ({source}) has "
-                f"reached its budget of {self.call_budget} without finishing. "
-                f"A session this long is looping, not converging - report state "
-                f"and hand the decision to the user.")
+        verdict = (f"ESCALATE: session phase={self.phase} calls={calls} ({source}) has "
+                   f"reached its budget of {self.call_budget} without finishing. "
+                   f"A session this long is looping, not converging - report state "
+                   f"and hand the decision to the user.")
+        if state_dir is not None:
+            events.emit(state_dir, "budget.escalate", phase=self.phase,
+                        verdict=verdict,
+                        detail=f"calls={calls} budget={self.call_budget} source={source}")
+        return verdict
 
 
 # -- the trace: the actual call count (run logging, tickets 02 / 04) ---------
@@ -284,6 +297,10 @@ def start(phase: str, name: str = "", state_dir=None,
         session.save(state_dir)
         ensure_run(state_dir, task_doc=task_doc, now_ms=session.started_ms)
         append_history(state_dir, session)
+        events.emit(state_dir, "phase.declared", phase=phase,
+                    detail=f"name={name or '-'} host={session.host or '-'} "
+                           f"session_id={session.host_session_id or '-'} "
+                           f"budget={call_budget} declared={len(history(state_dir))}")
     return session
 
 
@@ -448,4 +465,13 @@ def require(action: str, state_dir, default_phase: Optional[str] = None) -> None
         if default_phase is None:
             return
         session = Session(phase=default_phase)
-    session.require(action)
+    try:
+        session.require(action)
+    except PhaseViolation as exc:
+        # A refusal is a pain point the report must see (spec, class 6): it
+        # is recorded with the action, so a misrouted session is countable.
+        events.emit(state_dir, "phase.refused", phase=session.phase,
+                    verdict=f"FAIL: phase-boundary {action!r} refused in "
+                            f"a {session.phase!r} session",
+                    detail=f"action={action}: {exc}")
+        raise

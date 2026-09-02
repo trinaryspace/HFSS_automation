@@ -25,6 +25,9 @@ to src/) to replay a different set.
 
 Usage:  python src/12_verify_sync.py [workspace] [script ...]
 Exit: 0 on PASS, 1 on FAIL (scripts always get their port-pinned teardown).
+
+The verdict line is also a `sync.verify` event in the live workspace's
+`results/state/events.jsonl` (run logging, ticket 03).
 """
 
 import json
@@ -35,8 +38,20 @@ import subprocess
 import sys
 import time
 
+try:
+    import run_events
+except ImportError:
+    # Loaded by file path with src/ off sys.path (`hfss_spec.acceptance`
+    # borrows `canon` / `diff_shapes` that way): take the sibling by path.
+    import importlib.util as _importlib_util
+
+    _spec = _importlib_util.spec_from_file_location(
+        "run_events", os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_events.py"))
+    run_events = _importlib_util.module_from_spec(_spec)
+    _spec.loader.exec_module(run_events)
+
 INFRA = {"ws_common", "poll_solve", "capture_state", "12_verify_sync",
-         "00_static_gate", "stage_skeleton"}
+         "00_static_gate", "stage_skeleton", "run_events"}
 SOLVE_LIKE = ("solve", "qa", "plot")
 try:
     SCRIPT_TIMEOUT_S = int(os.environ.get("VERIFY_SCRIPT_TIMEOUT_S", "900"))
@@ -164,6 +179,14 @@ def diff_shapes(live, replay, prefix=()):
     return diffs
 
 
+def verdict(workspace, line, rc):
+    """Print the one terminal verdict line and record it as `sync.verify`."""
+    print(line, flush=True)
+    run_events.emit("sync.verify", stage="sync", verdict=line,
+                    state_dir=os.path.join(workspace, "results", "state"))
+    return rc
+
+
 def main(argv=None):
     argv = argv if argv is not None else sys.argv
     workspace = os.path.abspath(argv[1]) if len(argv) > 1 else workspace_root()
@@ -172,14 +195,12 @@ def main(argv=None):
     src_dir = os.path.join(workspace, "src")
     live_snapshot = os.path.join(workspace, "results", "state", "model_snapshot.json")
     if not os.path.isfile(live_snapshot):
-        print("FAIL: sync mismatch — no live model_snapshot.json (run capture_state.py first)",
-              flush=True)
-        return 1
+        return verdict(workspace, "FAIL: sync mismatch — no live model_snapshot.json "
+                                  "(run capture_state.py first)", 1)
 
     scripts = select_replay_scripts(src_dir, explicit)
     if not scripts:
-        print("FAIL: sync mismatch — no replay scripts found in src/", flush=True)
-        return 1
+        return verdict(workspace, "FAIL: sync mismatch — no replay scripts found in src/", 1)
     print("verify_sync replay count =", len(scripts), flush=True)
     for s in scripts:
         print("  replay:", os.path.relpath(s, src_dir), flush=True)
@@ -205,9 +226,9 @@ def main(argv=None):
         if rc != 0 or "STAGE_FAILED" in (stdout or ""):
             failed.append(os.path.basename(script))
     if failed:
-        print("FAIL: sync mismatch — replay scripts failed: " + ", ".join(failed), flush=True)
         _teardown_copy(python, copy)
-        return 1
+        return verdict(workspace, "FAIL: sync mismatch — replay scripts failed: "
+                                  + ", ".join(failed), 1)
 
     cap_script = os.path.join(copy, "src", "capture_state.py")
     rc, stdout, stderr = _run_py(python, [cap_script], cwd=os.path.dirname(cap_script))
@@ -215,9 +236,9 @@ def main(argv=None):
         print("  |", line, flush=True)
     replay_snapshot = os.path.join(copy, "results", "state", "model_snapshot.json")
     if rc != 0 or not os.path.isfile(replay_snapshot):
-        print("FAIL: sync mismatch — capture_state on the replay copy failed", flush=True)
         _teardown_copy(python, copy)
-        return 1
+        return verdict(workspace, "FAIL: sync mismatch — capture_state on the replay "
+                                  "copy failed", 1)
 
     live = _load_json(live_snapshot) or {}
     replay = _load_json(replay_snapshot) or {}
@@ -225,12 +246,11 @@ def main(argv=None):
     _teardown_copy(python, copy)
     if diffs:
         shown = diffs[:8]
-        print("FAIL: sync mismatch — differing keys: " + " | ".join(shown), flush=True)
         if len(diffs) > len(shown):
             print("%d more differences" % (len(diffs) - len(shown)), flush=True)
-        return 1
-    print("PASS: sync replay matches snapshot", flush=True)
-    return 0
+        return verdict(workspace, "FAIL: sync mismatch — differing keys: "
+                                  + " | ".join(shown), 1)
+    return verdict(workspace, "PASS: sync replay matches snapshot", 0)
 
 
 def _load_json(path):

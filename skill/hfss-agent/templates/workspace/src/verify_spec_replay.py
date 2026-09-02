@@ -67,6 +67,7 @@ import time
 
 import importlib.util
 
+import run_events
 import ws_common
 
 _VERIFIER = os.path.join(ws_common.WORKSPACE, "src", "12_verify_sync.py")
@@ -170,6 +171,14 @@ def run(python, args, cwd, timeout=1200):
         return -1, exc.stdout or "", "TIMED OUT after %ds" % timeout
 
 
+def verdict(line, rc):
+    """Print the one terminal verdict line and record it as `sync.verify`
+    in the LIVE workspace's event log (run logging, ticket 03)."""
+    print(line, flush=True)
+    run_events.emit("sync.verify", stage="sync", verdict=line, state_dir=ws_common.STATE)
+    return rc
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--spec", action="append", default=None,
@@ -182,14 +191,13 @@ def main(argv=None):
     live_snapshot = os.path.join(ws_common.WORKSPACE, "results", "state",
                                  "model_snapshot.json")
     if not os.path.isfile(live_snapshot):
-        print("FAIL: sync mismatch — no live model_snapshot.json (run capture_state.py first)", flush=True)
-        return 1
+        return verdict("FAIL: sync mismatch — no live model_snapshot.json "
+                       "(run capture_state.py first)", 1)
     copy = stamp_copy()
     print("copy:", copy, flush=True)
     specs, failure = resolve_specs(copy, args.spec)
     if failure:
-        print(failure, flush=True)
-        return 1
+        return verdict(failure, 1)
     for spec in specs:
         print("  replay:", spec, flush=True)
     failed = []
@@ -226,10 +234,8 @@ def main(argv=None):
     for line in (teardown.stdout or "").strip().splitlines()[-2:]:
         print("  teardown | " + line, flush=True)
     if failed:
-        print("FAIL: sync mismatch — %s" % "; ".join(failed), flush=True)
-        return 1
-    print("PASS: sync replay matches snapshot", flush=True)
-    return 0
+        return verdict("FAIL: sync mismatch — %s" % "; ".join(failed), 1)
+    return verdict("PASS: sync replay matches snapshot", 0)
 
 
 if __name__ == "__main__":

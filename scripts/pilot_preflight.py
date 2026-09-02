@@ -34,6 +34,7 @@ CASES = REPO / "knowledge" / "cases"
 WORKSPACES = REPO / "workspaces"
 SKILL = REPO / "skill" / "hfss-agent"
 OPENCODE_SKILL = Path.home() / ".agents" / "skills" / "hfss-agent"
+CLAUDE_SKILL = REPO / ".claude" / "skills" / "hfss-agent"
 
 
 def git(*argv):
@@ -51,10 +52,15 @@ def resolve_link(path):
     if not path.exists():
         return "absent"
     try:
-        target = Path(os.path.realpath(path))
+        target = os.path.normcase(os.path.realpath(path))
     except OSError:
         return "unresolvable"
-    return str(target) if target != path.resolve(strict=False) else "not a link"
+    # Compare against the UNresolved absolute path: `path.resolve()` follows
+    # the link too, so comparing the two resolved forms always said "not a
+    # link", for junctions and symlinks alike.
+    if target == os.path.normcase(os.path.abspath(str(path))):
+        return "not a link"
+    return os.path.realpath(path)
 
 
 def main(argv=None):
@@ -129,6 +135,7 @@ def main(argv=None):
     skill_commit = git("log", "-1", "--format=%h %s", "--", "skill/hfss-agent")
     print(f"  skill commit  {skill_commit or 'UNKNOWN'}")
     print(f"  opencode link {resolve_link(OPENCODE_SKILL)}")
+    print(f"  claude link   {resolve_link(CLAUDE_SKILL)}")
     if not SKILL.is_dir():
         failures.append("skill/hfss-agent is missing from this worktree")
 

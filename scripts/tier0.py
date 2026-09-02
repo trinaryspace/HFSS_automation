@@ -51,6 +51,10 @@ SUITES = [
     ("kb-checks", [sys.executable, os.path.join(REPO, "scraping", "verify_kb.py")]),
     ("skill-install", [sys.executable, os.path.join(REPO, "scripts", "install_skill.py"),
                        "--check"]),
+    # The two subagents exist once per harness (opencode.json vs
+    # .claude/agents/); this keeps the copies verbatim-identical so the skill
+    # gets the same kb-lookup / runcard on either host.
+    ("skill-agents", [sys.executable, os.path.join(REPO, "scripts", "verify_agents.py")]),
     # Phase 2: schema, validator, reducer and the compiler's golden call
     # sequences against a recorder. The whole point of the bet is that the
     # build path becomes checkable without license-hours, so it belongs here.

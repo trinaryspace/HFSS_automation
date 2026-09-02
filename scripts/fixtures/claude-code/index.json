@@ -1,0 +1,19 @@
+{
+  "f0c832a3-cb36-4168-ac07-70c2793c74a2": {
+    "captured_from": "f0c832a3-cb36-4168-ac07-70c2793c74a2.jsonl",
+    "captured_from_dir": "C--Users-afpim-Repos-HFSS-automation",
+    "card": {
+      "billed": 5013,
+      "parts": 40,
+      "slug": "Performance evaluation ticket 6",
+      "storesize": 207764,
+      "time_created": 1786754213017,
+      "time_updated": 1786754353750,
+      "tokens_cache_read": 518614,
+      "tokens_cache_write": 37727,
+      "tokens_input": 20,
+      "tokens_output": 4993,
+      "tokens_reasoning": 2978
+    }
+  }
+}

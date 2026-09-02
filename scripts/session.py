@@ -28,7 +28,8 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from hfss_spec.session import (                        # noqa: E402
-    DEFAULT_CALL_BUDGET, PHASES, Session, start,
+    DEFAULT_CALL_BUDGET, HOST_CLAUDE_CODE, HOST_OPENCODE, PHASES, Session,
+    detect_host, start,
 )
 
 
@@ -44,15 +45,29 @@ def main(argv=None):
                         help=f"call budget before escalating (default {DEFAULT_CALL_BUDGET}; 0 disables)")
     parser.add_argument("--note-calls", type=int, default=0, metavar="N",
                         help="add N to the call count and re-report the verdict")
+    parser.add_argument("--host", choices=(HOST_CLAUDE_CODE, HOST_OPENCODE),
+                        help="harness this session runs under (default: detected "
+                             "from the environment; Claude Code exports its id)")
+    parser.add_argument("--session-id",
+                        help="the harness's own id or slug for this session, so "
+                             "scripts/run_card.py can find it later")
     args = parser.parse_args(argv)
 
     state_dir = Path(args.workspace) / "results" / "state"
 
     if args.phase:
+        host, host_id = detect_host()
+        if args.host:
+            host = args.host
+        if args.session_id:
+            host_id = args.session_id
         session = start(args.phase, name=args.name, state_dir=state_dir,
-                        call_budget=args.budget)
+                        call_budget=args.budget, host=host,
+                        host_session_id=host_id)
         print(f"PASS: session declared phase={session.phase} "
-              f"name={session.name or '-'} budget={session.call_budget}")
+              f"name={session.name or '-'} budget={session.call_budget} "
+              f"host={session.host or '-'} "
+              f"session_id={session.host_session_id or '-'}")
         return 0
 
     session = Session.load(state_dir)

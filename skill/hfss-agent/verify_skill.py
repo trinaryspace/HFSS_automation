@@ -71,6 +71,13 @@ CONTRACT_MARKERS = {
     "build routes": ["Route A", "Route B", "design.yaml", "escape hatch",
                      "reference/design-spec.md"],
     "physics pre-check": ["precheck.py", "INCONSISTENT", "never blocks"],
+    # The skill runs under two harnesses. It has to say so, point at the one
+    # table of differences, and never tell an agent a skill is "installed
+    # globally" when its host cannot see it.
+    "two harnesses": ["opencode", "Claude Code", "Harness notes",
+                      "install_skill.py", "10 minutes"],
+    "analyze-papers is per host": ["~/.agents/skills/", "~/.claude/skills/",
+                                   "ask the user to run the installer"],
 }
 
 DESIGN_SPEC_REFERENCE = REFERENCE.parent / "design-spec.md"
@@ -111,6 +118,11 @@ REFERENCE_MARKERS = {
     "idempotency detail": ["delete-then-create", "in place"],
     "kb rules detail": ["spine-api.md", ".rst.md", "rg -l"],
     "reference papers before clarification": ["reference-papers", "analyze-papers", "before drafting the block"],
+    # The one table of per-host differences: subagent invocation, links,
+    # session naming, the run card, and the Claude Code bash-timeout ceiling.
+    "harness notes": ["Harness notes", "opencode.json", ".claude/agents/",
+                      "subagent_type", "CLAUDE.md", "600 000 ms",
+                      "session.json", "verify_agents.py"],
 }
 
 ADRS = {

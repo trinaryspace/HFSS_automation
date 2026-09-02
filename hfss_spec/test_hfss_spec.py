@@ -120,20 +120,77 @@ class FakeModeler:
         self._record("connect", assignment=assignment)
 
 
+def real_setup_props(case="patch-10GHZ-probe-fed"):
+    """A real captured setup-properties block, straight off this box.
+
+    `docs/agents/fixture-fidelity.md`: what a setup looks like when the model
+    reports it is read from the corpus, never recalled. It matters here because
+    the read-back check has to pick `MaximumPasses` out of a block that also
+    carries `MaxPass` — a different property with a similar name — and a
+    hand-written fixture would very likely have carried only one of them.
+    """
+    snapshot = json.loads((SNAPSHOTS / f"{case}.json").read_text(encoding="utf-8-sig"))
+    (block,) = list(snapshot["setups"].values())[:1] or [{}]
+    return dict(block)
+
+
 class FakeSetup:
-    def __init__(self, name, owner):
+    """A setup that keeps the model's own copy apart from the write.
+
+    `props` is pyAEDT's copy of the arg it sent; `properties` is what the model
+    reports back when asked. They are separate dicts on purpose — the P0 the
+    read-back exists for is exactly the run where the two disagreed and only
+    the first one was ever looked at.
+
+    `rejects` names the keys this model silently declines to take, which is the
+    live failure reproduced: AEDT kept its own `Frequency` and raised nothing.
+    """
+
+    def __init__(self, name, owner, reported=None, rejects=()):
         self.name = name
         self.props = {}
+        self.properties = dict(real_setup_props() if reported is None else reported)
+        self._rejects = tuple(rejects)
         self._owner = owner
 
-    def update(self):
+    def update(self, properties=None):
+        if properties:
+            self.props.update(properties)
+        for key, value in self.props.items():
+            if key not in self._rejects:
+                self.properties[key] = value
         self._owner.calls.append(("setup.update", dict(self.props)))
+        return True
+
+
+class WriteThroughOnlySetup:
+    """A setup with no object-oriented view — `properties` is simply absent.
+
+    pyAEDT builds that view from the setup's child object, and it is empty
+    whenever the tree node did not initialise. The compiler then has nothing
+    left but its own copy of the arg it sent, and has to say so.
+    """
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    @property
+    def name(self):
+        return self._inner.name
+
+    @property
+    def props(self):
+        return self._inner.props
+
+    def update(self, properties=None):
+        return self._inner.update(properties)
 
 
 class FakeHfss:
     """Records every call the compiler makes. No AEDT anywhere near it."""
 
-    def __init__(self, valid=True):
+    def __init__(self, valid=True, setup_rejects=(), setup_reported=None,
+                 setup_rename=None):
         self.calls = []
         self.modeler = FakeModeler(self)
         self.boundaries = []
@@ -141,6 +198,9 @@ class FakeHfss:
         self.variables = {}
         self._solution_type = None
         self._valid = valid
+        self._setup_rejects = setup_rejects
+        self._setup_reported = setup_reported
+        self._setup_rename = setup_rename
         self.materials = self
 
     # solution type
@@ -190,8 +250,12 @@ class FakeHfss:
 
     def create_setup(self, name):
         self.calls.append(("create_setup", name))
+        # pyAEDT runs the name through `generate_unique_setup_name`, so a setup
+        # that survived the delete makes the new one come back renamed.
+        name = self._setup_rename or name
         self.setup_names.append(name)
-        return FakeSetup(name, self)
+        return FakeSetup(name, self, reported=self._setup_reported,
+                         rejects=self._setup_rejects)
 
     def create_linear_count_sweep(self, **kwargs):
         self.calls.append(("sweep", kwargs))
@@ -511,6 +575,10 @@ class TestCompilerGolden(unittest.TestCase):
         props = hfss.ops("setup.update")[0][1]
         self.assertEqual(props["MaximumPasses"], 15)
         self.assertEqual(props["MaxDeltaS"], 0.02)
+        # `solution_frequency: f0` reaches AEDT as the literal 2.4GHz, never as
+        # the name `f0` — see TestSetupFrequency for why that distinction is
+        # the whole P0.
+        self.assertEqual(props["Frequency"], "2.4GHz")
         sweep = hfss.ops("sweep")[0][1]
         self.assertEqual(sweep["num_of_freq_points"], 201)
         self.assertEqual(sweep["sweep_type"], "Discrete")
@@ -527,6 +595,181 @@ class TestCompilerGolden(unittest.TestCase):
 
     def test_no_pyaedt_import_at_module_import_time(self):
         self.assertNotIn("ansys.aedt.core", sys.modules)
+
+
+class TestSetupFrequency(unittest.TestCase):
+    """The P0 of 2026-09-01, and the check that would have caught it.
+
+    `patch-array-5800` declared `solution_frequency: f0` with `f0: 5.8GHz` and
+    solved with `Frequency='5GHz'` in both designs — pyAEDT's HFSSDrivenDefault
+    template value, i.e. the compiler's write never reached AEDT. `EditSetup`
+    raised nothing, and `MaximumPasses=15` in the same call landed, so every
+    gate the run passed stayed green while the mesh adapted at the bottom edge
+    of the 5.0-6.5GHz sweep. Two things are asserted here: the frequency is
+    resolved to a literal before it is written, and the model is asked what it
+    actually holds afterwards.
+    """
+
+    def spec(self, **setup):
+        base = {"name": "Setup1", "solution_frequency": "f0"}
+        base.update(setup)
+        return spec_from_dict(minimal_spec(setup=base))
+
+    def test_a_variable_reference_is_resolved_before_it_is_written(self):
+        """AEDT's `Frequency` is a literal field, not an expression slot."""
+        hfss = FakeHfss()
+        compiler.build(self.spec(), hfss)
+        props = hfss.ops("setup.update")[0][1]
+        self.assertEqual(props["Frequency"], "2.4GHz")
+        self.assertNotIn("f0", str(props["Frequency"]))
+
+    def test_a_literal_keeps_the_unit_it_was_authored_in(self):
+        hfss = FakeHfss()
+        compiler.build(self.spec(solution_frequency="3.5GHz"), hfss)
+        self.assertEqual(hfss.ops("setup.update")[0][1]["Frequency"], "3.5GHz")
+
+    def test_an_expression_resolves_and_falls_back_to_hz(self):
+        """The same fallback `_frequency_pair` makes: no authored unit to keep."""
+        hfss = FakeHfss()
+        compiler.build(self.spec(solution_frequency="f0 * 1.25"), hfss)
+        self.assertEqual(hfss.ops("setup.update")[0][1]["Frequency"], "3000000000Hz")
+
+    def test_a_solution_frequency_that_is_not_a_frequency_is_refused(self):
+        """The validator gets there first; the compiler keeps its own guard.
+
+        Called directly, because a spec this wrong cannot reach `build()` —
+        which is the point: the guard is the last line, not the only one.
+        """
+        with self.assertRaises(SpecNotValidated):
+            compiler.build(self.spec(solution_frequency="w"), FakeHfss())
+        with self.assertRaises(compiler.CompileError) as caught:
+            compiler._solution_frequency(self.spec(solution_frequency="w"))
+        self.assertIn("not a frequency", str(caught.exception))
+
+    # --- the read-back ------------------------------------------------------
+
+    def rejecting_model(self):
+        """The live failure, rebuilt: a model that keeps its own `Frequency`.
+
+        The reported block is the real captured one with a single field varied
+        to pyAEDT's template default — the synthetic-alongside-real shape
+        `docs/agents/fixture-fidelity.md` allows, and asserted as such below.
+        """
+        reported = real_setup_props()
+        reported["Frequency"] = "5GHz"
+        return FakeHfss(setup_rejects=("Frequency",), setup_reported=reported)
+
+    def test_the_reported_block_is_the_real_one_with_one_field_varied(self):
+        real = real_setup_props()
+        synthetic = real_setup_props()
+        synthetic["Frequency"] = "5GHz"
+        self.assertEqual(set(real), set(synthetic))
+        self.assertEqual({k for k in real if real[k] != synthetic[k]}, {"Frequency"})
+        # The decoy the alias list must not read as the pass ceiling.
+        self.assertIn("MaximumPasses", real)
+        self.assertIn("MaxPass", real)
+        self.assertNotEqual(real["MaximumPasses"], real["MaxPass"])
+
+    def test_a_frequency_the_model_did_not_take_stops_the_build(self):
+        with self.assertRaises(compiler.CompileError) as caught:
+            compiler.build(self.spec(), self.rejecting_model())
+        message = str(caught.exception)
+        self.assertIn("2.4GHz", message)       # what the spec asked for
+        self.assertIn("5GHz", message)         # what the model reports
+        self.assertIn("Setup1", message)
+
+    def test_the_build_stops_at_the_setup_and_does_not_reach_validate(self):
+        hfss = self.rejecting_model()
+        with self.assertRaises(compiler.CompileError):
+            compiler.build(self.spec(), hfss)
+        self.assertEqual([c for c in hfss.calls if c[0] == "sweep"], [])
+
+    def test_a_max_passes_the_model_did_not_take_stops_the_build(self):
+        """The captured block reports 15; the spec asks for 9."""
+        hfss = FakeHfss(setup_rejects=("MaximumPasses",))
+        with self.assertRaises(compiler.CompileError) as caught:
+            compiler.build(self.spec(max_passes=9), hfss)
+        self.assertIn("max_passes", str(caught.exception))
+
+    def test_the_verification_line_names_the_view_that_answered(self):
+        hfss = FakeHfss()
+        log = compiler.build(self.spec(), hfss)
+        line = [r for r in log.results if r.stage == "setup_sweep"][0]
+        self.assertEqual(line.assertions["frequency"], "2.4GHz")
+        self.assertEqual(line.assertions["read_back"], "properties")
+
+    def test_the_weak_view_is_used_only_as_a_fallback_and_says_so(self):
+        """`props` is pyAEDT's copy of its own arg, so it can only ever agree.
+
+        It stays in the ladder because it is the one view that always answers,
+        but the Verification line has to show when a run leaned on it.
+        """
+        hfss = FakeHfss()
+        original = hfss.create_setup
+        hfss.create_setup = lambda name: WriteThroughOnlySetup(original(name))
+        log = compiler.build(self.spec(), hfss)
+        line = [r for r in log.results if r.stage == "setup_sweep"][0]
+        self.assertEqual(line.assertions["read_back"], "props")
+
+    def test_an_unreadable_view_falls_through_to_one_that_can_answer(self):
+        """A view that answers in nothing usable must not fail a good build.
+
+        Only the file-shaped `Frequency` spelling is corpus-verified; the
+        object-oriented view's is a guess, so a value it reports that does not
+        read as a frequency sends the check to the next view rather than
+        stopping a build that was, in fact, written correctly.
+        """
+        reported = real_setup_props()
+        reported["Frequency"] = "f0"
+        hfss = FakeHfss(setup_rejects=("Frequency",), setup_reported=reported)
+        log = compiler.build(self.spec(), hfss)
+        line = [r for r in log.results if r.stage == "setup_sweep"][0]
+        self.assertEqual(line.assertions["read_back"], "props")
+
+    def test_a_frequency_no_view_can_read_stops_the_build(self):
+        hfss = FakeHfss()
+        original = hfss.create_setup
+
+        def unreadable(name):
+            setup = original(name)
+            written = setup.update
+
+            def update(properties=None):
+                result = written(properties)
+                # Both views left holding a variable name — what AEDT would
+                # report if it had ever accepted the unresolved `f0`.
+                setup.props["Frequency"] = "f0"
+                setup.properties["Frequency"] = "f0"
+                return result
+
+            setup.update = update
+            return setup
+
+        hfss.create_setup = unreadable
+        with self.assertRaises(compiler.CompileError) as caught:
+            compiler.build(self.spec(), hfss)
+        self.assertIn("does not read as a frequency", str(caught.exception))
+
+    def test_a_model_that_will_not_report_its_frequency_stops_the_build(self):
+        hfss = FakeHfss()
+        original = hfss.create_setup
+
+        def mute(name):
+            setup = original(name)
+            setup.properties = {"IsEnabled": True}
+            setup.update = lambda properties=None: True   # writes nothing back
+            return setup
+
+        hfss.create_setup = mute
+        with self.assertRaises(compiler.CompileError) as caught:
+            compiler.build(self.spec(), hfss)
+        self.assertIn("would not report", str(caught.exception))
+
+    def test_a_renamed_setup_stops_the_build(self):
+        """`create_setup` renames rather than fails when the name is taken."""
+        with self.assertRaises(compiler.CompileError) as caught:
+            compiler.build(self.spec(), FakeHfss(setup_rename="Setup2"))
+        self.assertIn("Setup2", str(caught.exception))
 
 
 class TestSelectors(unittest.TestCase):

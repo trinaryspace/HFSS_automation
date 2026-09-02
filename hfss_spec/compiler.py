@@ -15,7 +15,15 @@ Properties that matter, each of them structural rather than remembered:
   because silently choosing the wrong face builds a model that simulates
   nonsense.
 - **Variables first.** Every dimension is emitted as an AEDT design variable
-  with its expression intact, so the parametric link is live in the UI.
+  with its expression intact, so the parametric link is live in the UI. The
+  setup's `Frequency` is the one deliberate exception — AEDT's adaptive
+  frequency is a literal field, not an expression slot, and `_solution_frequency`
+  records what that cost.
+- **A write is not believed until the model repeats it.** The setup stage
+  reads its own frequency, pass ceiling and delta-S back out and fails the
+  build on a disagreement. patch-array-5800 solved for a month at 5GHz with a
+  spec that said 5.8GHz, and no call ever raised; a stage that writes without
+  looking cannot tell itself apart from a stage that does nothing.
 - **Verification lines preserved.** Each stage still emits
   `PASS: <stage> <assertions>`, so the ledger and self-correction contracts are
   untouched. The Spine does not change; only who writes the code that walks it.
@@ -28,6 +36,7 @@ the Tier 0 golden tests do — costs no license check and no AEDT.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -182,15 +191,40 @@ def _stage_mesh(spec: DesignSpec, hfss, log: BuildLog) -> None:
 
 
 def _stage_setup_sweep(spec: DesignSpec, hfss, log: BuildLog) -> None:
+    """Write the setup, then make the model say back what it actually holds.
+
+    The adaptive frequency is resolved to a literal here (`_solution_frequency`)
+    and read back afterwards (`_verify_setup`), because a wrong adaptive
+    frequency is the quietest way to build a model that solves cleanly and
+    means nothing: the mesh converges somewhere the design was never about,
+    and every number downstream inherits that.
+    """
     setup_spec = spec.setup
     for existing in list(getattr(hfss, "setup_names", []) or []):
         if existing == setup_spec.name:
             hfss.delete_setup(setup_spec.name)
+    frequency, frequency_hz = _solution_frequency(spec)
     setup = hfss.create_setup(setup_spec.name)
-    setup.props["Frequency"] = _as_aedt(setup_spec.solution_frequency)
-    setup.props["MaximumPasses"] = setup_spec.max_passes
-    setup.props["MaxDeltaS"] = setup_spec.delta_s
-    setup.update()
+    # `create_setup` runs the requested name through `generate_unique_setup_name`
+    # and silently returns `Setup2` when `Setup1` survived the delete above. The
+    # sweep and every downstream report string are addressed by the spec's name,
+    # so a rename has to stop the build rather than surface later as "unknown
+    # setup". Observed in the same family on this box: patch-array-5800's
+    # snapshot carries a sweep pyAEDT renamed to `Sweep1_BZ5US7`.
+    written = getattr(setup, "name", setup_spec.name)
+    if written != setup_spec.name:
+        raise CompileError(
+            f"create_setup({setup_spec.name!r}) returned {written!r} — a setup "
+            f"by that name was still in the design and AEDT renamed the new one")
+    # One `update(properties)` is one `EditSetup` carrying the whole arg.
+    # Assigning through `props[...]` instead fires an `EditSetup` per key
+    # (`SetupProps.__setitem__` calls `update()` when `auto_update` is on), so
+    # the model passes through two states nobody asked for.
+    if setup.update({"Frequency": frequency,
+                     "MaximumPasses": setup_spec.max_passes,
+                     "MaxDeltaS": setup_spec.delta_s}) is False:
+        raise CompileError(f"setup {setup_spec.name!r}: update() reported failure")
+    read_back = _verify_setup(setup, setup_spec, frequency, frequency_hz)
     sweep_name = None
     if setup_spec.sweep is not None:
         sweep = setup_spec.sweep
@@ -210,8 +244,9 @@ def _stage_setup_sweep(spec: DesignSpec, hfss, log: BuildLog) -> None:
                         "discrete": "Discrete",
                         "fast": "Fast"}[sweep.type],
         )
-    log.record("setup_sweep", setup=setup_spec.name,
-               passes=setup_spec.max_passes, sweep=sweep_name or "none")
+    log.record("setup_sweep", setup=setup_spec.name, frequency=frequency,
+               passes=setup_spec.max_passes, sweep=sweep_name or "none",
+               read_back=read_back)
 
 
 def _stage_validate(spec: DesignSpec, hfss, log: BuildLog) -> None:
@@ -574,3 +609,200 @@ def _frequency_pair(spec: DesignSpec, sweep) -> tuple[str, float, float]:
         return "Hz", start, stop
     unit = start_q.unit or "Hz"
     return unit, start_q.value, stop_q.to(unit).value
+
+
+# --- the setup, and proving it landed ---------------------------------------
+
+# Key spellings the model may use when it reports its own setup back. Only
+# `Frequency`, `MaximumPasses` and `MaxDeltaS` are corpus-verified — all five
+# real captured snapshots in `knowledge/cases/_snapshots/` spell them that way,
+# as does patch-array-5800's own `model_snapshot.json`. The remaining frequency
+# spellings are candidates for the object-oriented fetch view, which
+# env-compat #16 records as naming the same property differently (`BasisOrder`
+# vs `Basis Order`, `IsEnabled` vs `Enabled`). They are listed one by one on
+# purpose: #16 also warns that a blanket "strip the spaces" rule collapses
+# genuinely distinct keys, and this setup carries two of those — `MaximumPasses`
+# (the adaptive-pass ceiling) sits beside `MaxPass` (the port solver's), and
+# reading the wrong one would check nothing while looking like a check.
+_FREQUENCY_KEYS = ("Frequency", "Solution Freq", "Solution Frequency",
+                   "Adaptive Frequency")
+_PASSES_KEYS = ("MaximumPasses", "Maximum Passes")
+_DELTA_S_KEYS = ("MaxDeltaS", "Max Delta S")
+
+
+def _solution_frequency(spec: DesignSpec) -> tuple[str, float]:
+    """`setup.solution_frequency` as a LITERAL AEDT string, plus its value in Hz.
+
+    A spec writes `solution_frequency: f0`, and `f0` must not be handed to AEDT
+    as `f0`. The HfssDriven `Frequency` field is a literal frequency, not an
+    expression slot: `EditSetup` takes an arg carrying a bare variable name
+    without complaining and keeps the value the setup already had. That is how
+    patch-array-5800 came to solve at pyAEDT's template default of `5GHz` while
+    its spec said 5.8GHz — adapting the mesh at the bottom edge of its own
+    5.0-6.5GHz sweep. Nothing looked wrong, because `MaximumPasses=15` in the
+    very same `EditSetup` call landed exactly as asked: the transport was never
+    the problem, the value was.
+
+    A literal keeps its authored unit and a bare `f0` borrows the unit `f0` was
+    written in, so the variable table and the setup dialog agree and read
+    `5.8GHz` rather than `5800000000Hz`. Anything more involved than one
+    variable name resolves to Hz — the same fallback, for the same reason, that
+    `_frequency_pair` makes for sweep endpoints.
+    """
+    from .expressions import ExpressionError, as_quantity, evaluate, resolve_all
+    from .units import FREQUENCY, UnitError, parse_quantity
+
+    raw = spec.setup.solution_frequency
+    try:
+        literal = parse_quantity(raw)
+    except UnitError:
+        literal = None
+    if literal is not None and literal.unit:
+        if literal.dimension != FREQUENCY:
+            raise CompileError(
+                f"setup.solution_frequency {raw!r} is not a frequency")
+        return str(literal), literal.si
+
+    table = spec.variable_scope()
+    try:
+        value = evaluate(raw, resolve_all(table))
+    except ExpressionError as exc:
+        raise CompileError(f"setup.solution_frequency {raw!r}: {exc}") from None
+    if value.dimension != FREQUENCY:
+        raise CompileError(
+            f"setup.solution_frequency {raw!r} resolves to {value}, "
+            f"which is not a frequency")
+    unit = "Hz"
+    declared = table.get(raw) if isinstance(raw, str) else None
+    if declared is not None:
+        try:
+            unit = parse_quantity(declared).unit or "Hz"
+        except UnitError:
+            unit = "Hz"
+    return str(as_quantity(value, unit)), value.si
+
+
+def _reported_setup(setup) -> list[tuple[str, dict]]:
+    """The views the model can be asked for its own setup, most independent first.
+
+    `properties` re-reads through AEDT on every access — `GetPropNames` /
+    `GetPropValue` against the setup's child object — so inside the writing
+    session it is the only view that can disagree with what was just written.
+    `props` is pyAEDT's own copy of the arg it sent, so it can only ever agree
+    with it; that makes it the last resort, and the Verification line names
+    which view answered so a run that fell back to the weak one says so out
+    loud. The strong reading of the same property is the one a *separate*
+    session takes — `capture_state.py` did exactly that on patch-array-5800 and
+    wrote `Frequency: "5GHz"` into the snapshot, where nothing compared it to
+    the spec.
+
+    Both views are wrapped: the raw COM surface is partially broken over gRPC
+    on this box (env-compat #3), and a view that raises must fall through to
+    the next rather than end the build.
+    """
+    views = []
+    for name in ("properties", "props"):
+        try:
+            candidate = getattr(setup, name, None)
+        except Exception:      # noqa: BLE001 - a broken fetch view is not an error
+            continue
+        if isinstance(candidate, dict) and candidate:
+            views.append((name, candidate))
+    return views
+
+
+def _reported(props: dict, keys: tuple[str, ...]):
+    """The first of `keys` the view actually carries, or None."""
+    for key in keys:
+        if key in props:
+            return props[key]
+    return None
+
+
+def _verify_setup(setup, setup_spec, frequency: str, frequency_hz: float) -> str:
+    """Read the setup back out of the model and refuse a write that did not land.
+
+    This is the lesson of the patch-array-5800 solve, not a belt-and-braces
+    extra. The compiler wrote a solution frequency, AEDT kept its own, no call
+    raised, no log line differed, and a month of results came off a mesh
+    converged 800MHz away from where the design lives. A build stage that
+    writes and does not look is indistinguishable from one that does nothing.
+
+    Returns the name of the view that answered, for the Verification line.
+    """
+    unreadable = None
+    for view, props in _reported_setup(setup):
+        reported = _reported(props, _FREQUENCY_KEYS)
+        if reported is None:
+            continue
+        hz = _as_hz(reported)
+        if hz is None:
+            # This view names the field but answers in something that is not a
+            # frequency. Ask the next view before failing: the file-shaped
+            # `props` spelling is the one five real snapshots agree on, and a
+            # build should not die because the object-oriented view formatted
+            # itself in a way this box has never been observed to produce.
+            unreadable = unreadable or (view, reported)
+            continue
+        if not math.isclose(hz, frequency_hz, rel_tol=1e-6):
+            raise CompileError(
+                f"setup {setup_spec.name!r}: the spec asked for "
+                f"solution_frequency {setup_spec.solution_frequency!r} "
+                f"({frequency}) but the model reports {reported!r} — the write "
+                f"did not land, and a mesh adapted at the wrong frequency "
+                f"invalidates every result from the solve")
+        _verify_number(setup_spec.name, props, _PASSES_KEYS,
+                       setup_spec.max_passes, "max_passes")
+        _verify_number(setup_spec.name, props, _DELTA_S_KEYS,
+                       setup_spec.delta_s, "delta_s")
+        return view
+    if unreadable is not None:
+        view, reported = unreadable
+        raise CompileError(
+            f"setup {setup_spec.name!r}: the model reports its adaptive "
+            f"frequency as {reported!r} in its {view} view, which does not read "
+            f"as a frequency, so the write cannot be confirmed")
+    raise CompileError(
+        f"setup {setup_spec.name!r}: the model would not report its adaptive "
+        f"frequency under any of {list(_FREQUENCY_KEYS)}, so the write cannot "
+        f"be confirmed")
+
+
+def _verify_number(setup_name: str, props: dict, keys: tuple[str, ...],
+                   wanted, field: str) -> None:
+    """A numeric setup property, checked only where the view reports it.
+
+    Absent is not a failure: the object-oriented view spells some keys
+    differently (env-compat #16), and guessing a spelling wrong would fail a
+    correct build. A key that IS present and disagrees is a hard error.
+    """
+    reported = _reported(props, keys)
+    if reported is None:
+        return
+    try:
+        ok = math.isclose(float(reported), float(wanted), rel_tol=1e-9)
+    except (TypeError, ValueError):
+        ok = False
+    if not ok:
+        raise CompileError(
+            f"setup {setup_name!r}: the spec asked for {field} {wanted!r} but "
+            f"the model reports {reported!r} — the write did not land")
+
+
+def _as_hz(reported):
+    """A reported adaptive frequency in Hz, or None if it does not read as one.
+
+    Everything is compared in Hz so `5.8GHz`, `5800000000` and `5.8e9Hz` are
+    one value. A bare number is taken as Hz. None means the view answered with
+    something that is not a frequency at all — a variable name that survived
+    into the field, say — which is a reason to look elsewhere, not to pass.
+    """
+    from .units import FREQUENCY, UnitError, parse_quantity
+
+    try:
+        quantity = parse_quantity(reported)
+    except UnitError:
+        return None
+    if quantity.unit:
+        return quantity.si if quantity.dimension == FREQUENCY else None
+    return quantity.value

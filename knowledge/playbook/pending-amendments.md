@@ -26,6 +26,7 @@ observed in that session, on AEDT 2024 R1 (`v241`) with pyAEDT 1.3.0.
 |---|---|---|---|
 | 2c | ~~scripted readouts are systematically broken over this pairing's gRPC~~ **-> pyAEDT tears down its own session mid-read** | `environment-compat.md` #6 | **UNBLOCKED, REWRITTEN, ready to approve.** Experiment run 2026-09-01: the readout does fail on fresh processes, but the transport is not the cause and the original wording teaches the wrong lesson. |
 | 2d-code | `canon()` normalizes setup prop keys before comparing | template `12_verify_sync.py` | **DEFERRED - needs a licence.** Not a playbook item; blocked on capturing a real pair of setup blocks (`docs/agents/fixture-fidelity.md`). See entry 16 for the caution about blanket normalization. |
+| 2f | HfssDriven `Frequency` takes a LITERAL only; a design-variable name is accepted and silently discarded | `environment-compat.md`, new entry | **ready to approve** - measured 2026-09-01, and it cost a month of wrong solves |
 
 ### Resolved 2026-09-01
 
@@ -142,6 +143,52 @@ post-construction teardown (one run logged "released **and closed**") was
 observed but not traced to its caller. One project, one design, one expression:
 a second project is the cheapest remaining question, and would settle the
 per-project reading.
+
+---
+
+## 2f. HfssDriven `Frequency` takes a literal only — a variable name is discarded
+
+**Claim.** On AEDT 2024 R1 / pyAEDT 1.3.0, the HfssDriven setup's `Frequency`
+field accepts a **literal frequency only**. Handed the name of a design variable
+(e.g. `"f0"`), `EditSetup` **returns without error and keeps the value the setup
+already had** — pyAEDT's template default, `5GHz`. Nothing raises, nothing warns,
+and `Setup.update()` returns `True`.
+
+**Evidence observed 2026-09-01.**
+
+- `workspaces/patch-array-5800/design.yaml` declares `solution_frequency: f0`
+  with `f0: 5.8GHz`. Both designs in the built `.aedt` carry `Frequency='5GHz'`.
+- pyAEDT's `modules/setup_templates.py` `HFSSDrivenDefault` is
+  `"Frequency": "5GHz"` — exactly what the model kept.
+- **The transport is not at fault, and this is the part that identifies the
+  cause.** The same template defaults `"MaximumPasses": 6`, but the model holds
+  `MaximumPasses=15`, the spec's value, written by the *same*
+  `props[...] = ...` + `update()` call in the *same* `EditSetup`. So the write
+  landed; only the frequency value was rejected.
+- The older staged-script route used the identical idiom with a literal —
+  `workspaces/bowtie-3500/src/06_setup_sweep.py:16` is
+  `setup.props["Frequency"] = "3.5GHz"` — and `bowtie-3500` (3.5GHz),
+  `patch-2400` and `patch-2400-2` (2.4GHz) all carry the correct value. Only
+  the spec-compiled project is wrong.
+- Switching to `create_setup(name, **props)` would not have helped:
+  `Hfss.create_setup` assigns each arg and calls one `update()`, i.e. the same
+  `EditSetup` (`hfss.py:1724-1791`, `modules/solve_setup.py:760-793`).
+
+**Why it is worth an entry.** The failure is silent, and the value it falls back
+to is *plausible* — a real frequency, inside the sweep band, at its bottom edge.
+Every offline gate passed, the solve completed Normal, and the mesh was adapted
+800 MHz below the design frequency for a month without anyone noticing. The
+route-around is one sentence, and the cost of not knowing it was every
+spec-driven result the repo has produced.
+
+**Route-around**: resolve `solution_frequency` to a literal before writing it,
+and read the setup back afterwards to confirm the model holds what the spec
+asked for. Both landed in `hfss_spec/compiler.py` on 2026-09-01.
+
+**If approved.** `knowledge/playbook/environment-compat.md`, a new numbered
+entry in the observation + route-around form, with the `MaximumPasses` contrast
+kept as the evidence — it is what distinguishes "the write failed" from "the
+value was rejected", and a future reader will need it.
 
 ---
 

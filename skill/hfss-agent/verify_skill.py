@@ -260,6 +260,18 @@ def main() -> int:
                  "billed_per_completed_sim" in card_text):
         failures += 1
 
+    # Run logging 06: the report and its two tracked outputs next to summary.md.
+    report_script = REPO / "scripts" / "run_report.py"
+    if not check("scripts has run_report.py", report_script.is_file()):
+        failures += 1
+    else:
+        report_text = report_script.read_text(encoding="utf-8")
+        for name in ("run-report.md", "run-report.json"):
+            if not check(f"run_report writes {name}", f'"{name}"' in report_text):
+                failures += 1
+        if not check("run_report emits report.written", '"report.written"' in report_text):
+            failures += 1
+
     # Ticket 05: the canonical case set that ends N=1 acceptance.
     cases = REPO / "knowledge" / "cases"
     if not check("canonical case index exists", (cases / "index.json").is_file()):

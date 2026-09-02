@@ -11,10 +11,16 @@ Ground truth, all real (docs/agents/fixture-fidelity.md):
 - `scripts/fixtures/claude-code/f0c832a3-….jsonl` — a real Claude Code
   session that never declared a phase (`ls -R`, two 13-17 KB reads, one
   failed `python -c`).
-- `scripts/fixtures/claude-code/a0e9c38f-….jsonl` — its two subagent slices
-  hold text steps only: the negative for every tool-based classifier.
+- `scripts/fixtures/claude-code/a0e9c38f-….jsonl` — a real Claude Code
+  session with two subagents (20 and 18 tool calls; recaptured with the
+  ticket-06 slicer, so their tool blocks and output heads are present).
 - `scripts/fixtures/patch-array-5800/state/` — every `results/state/` file
   of the real workspace, byte for byte (`capture.py` there).
+
+Since ticket 06 the trace carries each command whole, the first 2 KB of
+every tool output (`output_head`) and of every edit / write input
+(`input_head`), and stamps an opencode tool call at its emission
+(`time_created`), so the seq literals below are the recaptured slice's.
 
 Where a classifier has no positive in any of those, the positive is built
 from a real step or a real writer and the test name says `synthetic`: a copy
@@ -56,10 +62,13 @@ FALCON = "ses_fe8c117fdffeX8Q8m5QQ6By5Cz"        # hidden-falcon, runcard subage
 F0 = "f0c832a3-cb36-4168-ac07-70c2793c74a2"
 
 # The seven declarations in neon-eagle, by the seq of the `session.py
-# --phase` call (read off the trace by hand): clarify 149, build 245, solve
+# --phase` call (read off the trace by hand): clarify 149, build 243, solve
 # 473, build-2 536, solve-1b 648 (failed: cwd) and 652 (landed), build-3
-# 740, solve-2 822. The main session has 908 steps (0..907).
-DECLARATION_SEQS = (149, 245, 473, 536, 652, 740, 822)
+# 740, solve-2 822. The main session has 908 steps (0..907). A tool call's
+# ts is the part row's time_created (ticket 06), so a call emitted before a
+# user typed sits before that text: the build declaration is seq 243, and
+# the Start-Sleep call (517) precedes the user's mid-sleep message (518).
+DECLARATION_SEQS = (149, 243, 473, 536, 652, 740, 822)
 MAIN_STEPS = 908
 KNIGHT_STEPS, FALCON_STEPS = 16, 30
 
@@ -112,7 +121,9 @@ def _variant(real, **changes):
         if key not in run_trace.STEP_KEYS and key not in P.TEXT_KEYS:
             raise AssertionError(f"{key} is not a step key")
         copy[key] = value
-    assert set(copy) - set(P.TEXT_KEYS) == set(run_trace.STEP_KEYS)
+    # `output_head` is both a real step key and a text key; the other text
+    # keys are the ones a future trace may add.
+    assert set(copy) - set(P.TEXT_KEYS) == set(run_trace.STEP_KEYS) - set(P.TEXT_KEYS)
     return copy
 
 
@@ -146,9 +157,12 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual([d[1] for d in decls],
                          ["clarify", "build", "solve", "build", "solve", "build", "solve"])
         self.assertTrue(all(d[3] == "trace" and d[2] == NEON for d in decls))
-        # The failed 22:29:16 declaration and the one that landed 9 s later
-        # are one cluster, and the cluster keeps the LATEST instant.
+        # The failed declaration (emitted 22:29:06, `can't open file
+        # ...\scripts\session.py`) and the one that landed 18 s later are
+        # one cluster, and the cluster keeps the LATEST instant.
         self.assertEqual(decls[4][0], step(steps, NEON, 652)["ts"])
+        self.assertIn("No such file", step(steps, NEON, 649)["output_head"])
+        self.assertIn("PASS: session declared phase=solve", step(steps, NEON, 653)["output_head"])
 
     def test_step_count_by_phase_matches_the_hand_count(self):
         steps = neon_steps()
@@ -244,10 +258,17 @@ class TestHeavyOutput(unittest.TestCase):
         found = P.find_heavy_output(P.attribute(claude_steps()))
         self.assertEqual({tuple(f["steps"]) for f in found}, {(7, 8), (15, 16)})
 
-    def test_real_negative_text_only_subagents(self):
+    def test_real_negative_results_under_the_floor(self):
+        # Every real session on this box has at least one output above the
+        # floor (the a0e9c38f subagents included, now that their slices
+        # carry tool blocks), so the negative is a real session's steps
+        # with its over-floor results left out: real steps, nothing added.
         steps = [s for s in claude_steps(CLAUDE_TEXT_ONLY) if s["parent_session_id"]]
-        self.assertTrue(steps)
-        self.assertEqual(P.find_heavy_output(P.attribute(steps)), [])
+        self.assertTrue(any((s["out_bytes"] or 0) > P.HEAVY_OUTPUT_BYTES for s in steps))
+        under = [s for s in steps if s["kind"] != "tool_result"
+                 or (s["out_bytes"] or 0) <= P.HEAVY_OUTPUT_BYTES]
+        self.assertTrue(any(s["kind"] == "tool_result" for s in under))
+        self.assertEqual(P.find_heavy_output(P.attribute(under)), [])
 
 
 class TestLongReasoning(unittest.TestCase):
@@ -303,7 +324,7 @@ class TestRecursiveListing(unittest.TestCase):
     def test_real_positive_get_childitem_recurse(self):
         found = P.find_recursive_listing(P.attribute(main_only(neon_steps())))
         seqs = {f["steps"][0] for f in found}
-        self.assertTrue({50, 62, 84} <= seqs, seqs)
+        self.assertTrue({50, 61, 84} <= seqs, seqs)
 
     def test_real_negative_subagents(self):
         steps = [s for s in neon_steps() if s["session_id"] == FALCON]
@@ -352,10 +373,15 @@ class TestRebuildChain(unittest.TestCase):
     def test_real_positive_every_build_phase(self):
         found = P.find_rebuild_chain(P.attribute(neon_steps()))
         self.assertEqual(sorted(f["evidence"].split(" in build #")[1][0] for f in found), ["1", "3", "5"])
-        build3 = next(f for f in found if "build #3" in f["evidence"])
-        self.assertIn("ws_common.py", build3["evidence"])
-        self.assertTrue(build3["evidence"].startswith("5 compiles"))
-        self.assertEqual(build3["stage"], "compile")
+        # With the commands whole, every compile's --spec is visible: 3 / 4
+        # / 6 compiles in the three build phases (the cut trace read 5 / 5).
+        counts = {f["evidence"].split(" in build #")[1][0]: int(f["evidence"].split(" compiles")[0])
+                  for f in found}
+        self.assertEqual(counts, {"1": 3, "3": 4, "5": 6})
+        for index in ("3", "5"):
+            chain = next(f for f in found if f"build #{index}" in f["evidence"])
+            self.assertIn("ws_common.py", chain["evidence"])
+            self.assertEqual(chain["stage"], "compile")
 
     def test_real_negative_claude(self):
         self.assertEqual(P.find_rebuild_chain(P.attribute(claude_steps())), [])
@@ -378,8 +404,11 @@ class TestForegroundPoll(unittest.TestCase):
     def test_real_positive_start_sleep(self):
         found = P.find_foreground_poll(P.attribute(neon_steps()))
         four = next(f for f in found if "Start-Sleep -Seconds 240" in f["evidence"])
-        self.assertEqual(four["steps"], [518, 519])
-        self.assertEqual(four["cost_wall_ms"], 240_000)       # the declared sleep
+        self.assertEqual(four["steps"], [517, 519])
+        # The call's real wall (emitted -> result, 241 s) now beats the
+        # declared 240 s; before ticket 06 the call measured 32 ms.
+        self.assertGreaterEqual(four["cost_wall_ms"], 240_000)
+        self.assertLess(four["cost_wall_ms"], 245_000)
         self.assertIn("4 min 0 s declared", four["evidence"])
 
     def test_real_negative_reads_within_a_minute(self):
@@ -401,8 +430,10 @@ class TestProbeScript(unittest.TestCase):
     def test_real_positive_python_c_and_temp_probes(self):
         found = P.find_probe_script(P.attribute(neon_steps()))
         build1 = next(f for f in found if "build #1" in f["evidence"])
-        self.assertTrue(build1["evidence"].startswith("19 probe(s)"))
-        self.assertIn("11 python -c, 8 probe/tmp file(s)", build1["evidence"])
+        # 20 with the commands whole (the cut trace hid one `python -c`
+        # behind the 200th character of a compound command).
+        self.assertTrue(build1["evidence"].startswith("20 probe(s)"))
+        self.assertIn("12 python -c, 8 probe/tmp file(s)", build1["evidence"])
         self.assertIn(312, build1["steps"])                  # write Temp\opencode\probe_aedt_material.py
 
     def test_real_negative_subagent(self):
@@ -437,7 +468,14 @@ class TestEscalation(unittest.TestCase):
 
     def test_real_positive_user_replies(self):
         found = P.find_escalation(P.attribute(neon_steps()))
-        self.assertEqual(len(found), 12)            # 13 user turns, the first is the task
+        # 13 user turns: the first is the task, and the one at seq 518 was
+        # typed while the 240 s Start-Sleep call (517) was still running —
+        # not a reply after the agent stopped, now that a call's ts is its
+        # emission. 11 remain.
+        self.assertEqual(len(found), 11)
+        steps = neon_steps()
+        self.assertEqual(step(steps, NEON, 517)["kind"], "tool_use")
+        self.assertEqual((step(steps, NEON, 518)["role"], step(steps, NEON, 518)["kind"]), ("user", "text"))
         first = min(found, key=lambda f: f["steps"][0])
         self.assertEqual(first["steps"], [158, 159])
         self.assertIn("waited 1 h 10 min", first["evidence"])
@@ -464,13 +502,13 @@ class TestLateDeclaration(unittest.TestCase):
         # The ledger calls this "the solve-phase declaration came one step
         # late". From the machine state alone: watchdog run 2 started at
         # 1787092156 (22:29:16Z); the trace's solve declaration that landed
-        # is at 22:29:25Z; session.json still read build in between.
+        # was emitted at 22:29:24Z; session.json still read build in between.
         found = P.find_late_declaration(P.attribute(neon_steps()), [], machine_state())
         self.assertEqual(len(found), 1)
         f = found[0]
         self.assertEqual((f["phase"], f["stage"], f["source"]), ("build", "solve", "state"))
         self.assertIn("watchdog_started=1787092156", f["evidence"])
-        self.assertIn("in phase build, 9 s before the solve declaration at 2026-08-18T22:29:25Z", f["evidence"])
+        self.assertIn("in phase build, 8 s before the solve declaration at 2026-08-18T22:29:24Z", f["evidence"])
 
     def test_real_negative_no_state(self):
         self.assertEqual(P.find_late_declaration(P.attribute(neon_steps()), [], {}), [])
@@ -503,7 +541,8 @@ class TestUndeclaredSession(unittest.TestCase):
 class TestBackendError(unittest.TestCase):
 
     def test_real_positive_from_machine_state(self):
-        found = P.find_backend_error(P.attribute(neon_steps()), [], machine_state())
+        found = [f for f in P.find_backend_error(P.attribute(neon_steps()), [], machine_state())
+                 if f["source"] == "state"]
         self.assertEqual(len(found), 1)
         f = found[0]
         self.assertEqual((f["source"], f["phase"], f["stage"]), ("state", "solve", "readout"))
@@ -511,8 +550,29 @@ class TestBackendError(unittest.TestCase):
                          "GrpcApiError GetVariables x3 quoted by readouts.txt x2, z_act.txt x1 "
                          "(readouts.txt: route=both-failed)")
 
-    def test_real_negative_trace_carries_no_output_text(self):
-        self.assertEqual(P.find_backend_error(P.attribute(neon_steps()), [], {}), [])
+    def test_real_positive_from_the_trace_output_heads(self):
+        # The trace carries the first 2 KB of every tool output (ticket 06),
+        # so the errors the run hit are read off it: five AEDT commands in
+        # the main session, grouped by command and stage, plus the runcard
+        # subagent's two reads of readouts.txt / z_act.txt, which quote the
+        # same GetVariables / GetPropValue lines the state files hold.
+        found = [f for f in P.find_backend_error(P.attribute(neon_steps()), [], {})
+                 if f["source"] == "trace"]
+        main = {(f["evidence"].split(" x")[0], f["stage"]): f for f in found if f["session"] == NEON}
+        self.assertEqual(set(main), {("GrpcApiError GetPropertyValue", P.BETWEEN),
+                                     ("GrpcApiError GetVariables", "readout"),
+                                     ("GrpcApiError Subtract", "compile"),
+                                     ("GrpcApiError GetDesignNames", P.BETWEEN),
+                                     ("GrpcApiError GetPropValue", "readout")})
+        self.assertEqual(main[("GrpcApiError Subtract", "compile")]["steps"], [743, 744, 750, 751])
+        self.assertEqual(main[("GrpcApiError GetVariables", "readout")]["evidence"].split(" in ")[0],
+                         "GrpcApiError GetVariables x4")
+        self.assertEqual({f["session"] for f in found} - {NEON}, {FALCON})
+        self.assertEqual(len(found), 7)
+
+    def test_real_negative_without_heads(self):
+        steps = [dict(s, output_head=None) for s in neon_steps()]
+        self.assertEqual(P.find_backend_error(P.attribute(steps), [], {}), [])
 
     def test_synthetic_beside_real_output_head(self):
         steps = neon_steps()
@@ -556,55 +616,62 @@ class TestDesktopRecycle(unittest.TestCase):
 
 class TestDesignMisroute(unittest.TestCase):
 
-    def test_real_positive_the_confirmed_misroute(self):
+    def test_real_positive_both_misroutes_confirmed(self):
+        # Both DESIGN misroutes the ledger records by hand, confirmed from
+        # the trace alone now that the commands are whole (ticket 05 saw
+        # the second only as POSSIBLE behind the 200-char cut).
         found = P.find_design_misroute(P.attribute(neon_steps()))
-        confirmed = [f for f in found if not f["evidence"].startswith("POSSIBLE")]
-        self.assertEqual(len(confirmed), 1)
-        f = confirmed[0]
-        # fed compile 568, ws_common.py edit 596, fed compiles 599 and 603
-        self.assertEqual(f["steps"], [568, 569, 596, 597, 599, 600, 603, 604])
-        self.assertEqual((f["phase"], f["stage"]), ("build", "compile"))
-        self.assertIn("design.yaml", f["evidence"])
-        self.assertIn("ws_common.py", f["evidence"])
+        self.assertEqual([f for f in found if f["evidence"].startswith("POSSIBLE")], [])
+        self.assertEqual(len(found), 2)
+        first, second = sorted(found, key=lambda f: f["steps"][0])
+        # #1 (build-2): fed compile 568, ws_common.py edit 596, fed compiles 599 and 603
+        self.assertEqual(first["steps"], [568, 569, 596, 597, 599, 600, 603, 604])
+        # #2 (build-3): fed compiles 743 / 750 / 757, edit 791, fed compiles 794 and 798
+        self.assertEqual(second["steps"], [743, 744, 750, 751, 757, 758, 791, 792, 794, 795, 798, 799])
+        for f in (first, second):
+            self.assertEqual((f["phase"], f["stage"]), ("build", "compile"))
+            self.assertIn("design.yaml", f["evidence"])
+            self.assertIn("ws_common.py", f["evidence"])
+            # Every compile here was piped through `Select-Object -Last N`,
+            # so its output head is the PASS/FAIL tail, not the attach
+            # banner: no Active Design names are quoted from real data.
+            self.assertNotIn("Active Design", f["evidence"])
+        steps = neon_steps()
+        self.assertIn("Select-Object -Last", step(steps, NEON, 743)["command"])
+        self.assertIn("PASS: compile_spec", step(steps, NEON, 569)["output_head"])
 
-    def test_real_possible_misroutes_are_labelled(self):
-        # The 200-char command cut hides the --spec of the three fed
-        # compiles of build-3 (the second real misroute) and the --dry-run
-        # of seq 401 (not a misroute). Both surface as POSSIBLE, never as
-        # confirmed, and say why.
-        found = P.find_design_misroute(P.attribute(neon_steps()))
-        possible = sorted((f["steps"][0] for f in found if f["evidence"].startswith("POSSIBLE")))
-        self.assertEqual(possible, [401, 743])
-        self.assertTrue(all("200-char command cut" in f["evidence"] for f in found
-                            if f["evidence"].startswith("POSSIBLE")))
+    def test_real_dry_run_is_not_a_compile(self):
+        # Seq 401 ends in `--dry-run`, which the cut trace lost; whole, it
+        # is a gate, not a compile, and no POSSIBLE finding is left.
+        steps = neon_steps()
+        self.assertIn(P.DRY_RUN, step(steps, NEON, 401)["command"])
+        self.assertEqual(P.compile_calls(step(steps, NEON, 401)["command"]), [("design.yaml", True)])
 
     def test_real_negative(self):
         self.assertEqual(P.find_design_misroute(P.attribute(claude_steps())), [])
 
-    def test_synthetic_beside_real_full_commands_confirm_and_clear(self):
-        # The same real steps with the four cut commands restored to what the
-        # store holds (read on 2026-09-02): seq 401 becomes a dry run and
-        # drops out; 743/750 become fed compiles and build-3 is confirmed.
+    def test_synthetic_beside_real_cut_commands_degrade_to_possible(self):
+        # The same real steps with the build-3 compiles cut at 200 chars, as
+        # the ticket-05 trace carried them (and the classifier's cap set to
+        # that cut): the second misroute degrades to POSSIBLE and says why,
+        # never to a confirmed finding on a guess. Dormant on today's trace,
+        # whose cap no real command reaches.
         steps = neon_steps()
-        w = "workspaces/patch-array-5800"
-        full = {
-            401: f"python scripts/validate_spec.py {w}/design.yaml --quiet; python scripts/compile_spec.py "
-                 f"--workspace {w} --spec {w}/design.yaml --dry-run 2>&1 | Select-Object -Last 2",
-            743: f"python -c \"import json, os; f='{w}/results/state/session.json'; print(open(f).read())\"; "
-                 f"python scripts/compile_spec.py --workspace {w} --spec {w}/design.yaml 2>&1 | Select-Object -Last 3",
-            750: "Get-Process -Name ansysedt -ErrorAction SilentlyContinue | Select-Object -First 5 | Measure-Object "
-                 f"| Select-Object -ExpandProperty Count; python scripts/compile_spec.py --workspace {w} "
-                 f"--spec {w}/design.yaml --launch 2>&1 | Select-Object -Last 3",
-        }
-        restored = [_variant(s, command=full[s["seq"]]) if s["session_id"] == NEON and s["seq"] in full else s
-                    for s in steps]
-        found = P.find_design_misroute(P.attribute(restored))
+        cut = [_variant(s, command=s["command"][:200])
+               if s["session_id"] == NEON and s["seq"] in (743, 744, 750, 751, 757, 758) else s
+               for s in steps]
+        self.assertTrue(all(len(s["command"]) == 200 for s in cut if s["seq"] in (743, 750) and s["session_id"] == NEON))
+        cap = P.COMMAND_CHARS
+        P.COMMAND_CHARS = 200
+        try:
+            found = P.find_design_misroute(P.attribute(cut))
+        finally:
+            P.COMMAND_CHARS = cap
         confirmed = sorted(f["steps"][0] for f in found if not f["evidence"].startswith("POSSIBLE"))
-        self.assertEqual(confirmed, [568, 743])
-        # Seq 297's command is still cut here (its full text was not copied),
-        # so it may remain a POSSIBLE; 401 and 743 may not.
-        possible = {f["steps"][0] for f in found if f["evidence"].startswith("POSSIBLE")}
-        self.assertTrue(possible <= {297}, possible)
+        possible = [f for f in found if f["evidence"].startswith("POSSIBLE")]
+        self.assertEqual(confirmed, [568])
+        self.assertEqual([f["steps"][0] for f in possible], [743])
+        self.assertIn("200-char command cut", possible[0]["evidence"])
 
     def test_synthetic_beside_real_active_design_quoted(self):
         steps = neon_steps()

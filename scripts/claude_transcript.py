@@ -52,14 +52,21 @@ evidence with the content itself dropped:
 - `thinking`    -> `{"type": "thinking", "thinking_bytes": N}`
 - `text`        -> `{"type": "text", "text_bytes": N}`
 - `tool_use`    -> `{"type": "tool_use", "id", "name", "input_bytes": N,
-                     "command": <first 200 chars of the command / path>}`
+                     "command": <the command / path, whole up to
+                     COMMAND_CHARS>, "input_head": <for an edit / write
+                     only: the first HEAD_CHARS of the content written, or
+                     {"old", "new"} heads of an edit's strings>}`
 - `tool_result` -> `{"type": "tool_result", "tool_use_id", "is_error",
-                     "content_bytes": N}`
+                     "content_bytes": N, "content_head": <the first
+                     HEAD_CHARS of the result's text>}`
 - a string `content` -> `"content_bytes": N` on the message
 
 `N` is the UTF-8 byte length of the text, or of the block's JSON for
-non-text values (`byte_size`). `scripts/run_trace.py` reads either form,
-so a slice traces exactly like its source. The slice is written only if it
+non-text values (`byte_size`). The heads are what the pain-point
+classifiers read (`Active Design set to X`, `GrpcApiError ... command: X`,
+a `DESIGN = ...` edit); everything past them is dropped, so a slice stays
+small and a fixture never carries a whole file. `scripts/run_trace.py`
+reads either form, so a slice traces exactly like its source. The slice is written only if it
 reduces to the same card (`storesize` aside, which is the slice's own size
 by construction) and passes the caller's extra `verify` check, so a fixture
 can never drift from the artifact it stands for
@@ -268,11 +275,24 @@ KEEP_USAGE = ("input_tokens", "output_tokens", "cache_read_input_tokens",
               "cache_creation_input_tokens", "output_tokens_details")
 SUBAGENTS_DIR = "subagents"
 SUBAGENT_GLOB = "agent-*.jsonl"
-COMMAND_CHARS = 200
+# A command is carried whole. The cap exists so a fixture can never swallow a
+# file's content pasted into a heredoc; the longest real shell command on
+# this box is 1,659 characters (neon-eagle), and the 200-character cut this
+# used to be hid `--spec` and `--dry-run` from the classifiers (ticket 05).
+COMMAND_CHARS = 8192
+# The head of a tool's output and of an edit's / write's input: ~2 KB, enough
+# for the `Active Design set to X` line, a `GrpcApiError ... command: X`
+# traceback tail, a PASS:/FAIL: line, or a `DESIGN = "..."` edit.
+HEAD_CHARS = 2048
 # The tool_use input key that names what the call acted on, in precedence
 # order: a shell command, a file path, a search pattern, an agent prompt.
 COMMAND_KEYS = ("command", "file_path", "filePath", "notebook_path", "pattern",
                 "path", "url", "skill", "query", "description", "prompt")
+# An edit's strings (Claude Code Edit / opencode edit) and a write's content
+# (Write / write; NotebookEdit's new_source).
+EDIT_OLD_KEYS = ("old_string", "oldString")
+EDIT_NEW_KEYS = ("new_string", "newString")
+WRITE_CONTENT_KEYS = ("content", "new_source")
 
 
 def byte_size(value):
@@ -283,13 +303,72 @@ def byte_size(value):
 
 
 def command_of(tool_input):
-    """The first 200 chars of what a tool call acted on, or None."""
+    """What a tool call acted on (whole, up to COMMAND_CHARS), or None."""
     if not isinstance(tool_input, dict):
         return None
     for key in COMMAND_KEYS:
         value = tool_input.get(key)
         if isinstance(value, str) and value.strip():
             return value[:COMMAND_CHARS]
+    return None
+
+
+def head_of(text, limit=HEAD_CHARS):
+    """The first `limit` characters of a text; None stays None."""
+    if text is None:
+        return None
+    if not isinstance(text, str):
+        text = json.dumps(text, ensure_ascii=False)
+    return text[:limit]
+
+
+def result_text(content):
+    """The text a tool result carries: the string itself, or the `text`
+    blocks of a list joined (an image or a tool_reference block has no
+    text and contributes nothing); None for no content."""
+    if content is None:
+        return None
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(str(block.get("text") or ""))
+        return "\n".join(parts)
+    return json.dumps(content, ensure_ascii=False)
+
+
+def _first_str(tool_input, keys):
+    for key in keys:
+        value = tool_input.get(key)
+        if isinstance(value, str):
+            return value
+    return None
+
+
+def input_head_of(tool_input):
+    """The head of what an edit or write put into a file, or None.
+
+    An edit gives `{"old": head, "new": head}` (a MultiEdit: its first
+    edit); a write gives the head of its content. Any other call — a shell
+    command, a read, a search — gives None: its `command` already says
+    everything the trace needs.
+    """
+    if not isinstance(tool_input, dict):
+        return None
+    edits = tool_input.get("edits")
+    if isinstance(edits, list) and edits and isinstance(edits[0], dict):
+        return input_head_of(edits[0])
+    old = _first_str(tool_input, EDIT_OLD_KEYS)
+    new = _first_str(tool_input, EDIT_NEW_KEYS)
+    if old is not None or new is not None:
+        return {"old": head_of(old or ""), "new": head_of(new or "")}
+    content = _first_str(tool_input, WRITE_CONTENT_KEYS)
+    if content is not None:
+        return head_of(content)
     return None
 
 
@@ -310,11 +389,18 @@ def slice_block(block):
         command = command_of(block.get("input"))
         if command is not None:
             out["command"] = command
+        input_head = input_head_of(block.get("input"))
+        if input_head is not None:
+            out["input_head"] = input_head
         return out
     if btype == "tool_result":
-        return {"type": btype, "tool_use_id": block.get("tool_use_id"),
-                "is_error": bool(block.get("is_error", False)),
-                "content_bytes": byte_size(block.get("content", ""))}
+        out = {"type": btype, "tool_use_id": block.get("tool_use_id"),
+               "is_error": bool(block.get("is_error", False)),
+               "content_bytes": byte_size(block.get("content", ""))}
+        head = head_of(result_text(block.get("content")))
+        if head is not None:
+            out["content_head"] = head
+        return out
     return {"type": btype}
 
 

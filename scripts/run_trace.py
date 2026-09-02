@@ -18,12 +18,20 @@ The step record (every key present, None where not applicable):
     kind                "text" | "reasoning" | "tool_use" | "tool_result"
     tool                tool name (on the tool_use and copied onto its result)
     tool_use_id         the call id joining a tool_use to its tool_result
-    command             first 200 chars of the bash command / file path /
-                        pattern / agent prompt the call acted on (copied onto
+    command             the bash command / file path / pattern / agent prompt
+                        the call acted on, whole (capped at
+                        claude_transcript.COMMAND_CHARS = 8192; copied onto
                         the result too)
+    input_head          tool_use of an edit / write only: the first
+                        HEAD_CHARS (2048) of the content written, or
+                        {"old", "new"} heads of an edit's two strings;
+                        None on every other step
     in_bytes            bytes handed in: a tool call's input, a user's text
     out_bytes           bytes produced: a tool's output, the model's text or
                         reasoning
+    output_head         tool_result only: the first HEAD_CHARS of the
+                        result's text (the error text when the call failed
+                        with no output); None elsewhere
     is_error            tool_result only: the harness flagged the call failed
     request_id          the API request (Claude Code requestId / opencode
                         assistant message id) the step was generated in
@@ -53,8 +61,9 @@ Claude Code (`~/.claude/projects/<encoded cwd>/<session-id>.jsonl`):
   a0e9c38f fixture shows output 36 -> 2356 within one request), so the
   last record's usage wins, as in `load_card`.
 - `user` records: `tool_result` blocks (`tool_use_id`, `content`,
-  `is_error`) -> tool_result with role tool_result; text blocks or a plain
-  string content -> text with role user.
+  `is_error`) -> tool_result with role tool_result (output_head = the head
+  of the content string, or of its `text` blocks joined); text blocks or a
+  plain string content -> text with role user.
 - every other record type (attachment, mode, system, titles, file-history)
   is bookkeeping, not a step.
 - subagents: `<session-id>/subagents/agent-<id>.jsonl` beside the file.
@@ -77,22 +86,27 @@ opencode (`~/.local/share/opencode/opencode.db`, opened read-only through
   counted). request_id = the message id.
 - `part` rows (`data` JSON, keyed by `type`): `text` -> text (role from
   its message), `reasoning` -> reasoning, `tool` -> TWO steps: a tool_use
-  at `state.time.start` (`tool`, `callID`, in_bytes = `state.input`'s JSON
-  size, command from the input) and, once `state.status` is completed or
-  error, a tool_result at `state.time.end` (out_bytes = the size of
-  `state.output`, or of `state.error` when the output is null, is_error =
-  status == "error"). `step-start`, `step-finish`, `patch` and the like are
-  not steps. A text or reasoning part's ts is its `time.start`, else the
-  row's time_created.
+  at the part row's `time_created` (`tool`, `callID`, in_bytes =
+  `state.input`'s JSON size, command and input_head from the input) and,
+  once `state.status` is completed or error, a tool_result at
+  `state.time.end` (out_bytes = the size of `state.output`, or of
+  `state.error` when the output is null, output_head = its head, is_error
+  = status == "error"). The row's `time_created` is when the model emitted
+  the call; `state.time.start` is written when the call completes, ~30 ms
+  before `state.time.end` (the `Start-Sleep -Seconds 240` call in
+  neon-eagle reads 32 ms start-to-end and 241 s created-to-end), so a
+  call's wall is only real from `time_created`. `step-start`,
+  `step-finish`, `patch` and the like are not steps. A text or reasoning
+  part's ts is its `time.start`, else the row's time_created.
 - a message with usage but no step (an aborted turn) gets one empty text
   step so its tokens are never dropped.
 - subagents: `session.parent_id` (the `task` tool's `state.metadata`
   names the same child `sessionId`), followed recursively.
 - fixture slices (`capture_opencode`, `scripts/fixtures/opencode/`): one
   JSONL of the family's session / message / part rows with content
-  replaced by sizes (`text_bytes`; `input_bytes` + `command`;
-  `output_bytes`), read back by `SliceStore`, and written only if it
-  traces identically to the database.
+  replaced by sizes and heads (`text_bytes`; `input_bytes` + `command` +
+  `input_head`; `output_bytes` + `output_head`), read back by
+  `SliceStore`, and written only if it traces identically to the database.
 
 Usage:
     python scripts/run_trace.py --workspace W [--out DIR]
@@ -128,10 +142,12 @@ HOST_OPENCODE = run_card.HOST_OPENCODE
 HOSTS = (HOST_OPENCODE, HOST_CLAUDE)
 
 STEP_KEYS = ("ts", "session_id", "host", "parent_session_id", "seq", "role",
-             "kind", "tool", "tool_use_id", "command", "in_bytes", "out_bytes",
-             "is_error", "request_id", "tokens_input", "tokens_output",
-             "tokens_cache_read", "tokens_cache_write", "tokens_reasoning",
-             "latency_ms")
+             "kind", "tool", "tool_use_id", "command", "input_head", "in_bytes",
+             "out_bytes", "output_head", "is_error", "request_id", "tokens_input",
+             "tokens_output", "tokens_cache_read", "tokens_cache_write",
+             "tokens_reasoning", "latency_ms")
+COMMAND_CHARS = claude_transcript.COMMAND_CHARS
+HEAD_CHARS = claude_transcript.HEAD_CHARS
 TOKEN_KEYS = ("tokens_input", "tokens_output", "tokens_cache_read",
               "tokens_cache_write", "tokens_reasoning")
 KINDS = ("text", "reasoning", "tool_use", "tool_result")
@@ -150,6 +166,9 @@ KB = 1024.0
 
 byte_size = claude_transcript.byte_size
 command_of = claude_transcript.command_of
+head_of = claude_transcript.head_of
+input_head_of = claude_transcript.input_head_of
+result_text = claude_transcript.result_text
 
 
 def _step(**fields):
@@ -222,17 +241,23 @@ def _block_steps(block, rtype, base, tools):
             return _step(kind="text", role="assistant", out_bytes=size, **base)
         return _step(kind="text", role="user", in_bytes=size, **base)
     if btype == "tool_use":
-        command = (command_of(block.get("input")) if "input" in block
-                   else block.get("command"))
+        if "input" in block:
+            command = command_of(block.get("input"))
+            input_head = input_head_of(block.get("input"))
+        else:                                   # a slice: already reduced
+            command = block.get("command")
+            input_head = block.get("input_head")
         tools[block.get("id")] = (block.get("name"), command)
         return _step(kind="tool_use", role="assistant", tool=block.get("name"),
                      tool_use_id=block.get("id"), command=command,
-                     in_bytes=_size(block, "input"), **base)
+                     input_head=input_head, in_bytes=_size(block, "input"), **base)
     if btype == "tool_result":
         tool, command = tools.get(block.get("tool_use_id"), (None, None))
+        head = (head_of(result_text(block.get("content"))) if "content" in block
+                else block.get("content_head"))
         return _step(kind="tool_result", role=ROLE_TOOL_RESULT, tool=tool,
                      tool_use_id=block.get("tool_use_id"), command=command,
-                     out_bytes=_size(block, "content"),
+                     out_bytes=_size(block, "content"), output_head=head,
                      is_error=bool(block.get("is_error", False)), **base)
     return None
 
@@ -447,6 +472,17 @@ def _tool_output_size(state):
     return byte_size(output) if output is not None else None
 
 
+def _tool_output_head(state):
+    """The head of what the model saw back (output, else the error); from
+    a slice, the recorded head."""
+    if "input_bytes" in state:
+        return state.get("output_head")
+    output = state.get("output")
+    if output is None:
+        output = state.get("error")
+    return head_of(output)
+
+
 def _part_steps(row, role, base):
     """The steps one part row yields (0, 1 or 2)."""
     data = row.get("data") or {}
@@ -464,19 +500,24 @@ def _part_steps(row, role, base):
         time = state.get("time") or {}
         if "input_bytes" in state:
             in_bytes, command = int(state["input_bytes"]), state.get("command")
+            input_head = state.get("input_head")
         else:
             in_bytes = byte_size(state.get("input", {}))
             command = command_of(state.get("input"))
+            input_head = input_head_of(state.get("input"))
         tool, call_id = data.get("tool"), data.get("callID")
-        steps = [_step(ts=time.get("start") or row.get("time_created"), kind="tool_use",
+        # The row's time_created is the call's real start (see the module
+        # docstring); state.time.start is stamped at completion.
+        steps = [_step(ts=row.get("time_created") or time.get("start"), kind="tool_use",
                        role="assistant", tool=tool, tool_use_id=call_id,
-                       command=command, in_bytes=in_bytes, **base)]
+                       command=command, input_head=input_head, in_bytes=in_bytes, **base)]
         status = state.get("status")
         if status in FINISHED_STATUSES:
             steps.append(_step(ts=time.get("end") or row.get("time_updated"),
                                kind="tool_result", role=ROLE_TOOL_RESULT, tool=tool,
                                tool_use_id=call_id, command=command,
                                out_bytes=_tool_output_size(state),
+                               output_head=_tool_output_head(state),
                                is_error=(status == "error"), **base))
         return steps
     return []
@@ -558,9 +599,15 @@ def slice_part_data(data):
         command = command_of(state.get("input"))
         if command is not None:
             kept["command"] = command
+        input_head = input_head_of(state.get("input"))
+        if input_head is not None:
+            kept["input_head"] = input_head
         size = _tool_output_size(state)
         if size is not None:
             kept["output_bytes"] = size
+        head = _tool_output_head(state)
+        if head is not None:
+            kept["output_head"] = head
         if "time" in state:
             kept["time"] = state["time"]
         out.update({"tool": data.get("tool"), "callID": data.get("callID"),

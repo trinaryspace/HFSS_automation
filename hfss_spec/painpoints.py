@@ -40,14 +40,14 @@ gap, or the span of a chain. Severity by cost (`severity_of`): `high` above
 `HIGH_TOKEN_SHARE` of the run or `HIGH_WALL_MS`; `low` for a discipline
 finding that cost nothing this time; `medium` otherwise.
 
-What the trace does not carry, and how that is handled: `run_trace` keeps
-the first 200 characters of a command and the byte size of a tool's
-output, never the output text. `backend_error` and `design_misroute` are
-defined on output text (`Active Design set to X`, `GrpcApiError ...
-command: X`); `step_text` reads it from an `output_head` key when a future
-trace carries one, and until then the two classifiers work from what is
-recorded: the machine-state files that quote the errors (`readouts.txt`,
-`z_act.txt`) and, for the misroute, the command-level signature that both
+What the trace carries, and how that is used: `run_trace` keeps a command
+whole (up to `COMMAND_CHARS`), the byte size of a tool's output and its
+first 2 KB as `output_head` (run logging, ticket 06). `backend_error` and
+`design_misroute` are defined on output text (`Active Design set to X`,
+`GrpcApiError ... command: X`); `step_text` reads it from the head, and the
+two classifiers also work from what is recorded elsewhere: the
+machine-state files that quote the errors (`readouts.txt`, `z_act.txt`)
+and, for the misroute, the command-level signature that both
 patch-array-5800 misroutes left — a spec compiled, `ws_common.py` (the file
 that holds the `DESIGN` constant) edited, the same spec compiled again, all
 inside one build phase. The evidence line says which source it came from.
@@ -76,9 +76,13 @@ HIGH_WALL_MS = 15 * 60_000           # or above this wall
 LOW_TOKEN_SHARE = 0.005              # a discipline finding below both of these
 LOW_WALL_MS = 60_000                 # "cost nothing this time" -> low
 ROUTING_FILE = "ws_common.py"        # holds the DESIGN constant that routes a compile
-COMMAND_CHARS = 200                  # run_trace keeps this much of a command; a
-                                     # command this long may be cut mid-flag
+COMMAND_CHARS = 8192                 # run_trace keeps this much of a command
+                                     # (claude_transcript.COMMAND_CHARS); a command
+                                     # this long may be cut mid-flag
 UNKNOWN_SPEC = "?"                   # a compile whose --spec the cut command lost
+DECLARE_CLUSTER_MS = 30_000          # same-phase declarations this close are one:
+                                     # the first did not land (solve-1b: emitted
+                                     # 22:29:06, failed on cwd; again 22:29:24)
 
 PHASES = ("clarify", "build", "solve")
 UNDECLARED = "undeclared"
@@ -463,12 +467,12 @@ def declarations(steps, events, history):
     found.sort(key=lambda d: (d[0], d[3]))
     # The same declaration recorded three ways lands within seconds; a phase
     # re-declared within seconds is one whose first attempt did not land
-    # (patch-array-5800's solve-1b: declared at 22:29:16 in a command whose
-    # cwd broke it, again at 22:29:25). Either way the LATEST instant is the
+    # (patch-array-5800's solve-1b: emitted at 22:29:06 in a command whose
+    # cwd broke it, again at 22:29:24). Either way the LATEST instant is the
     # one that governs, so a cluster keeps its last member.
     deduped = []
     for decl in found:
-        if deduped and deduped[-1][1] == decl[1] and abs(decl[0] - deduped[-1][0]) <= 10_000 \
+        if deduped and deduped[-1][1] == decl[1] and abs(decl[0] - deduped[-1][0]) <= DECLARE_CLUSTER_MS \
                 and (deduped[-1][2] in (None, decl[2]) or decl[2] is None):
             deduped[-1] = (decl[0], decl[1], deduped[-1][2] or decl[2], decl[3])
             continue

@@ -92,8 +92,50 @@ CREATE INDEX part_session_idx ON part(session_id);
 """
 
 
-def inflate_input(size, command):
-    """A tool input dict of exactly `size` JSON bytes whose command is `command`."""
+def inflate_text(size, head=None):
+    """A text of exactly `size` UTF-8 bytes that starts with `head`."""
+    head = head or ""
+    pad = size - len(head.encode("utf-8"))
+    if pad < 0:
+        raise ValueError(f"a {size}-byte text cannot start with a {len(head)}-char head")
+    return head + "x" * pad
+
+
+def _padded(base, size):
+    """`base` grown to exactly `size` JSON bytes with a filler key, or None."""
+    short = size - claude_transcript.byte_size(base)
+    if short == 0:
+        return base
+    overhead = claude_transcript.byte_size(dict(base, _="")) - claude_transcript.byte_size(base)
+    if short >= overhead:
+        return dict(base, _="x" * (short - overhead))
+    return None
+
+
+def inflate_input(size, command, input_head=None):
+    """A tool input dict of exactly `size` JSON bytes whose command is
+    `command` and whose `input_head_of` is `input_head` (an edit's old/new
+    heads, a write's content head, or None)."""
+    if isinstance(input_head, dict):                       # an edit
+        base = {"filePath": command, "oldString": input_head["old"],
+                "newString": input_head["new"]}
+        short = size - claude_transcript.byte_size(base)
+        for key in ("newString", "oldString"):             # a string the head cut
+            if short > 0 and len(base[key]) >= claude_transcript.HEAD_CHARS:
+                return dict(base, **{key: base[key] + "x" * short})
+        out = _padded(base, size)
+        if out is not None:
+            return out
+        raise ValueError(f"cannot inflate a {size}-byte edit input for {command!r}")
+    if isinstance(input_head, str):                        # a write
+        base = {"filePath": command, "content": input_head}
+        short = size - claude_transcript.byte_size(base)
+        if short > 0 and len(input_head) >= claude_transcript.HEAD_CHARS:
+            return dict(base, content=input_head + "x" * short)
+        out = _padded(base, size)
+        if out is not None:
+            return out
+        raise ValueError(f"cannot inflate a {size}-byte write input for {command!r}")
     if command is None:
         if size == 2:
             return {}
@@ -120,9 +162,10 @@ def inflate_part(data):
     if ptype == "tool":
         state = data.get("state") or {}
         full = {"status": state.get("status"),
-                "input": inflate_input(int(state["input_bytes"]), state.get("command"))}
+                "input": inflate_input(int(state["input_bytes"]), state.get("command"),
+                                       state.get("input_head"))}
         if "output_bytes" in state:
-            full["output"] = "x" * int(state["output_bytes"])
+            full["output"] = inflate_text(int(state["output_bytes"]), state.get("output_head"))
         if "time" in state:
             full["time"] = state["time"]
         return {"type": ptype, "tool": data.get("tool"), "callID": data.get("callID"),
@@ -305,6 +348,20 @@ class TestClaudeCode(unittest.TestCase):
         self.assertEqual((first["kind"], first["role"]), ("text", "user"))
         self.assertGreater(first["in_bytes"], 0)
 
+    def test_claude_heads(self):
+        results = [s for s in self.steps if s["kind"] == "tool_result"]
+        self.assertTrue(all(isinstance(s["output_head"], str) for s in results))
+        self.assertTrue(all(len(s["output_head"]) <= run_trace.HEAD_CHARS for s in results))
+        self.assertTrue(any(len(s["output_head"]) == run_trace.HEAD_CHARS for s in results))
+        # f0c832a3 has no edits or writes; the a0e9c38f parent has 34 + 8.
+        self.assertTrue(all(s["input_head"] is None for s in self.steps))
+        parent = run_trace.trace_claude(CC_PARENT_TRANSCRIPT)[CC_PARENT]
+        edits = [s for s in parent if s["kind"] == "tool_use" and s["tool"] == "Edit"]
+        writes = [s for s in parent if s["kind"] == "tool_use" and s["tool"] == "Write"]
+        self.assertEqual((len(edits), len(writes)), (34, 8))
+        self.assertTrue(all(set(s["input_head"]) == {"old", "new"} for s in edits))
+        self.assertTrue(all(isinstance(s["input_head"], str) for s in writes))
+
     def test_subagents_link_to_parent_and_totals_agree_with_the_cards(self):
         family = run_trace.trace_claude(CC_PARENT_TRANSCRIPT)
         self.assertEqual(tuple(family), (CC_PARENT,) + CC_AGENTS)
@@ -376,6 +433,64 @@ class TestOpencode(unittest.TestCase):
         kinds = {p["data"]["type"] for p in self.store.parts(OC_SESSION)}
         self.assertIn("step-finish", kinds)
         self.assertNotIn("step-finish", {s["kind"] for s in self.family[OC_SESSION]})
+
+    def test_commands_are_whole(self):
+        # The longest shell command of the run is 1,659 characters; the
+        # 200-character cut hid `--spec` and `--dry-run` from the classifiers.
+        commands = [s["command"] for s in self.family[OC_SESSION] if s["kind"] == "tool_use"]
+        self.assertEqual(max(len(c or "") for c in commands), 1659)
+        self.assertTrue(any(len(c or "") > 200 and "--dry-run" in c for c in commands))
+        self.assertTrue(all(len(c or "") <= run_trace.COMMAND_CHARS for c in commands))
+
+    def test_output_heads_are_the_first_two_kb(self):
+        results = [s for s in self.family[OC_SESSION] if s["kind"] == "tool_result"]
+        heads = [s["output_head"] for s in results if s["output_head"] is not None]
+        self.assertEqual(len(heads), 254)                    # the 4 failed reads carry their error text
+        self.assertTrue(all(s["output_head"].startswith("File") for s in results if s["is_error"]))
+        self.assertTrue(all(len(h) <= run_trace.HEAD_CHARS for h in heads))
+        self.assertTrue(any(len(h) == run_trace.HEAD_CHARS for h in heads))
+        for s in results:                                    # a head never exceeds its output
+            if s["output_head"] is not None:
+                self.assertLessEqual(len(s["output_head"].encode("utf-8")), s["out_bytes"])
+        self.assertTrue(any("Active Design set to" in h for h in heads))
+        self.assertTrue(any("GrpcApiError" in h for h in heads))
+        self.assertTrue(all(s["output_head"] is None for s in self.family[OC_SESSION]
+                            if s["kind"] != "tool_result"))
+
+    def test_input_heads_on_edits_and_writes_only(self):
+        uses = [s for s in self.family[OC_SESSION] if s["kind"] == "tool_use"]
+        edits = [s for s in uses if s["tool"] == "edit"]
+        writes = [s for s in uses if s["tool"] == "write"]
+        self.assertEqual((len(edits), len(writes)), (44, 23))
+        for s in edits:
+            self.assertEqual(set(s["input_head"]), {"old", "new"})
+            self.assertTrue(all(len(v) <= run_trace.HEAD_CHARS for v in s["input_head"].values()))
+        for s in writes:
+            self.assertIsInstance(s["input_head"], str)
+            self.assertLessEqual(len(s["input_head"]), run_trace.HEAD_CHARS)
+        self.assertTrue(all(s["input_head"] is None for s in uses if s["tool"] not in ("edit", "write")))
+        # The DESIGN routing edits are now readable from the trace itself.
+        self.assertTrue(any("DESIGN" in s["input_head"]["old"] and "DESIGN" in s["input_head"]["new"]
+                            for s in edits if s["command"].endswith("ws_common.py")))
+
+    def test_tool_use_ts_is_the_part_row_time_created(self):
+        # opencode stamps state.time.start at completion (~30 ms before end);
+        # the part row's time_created is when the model emitted the call.
+        # The `Start-Sleep -Seconds 240` call reads 241 s, not 32 ms.
+        steps = self.family[OC_SESSION]
+        parts = {p["data"]["callID"]: p for p in self.store.parts(OC_SESSION)
+                 if p["data"]["type"] == "tool"}
+        calls = {s["tool_use_id"]: s for s in steps if s["kind"] == "tool_use"}
+        results = {s["tool_use_id"]: s for s in steps if s["kind"] == "tool_result"}
+        for call_id, use in calls.items():
+            self.assertEqual(use["ts"], parts[call_id]["time_created"])
+            self.assertEqual(results[call_id]["ts"], parts[call_id]["data"]["state"]["time"]["end"])
+        sleep = next(s for s in calls.values() if "Start-Sleep -Seconds 240" in s["command"])
+        wall = results[sleep["tool_use_id"]]["ts"] - sleep["ts"]
+        self.assertGreater(wall, 240_000)
+        self.assertLess(wall, 245_000)
+        state_time = parts[sleep["tool_use_id"]]["data"]["state"]["time"]
+        self.assertLess(state_time["end"] - state_time["start"], 1000)
 
 
 class TestSyntheticDbMatchesRealSlice(unittest.TestCase):
@@ -471,8 +586,10 @@ class TestClaudeCapture(unittest.TestCase):
         self.assertEqual(call["command"], "ls -la")
         self.assertEqual(call["in_bytes"], claude_transcript.byte_size(
             {"command": "ls -la", "timeout": 5}))
+        self.assertIsNone(call["input_head"])
         self.assertTrue(result["is_error"])
         self.assertEqual(result["out_bytes"], len("total 0\n"))
+        self.assertEqual(result["output_head"], "total 0\n")
         self.assertEqual(result["tool"], "Bash")
         # And the slice of it traces the same (the capture's own check).
         target = run_trace.capture_claude(src, Path(self.tmp) / "out")

@@ -14,6 +14,34 @@
       "tokens_input": 7868,
       "tokens_output": 81085,
       "tokens_reasoning": 22296
+    },
+    "subagents": {
+      "agent-a7c9f335c3a8f10e1": {
+        "billed": 2378,
+        "parts": 52,
+        "slug": "a0e9c38f-3117-4d93-8086-9b4f16ee0d52",
+        "storesize": 371247,
+        "time_created": 1788320114888,
+        "time_updated": 1788320308730,
+        "tokens_cache_read": 463940,
+        "tokens_cache_write": 75607,
+        "tokens_input": 22,
+        "tokens_output": 2356,
+        "tokens_reasoning": 684
+      },
+      "agent-aee86fa4fd776a43f": {
+        "billed": 292,
+        "parts": 47,
+        "slug": "a0e9c38f-3117-4d93-8086-9b4f16ee0d52",
+        "storesize": 497582,
+        "time_created": 1788320131481,
+        "time_updated": 1788320298987,
+        "tokens_cache_read": 230616,
+        "tokens_cache_write": 57254,
+        "tokens_input": 74,
+        "tokens_output": 218,
+        "tokens_reasoning": 106
+      }
     }
   },
   "f0c832a3-cb36-4168-ac07-70c2793c74a2": {

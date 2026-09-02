@@ -73,6 +73,11 @@ SUITES = [
     # results/state files. Attribution matches a hand count; per-kind costs
     # never exceed the run.
     ("painpoints", [sys.executable, os.path.join(REPO, "hfss_spec", "test_painpoints.py")]),
+    # The run report (run-logging 06): rendered on the shipped fixtures (the
+    # neon-eagle trace, the captured patch-array-5800 state, the real ledger
+    # slice) with no store access; byte-idempotent, the eleven sections in
+    # order, one PASS line, every unmeasurable with run_card's reason.
+    ("run-report", [sys.executable, os.path.join(REPO, "scripts", "test_run_report.py")]),
     ("static-gate", [sys.executable, os.path.join(SRC, "00_static_gate.py")]),
     ("skill-markers", [sys.executable, os.path.join(REPO, "skill", "hfss-agent", "verify_skill.py")]),
     ("kb-checks", [sys.executable, os.path.join(REPO, "scraping", "verify_kb.py")]),

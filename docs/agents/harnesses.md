@@ -20,6 +20,8 @@ that fails when the copies differ (`scripts/verify_agents.py`).
 | Subagents `kb-lookup`, `runcard` | `opencode.json` `agent:` | `.claude/agents/*.md` | `verify_agents.py` in tier 0 (prompts verbatim, tool surfaces agree) |
 | `analyze-papers` skill | `~/.agents/skills/analyze-papers` | `~/.claude/skills/analyze-papers` | a link the installer makes when the source exists |
 | Session store (run card) | `opencode.db` | `~/.claude/projects/*/<id>.jsonl` | `scripts/run_card.py` reads both; `claude_transcript.py` is the one parser for the second, with a real captured fixture |
+| Session store (step trace) | `opencode.db` — `part` rows per session, subagents via `session.parent_id` | the transcript plus `<id>/subagents/agent-*.jsonl` | `scripts/run_trace.py` reads both into one `steps.jsonl` shape; a real captured slice per host under `scripts/fixtures/`, each refused when it traces differently from its source; `scripts/run_report.py` consumes the trace, never a store |
+| Live tool timing (run logging 08) | plugin `tool.execute.before/after` — a follow-up, not built | `PreToolUse` / `PostToolUse` hooks in `.claude/settings.json` writing `results/state/tools.jsonl` — landing under ticket 08 | the harness table row lands with the ticket; until then the trace's transcript-derived timing is the only source |
 | Session identity | slug `<name>-<phase>` | `/rename`, plus `CLAUDE_CODE_SESSION_ID` recorded by `scripts/session.py` | `results/state/session.json` carries `host` + `host_session_id` |
 | Permissions | per-agent `permission` maps | `.claude/settings.json` allow-list, per-agent `tools:` | — |
 
@@ -34,6 +36,10 @@ maintainer's view of the same thing.
 - Changed what the skill needs from the host (a new tool, a new global
   skill)? Add a row to the "Harness notes" table in `execution.md` and, if
   it is a location, a `Target` in `install_skill.py`.
+- Changed a step-trace field? The mapping for both stores is stated in
+  `scripts/run_trace.py`'s docstring; recapture both fixtures
+  (`python scripts/run_trace.py --capture <id> --out scripts/fixtures/<host>`),
+  which refuses a slice that traces differently from its original.
 - Changed a run-card metric? The mapping for the Claude Code side is stated
   in `scripts/claude_transcript.py`'s docstring; keep the two definitions
   the same and recapture the fixture

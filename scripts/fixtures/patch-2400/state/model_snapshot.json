@@ -1,0 +1,144 @@
+{
+ "bboxes": {
+  "AirBox": [
+   -71.0,
+   -71.0,
+   -31.035,
+   71.0,
+   71.0,
+   32.6
+  ],
+  "Ground": [
+   -40.0,
+   -40.0,
+   -0.035,
+   40.0,
+   40.0,
+   0.0
+  ],
+  "Patch": [
+   -19.005,
+   -40.0,
+   1.6,
+   19.005,
+   14.7108,
+   1.635
+  ],
+  "PortSheet": [
+   -1.53,
+   -40.0,
+   -0.0,
+   1.53,
+   -40.0,
+   1.6
+  ],
+  "Substrate": [
+   -40.0,
+   -40.0,
+   0.0,
+   40.0,
+   40.0,
+   1.6
+  ]
+ },
+ "boundaries": {
+  "1": "Lumped Port",
+  "Rad1": "Radiation"
+ },
+ "excitations": {},
+ "materials": {
+  "AirBox": "air",
+  "Ground": "pec",
+  "Patch": "pec",
+  "PortSheet": "",
+  "Substrate": "fr4_epoxy"
+ },
+ "model_units": "mm",
+ "objects": [
+  "AirBox",
+  "Ground",
+  "Patch",
+  "PortSheet",
+  "Substrate"
+ ],
+ "ports": {
+  "1": "Lumped Port"
+ },
+ "setups": {
+  "Setup1": {
+   "BasisOrder": 1,
+   "DoLambdaRefine": true,
+   "DoMaterialLambda": true,
+   "DrivenSolverType": "Direct Solver",
+   "EnhancedLowFreqAccuracy": false,
+   "Frequency": "2.4GHz",
+   "ID": 0,
+   "IE Solver Accuracy": "Balanced",
+   "IESolverType": "Auto",
+   "InfiniteSphereSetup": -1,
+   "IsEnabled": true,
+   "LambdaTargetForIESolver": 0.15,
+   "MaxDeltaS": 0.02,
+   "MaxPass": 10,
+   "MaximumPasses": 6,
+   "MeshLink": {
+    "ImportMesh": false
+   },
+   "MinConvPass": 1,
+   "MinPass": 1,
+   "MinimumConvergedPasses": 1,
+   "MinimumPasses": 1,
+   "PerError": 1,
+   "PerRefine": 30,
+   "PercentRefinement": 30,
+   "PortAccuracy": 2,
+   "PortMaxTri": 500,
+   "PortMinTri": 100,
+   "SaveAnyFields": true,
+   "SaveRadFieldsOnly": false,
+   "SetLambdaTarget": false,
+   "SetPortMinMaxTri": false,
+   "SetupType": "HfssDriven",
+   "SolveType": "Single",
+   "Sweeps": {
+    "MoveBackwards": false,
+    "NextUniqueID": 1,
+    "Sweep_2R59H1": {
+     "ID": 0,
+     "IsEnabled": true,
+     "RangeCount": 201,
+     "RangeEnd": "3GHz",
+     "RangeStart": "2GHz",
+     "RangeType": "LinearCount",
+     "SaveFields": true,
+     "SaveRadFields": false,
+     "Type": "Discrete"
+    }
+   },
+   "Target": 0.3333,
+   "UseABCOnPort": false,
+   "UseDefaultLambdaTgtForIESolver": true,
+   "UseMatrixConv": false,
+   "UseMaxTetIncrease": false
+  }
+ },
+ "snapshot_version": 2,
+ "sweeps": [
+  "Setup1 - AirGap='31mm' CuT='0.035000000000000003mm' FeedW='3.0600000000000001mm' InsetDepth='7.4000000000000004mm' InsetGap='3mm' PatchL='29.421600000000002mm' PatchW='38.009999999999998mm' SubH='1.6000000000000001mm' SubL='80mm' SubW='80mm' : Table",
+  "Setup1 : LastAdaptive",
+  "Setup1 : Sweep_2R59H1"
+ ],
+ "terminals": {},
+ "variables": {
+  "AirGap": "31mm",
+  "CuT": "0.035mm",
+  "FeedW": "3.06mm",
+  "InsetDepth": "7.4mm",
+  "InsetGap": "3mm",
+  "PatchL": "29.4216mm",
+  "PatchW": "38.01mm",
+  "SubH": "1.6mm",
+  "SubL": "80mm",
+  "SubW": "80mm"
+ }
+}

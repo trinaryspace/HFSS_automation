@@ -1,0 +1,14 @@
+{
+  "captured": "2026-09-02",
+  "captured_from": "C:\\Users\\afpim\\AppData\\Local\\Temp\\pr-ws\\bowtie-3670\\results\\state\\trace\\ses_03a8008c2ffeEN5jJusT7PyFuO.steps.jsonl",
+  "session_id": "ses_03a8008c2ffeEN5jJusT7PyFuO",
+  "note": "Capture named steps of a real step trace as a fixture, line for line.",
+  "steps": {
+    "567": {
+      "kind": "tool_use",
+      "tool": "bash",
+      "bytes": 756,
+      "sha256": "48b9e53397d5a08eac6afc62483db5a14520cdc4f995a95babfe09b78358defd"
+    }
+  }
+}

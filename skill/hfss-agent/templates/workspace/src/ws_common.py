@@ -37,6 +37,7 @@ know them). Keep all other script paths derived from this module.
 import os
 import socket
 
+import run_events
 from ansys.aedt.core import Desktop, Hfss
 
 WORKSPACE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -56,6 +57,19 @@ def write_state(key, value):
     """Write one machine-state file: `results/state/<key>.txt`."""
     with open(os.path.join(STATE, key + ".txt"), "w") as f:
         f.write(str(value))
+
+
+def append_state(key, value):
+    """Append one line to `results/state/<key>.txt`; never rewrites a line.
+
+    For boundaries that can legitimately happen more than once — a solve
+    re-submitted after a user-approved model change — where the record has
+    to keep every occurrence: the first line is the boundary, the line count
+    is the number of occurrences (run logging, ticket 02).
+    """
+    os.makedirs(STATE, exist_ok=True)
+    with open(os.path.join(STATE, key + ".txt"), "a") as f:
+        f.write(str(value) + "\n")
 
 
 def read_state(key):
@@ -108,6 +122,7 @@ def attach(launch=False, probe=None):
     probe = probe or _pin_probe
     os.makedirs(STATE, exist_ok=True)
     port = _session_port()
+    stale = False
     if not launch and port and not probe(port):
         print(
             "stale pin: aedt_port=%d has no live desktop (bounded connect "
@@ -119,6 +134,7 @@ def attach(launch=False, probe=None):
         write_state("aedt_process_id", "0")
         port = 0
         launch = True
+        stale = True
     if launch:
         hfss = Hfss(
             version=AEDT_VERSION,
@@ -164,6 +180,13 @@ def attach(launch=False, probe=None):
         )
     write_state("aedt_port", str(live_port))
     write_state("aedt_process_id", str(live_pid))
+    # Port and pid on every attach and launch (run logging, ticket 03): a
+    # mid-run desktop recycle is a pid change in this log, visible to the
+    # report without anyone writing it into the ledger.
+    run_events.emit("desktop.launch" if launch else "desktop.attach", stage="desktop",
+                    detail="port=%s pid=%s%s" % (live_port, live_pid,
+                                                 " (stale pin re-pinned)" if stale else ""),
+                    state_dir=STATE)
     return hfss
 
 
@@ -277,6 +300,7 @@ def recycle_desktop():
                  % (read_state("aedt_port"), read_state("aedt_process_id")))
     note = "recycled desktop: " + "; ".join(steps)
     print(note, flush=True)
+    run_events.emit("desktop.recycle", stage="desktop", detail=note, state_dir=STATE)
     return hfss, note
 
 
@@ -355,6 +379,9 @@ def teardown():
             "refusing to close any desktop",
             flush=True,
         )
+        run_events.emit("teardown", stage="teardown",
+                        detail="aborted: no pinned aedt_port recorded - no desktop touched",
+                        state_dir=STATE)
         sys.stdout.flush()
         os._exit(0)
     verdict = guard_verdict(PROJECT)
@@ -365,6 +392,10 @@ def teardown():
             "python src/confirm_solve.py %s, then re-run teardown." % PROJECT,
             flush=True,
         )
+        run_events.emit("teardown", stage="teardown",
+                        detail="refused: solve evidence on disk is not banked "
+                               "(port=%s pid=%s) - bank it first" % (port, pid),
+                        state_dir=STATE)
         sys.stdout.flush()
         os._exit(2)
     close_projects = verdict != GUARD_BANKED
@@ -373,9 +404,10 @@ def teardown():
     else:
         print("teardown: banked workspace — projects left on disk (close_projects=False)",
               flush=True)
+    # The module-level `Desktop`, as `attach` and `recycle_desktop` use — a
+    # local re-import here silently bypassed the no-AEDT test seam and let a
+    # tier-0 test launch a real desktop (run logging 03 found it that way).
     try:
-        from ansys.aedt.core import Desktop
-
         d = Desktop(version=AEDT_VERSION, new_desktop=False, port=port)
         d.release_desktop(close_projects=close_projects, close_on_exit=True)
     except Exception as e:  # noqa: BLE001 - best effort
@@ -391,5 +423,9 @@ def teardown():
         print("True (no server process was recorded)", flush=True)
     else:
         print(str(gone), flush=True)
+    run_events.emit("teardown", stage="teardown",
+                    detail="verdict=%s close_projects=%s port=%s pid=%s gone=%s"
+                           % (verdict, close_projects, port, pid or "0", gone),
+                    state_dir=STATE)
     sys.stdout.flush()
     os._exit(0)

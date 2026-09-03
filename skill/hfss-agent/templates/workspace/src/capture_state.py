@@ -257,7 +257,12 @@ def main():
     }
     detail = " ".join("%s=%d" % kv for kv in sorted(counts.items()))
     print("snapshot written:", out, flush=True)
-    print("PASS: capture_state " + detail, flush=True)
+    line = "PASS: capture_state " + detail
+    print(line, flush=True)
+    import run_events
+
+    run_events.emit("snapshot.captured", stage="snapshot", verdict=line,
+                    detail="snapshot=%s" % out, state_dir=STATE)
     sys.stdout.flush()
 
 

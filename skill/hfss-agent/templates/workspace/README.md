@@ -18,7 +18,9 @@ workspaces/<name>/
 ├── <name>.aedt          # the AEDT project file (created by the staged scripts)
 ├── results/state/       # machine state, one .txt per key (port, pid, …)
 ├── results/             # requested plots and exported results
-└── summary.md           # acute design decisions + what the Model is + Run card
+├── summary.md           # acute design decisions + what the Model is + Run card
+└── run-report.md        # the run report (+ run-report.json): where the tokens,
+                         # wall, retries and escalations went, machine-derived
 ```
 
 Rules that make the workspace work:
@@ -79,5 +81,15 @@ Rules that make the workspace work:
   updated by read-back sync deltas and learning-loop notes; the `## Run
   card` section is filled by the measurement harness
   (`scripts/run_card.py --summary summary.md`).
+- **End-of-run checklist, in this order, every command from the repo root:**
+  1. `python scripts/record_outcome.py --workspace workspaces/<name>
+     --outcome completed|escalated|abandoned --completions <n> --note "<user
+     verdict verbatim>"` — the outcome in the key=value form the card parses.
+  2. `python scripts/run_card.py --workspace workspaces/<name> --summary
+     workspaces/<name>/summary.md` — the measured card, appended.
+  3. `python scripts/run_report.py --workspace workspaces/<name>` — the run
+     report, `run-report.md` + `run-report.json`, beside `summary.md`.
+  Each prints one `PASS:` line; the run is closed out when all three have.
 - `.aedt`, `.aedtresults/`, `results/`, and lock files are gitignored;
-  `src/`, `state.md`, and `summary.md` are the tracked record.
+  `src/`, `state.md`, `summary.md`, `run-report.md` and `run-report.json`
+  are the tracked record.

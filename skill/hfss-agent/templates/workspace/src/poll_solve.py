@@ -32,13 +32,18 @@ states are evidenced before claiming, never guessed:
 
 The sweep-count guess parameter (EXPECTED_SD) is removed entirely —
 completion never depends on a predicted output count. This module imports
-nothing from pyAEDT and no other workspace module: filesystem + process
-observation only (stdlib; psutil IS optional and used solely for the
+nothing from pyAEDT: filesystem + process observation only (stdlib, plus
+the two stdlib-only workspace modules `profile_evidence` — the one profile
+parser — and `run_events`; psutil IS optional and used solely for the
 solver-death probe). It never attaches to a desktop and never kills
 anything. On startup it guarantees the `aedt_port.txt` /
 `aedt_process_id.txt` files exist (filling "0" only if the launching
 session left none — it never overwrites live values) and records its own
 pid in `solve_watchdog_pid.txt`.
+
+The tick log stays in `solve_progress.txt`. Only the TERMINAL line becomes
+an event — `solve.terminal`, the line verbatim as its detail, in
+`results/state/events.jsonl` (run logging, ticket 03).
 """
 
 import os
@@ -47,6 +52,7 @@ import sys
 import time
 
 import profile_evidence
+import run_events
 
 SLEEP_SECONDS = 20
 SETTLE_TICKS = 3          # unchanged ticks after the completion evidence => complete
@@ -418,14 +424,16 @@ def resolve_project(argv=None):
     return None
 
 
-def main(argv=None):
-    argv = argv if argv is not None else sys.argv
-    project = resolve_project(argv)
-    if not project:
-        print("watchdog aborted: no project path (pass <project>.aedt or set SOLVE_PROJECT)", flush=True)
-        return 3
-    workspace = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    state_dir = os.path.join(workspace, "results", "state")
+def run(project, state_dir, cfg=None, sleep=None, process_alive=None):
+    """The watchdog loop against `project`, its state under `state_dir`.
+
+    Returns the exit code (0 complete, 2 stalled, 3 aborted). `cfg` overrides
+    the tick windows and `sleep` the ~20 s pause; both are injectable so the
+    no-AEDT tests can drive a real results tree to its terminal line in
+    milliseconds. `main()` is the detached entry point around this.
+    """
+    cfg = cfg or {}
+    sleep = sleep or time.sleep
     os.makedirs(state_dir, exist_ok=True)
     progress = os.path.join(state_dir, "solve_progress.txt")
 
@@ -450,8 +458,8 @@ def main(argv=None):
     stage = STAGE_MESH
     evidence = None
     while True:
-        cur = observe(project_results_dir(project), state_dir)
-        status, stage, evidence, state = watchdog_tick(prev, cur, state, {})
+        cur = observe(project_results_dir(project), state_dir, process_alive)
+        status, stage, evidence, state = watchdog_tick(prev, cur, state, cfg)
         line = format_progress(tick_no, status, stage, cur, evidence,
                                state.get("unchanged", 0),
                                time.time() - started, started)
@@ -460,10 +468,26 @@ def main(argv=None):
         print(line, flush=True)
         if status != STATUS_RUNNING:
             print("watchdog exit:", status, flush=True)
+            # The one line of this log that is an event: the terminal line,
+            # verbatim. Every tick before it stays in solve_progress.txt.
+            run_events.emit("solve.terminal", stage="solve", detail=line,
+                            duration_ms=(time.time() - started) * 1000,
+                            state_dir=state_dir)
             return {STATUS_COMPLETE: 0, STATUS_STALLED: 2, STATUS_ABORTED: 3}[status]
         prev = cur
         tick_no += 1
-        time.sleep(SLEEP_SECONDS)
+        sleep(SLEEP_SECONDS)
+
+
+def main(argv=None):
+    argv = argv if argv is not None else sys.argv
+    project = resolve_project(argv)
+    if not project:
+        print("watchdog aborted: no project path (pass <project>.aedt or set SOLVE_PROJECT)", flush=True)
+        return 3
+    workspace = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    state_dir = os.path.join(workspace, "results", "state")
+    return run(project, state_dir)
 
 
 if __name__ == "__main__":

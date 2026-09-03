@@ -1,0 +1,1 @@
+Setup1 : LastAdaptive,Setup1 : Sweep_2R59H1,Setup1 - AirGap='31mm' CuT='0.035000000000000003mm' FeedW='3.0600000000000001mm' InsetDepth='7.4000000000000004mm' InsetGap='3mm' PatchL='29.421600000000002mm' PatchW='38.009999999999998mm' SubH='1.6000000000000001mm' SubL='80mm' SubW='80mm' : Table

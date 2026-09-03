@@ -21,4 +21,5 @@ becomes a second copy. What is specific to this harness:
   bash call; it runs under the detached watchdog (ADR 0006).
 - Name the three phase sessions with `/rename <name>-clarify` (`-build`,
   `-solve`); `scripts/session.py --phase` records this session's id so
-  `scripts/run_card.py` can find the transcript afterwards.
+  `scripts/run_card.py` and `scripts/run_report.py` can find the transcript
+  (and its `subagents/` tree) afterwards.

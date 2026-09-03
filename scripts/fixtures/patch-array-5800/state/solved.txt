@@ -1,0 +1,3 @@
+status=Normal Completion
+sweep_points=150
+banked_at=1787096304

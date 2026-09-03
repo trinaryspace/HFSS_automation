@@ -1,0 +1,1 @@
+Setup1 : LastAdaptive,Setup1 : Sweep_3U94XF,Setup1 - AirGap='25mm' CuT='0.10000000000000001mm' FeedL='45mm' FeedW='3.1118000000000001mm' PatchBase='20.216799999999999mm' PatchH='24.3094mm' PatchLeg='26.326899999999998mm' PortH='9.3353999999999999mm' PortW='9.3353999999999999mm' SubH='1.6000000000000001mm' SubL='80mm' SubW='90mm' : Table

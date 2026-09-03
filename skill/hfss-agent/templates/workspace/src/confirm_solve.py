@@ -29,6 +29,9 @@ Evidence rules (ground truth: the pilot's `Bowtie3501.results` tree):
   their profile and ignored.
 
 Exit: 0 banked; 2 nothing banked (abort line explains why).
+
+The bank is also an event (run logging, ticket 03): `solve.banked` with the
+`PASS:` line as its verdict, or `solve.unbanked` with the abort line.
 """
 
 import os
@@ -37,6 +40,7 @@ import sys
 import time
 
 import profile_evidence
+import run_events
 
 WORKSPACE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(WORKSPACE, "results", "state")
@@ -116,12 +120,15 @@ def confirm(project_path, state_dir=None, now=None):
     clock; both are explicit so the runner tests can drive fixture state.
     """
     root = project_results_dir(project_path)
+    state_dir = state_dir or STATE
     lines = []
     profile = newest_terminal_profile(root)
     if profile is None:
         lines.append(
             "confirm_solve aborted: no terminal solve profile under %s — "
             "the solve never ran or is still in flight; nothing banked" % root)
+        run_events.emit("solve.unbanked", stage="solve", detail=lines[-1],
+                        state_dir=state_dir)
         return 2, lines
     live = in_flight_semaphores(root, profile)
     if live:
@@ -129,11 +136,12 @@ def confirm(project_path, state_dir=None, now=None):
             "confirm_solve aborted: in-flight solve markers under %s are "
             "newer than the last completion — wait for the watchdog's "
             "terminal line; nothing banked" % root)
+        run_events.emit("solve.unbanked", stage="solve", detail=lines[-1],
+                        state_dir=state_dir)
         return 2, lines
     status = terminal_status(profile)
     sweep_points = sweep_point_count(profile)
     banked_at = int(now if now is not None else time.time())
-    state_dir = state_dir or STATE
     os.makedirs(state_dir, exist_ok=True)
     with open(os.path.join(state_dir, "solved.txt"), "w") as f:
         f.write("status=%s\n" % status)
@@ -141,6 +149,10 @@ def confirm(project_path, state_dir=None, now=None):
         f.write("banked_at=%d\n" % banked_at)
     lines.append("PASS: confirm_solve banked status=%s sweep_points=%d banked_at=%d"
                  % (status, sweep_points, banked_at))
+    run_events.emit("solve.banked", stage="solve", verdict=lines[-1],
+                    detail="status=%s sweep_points=%d profile=%s"
+                           % (status, sweep_points, os.path.basename(profile)),
+                    state_dir=state_dir)
     if status != "Normal Completion":
         lines.append("! confirm_solve: solve status is NOT 'Normal Completion' (%s) — "
                      "results are banked; escalate per resolve-once" % status)

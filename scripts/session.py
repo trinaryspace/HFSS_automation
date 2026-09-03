@@ -14,8 +14,26 @@ resuming session or a human wants:
 
     python scripts/session.py --workspace workspaces/<name>
 
+The budget is judged against the actual tool-call count in the step trace
+(`results/state/trace/*.steps.jsonl`, run logging ticket 04) when one has been
+extracted, and reported as `calls unaccounted (no trace)` otherwise — never as
+a count nobody measured.
+
 Once declared, the repo's own entry points refuse out-of-phase work: a clarify
 session cannot `compile_spec --launch`, and only a solve session may solve.
+
+Every declaration is also recorded: one line appended to
+`results/state/sessions.jsonl` (the run's session history, never rewritten)
+and, on the first declaration, `results/state/run.json` naming the run. That
+is how `scripts/run_card.py --workspace` finds all three phase sessions
+afterwards. `--task-doc` records the request document the run answers.
+
+A declaration that carries a harness session id (Claude Code exports
+`CLAUDE_CODE_SESSION_ID`; `--session-id` for anything else) is also written
+to the per-machine map `~/.hfss-agent/sessions.json` (session id ->
+workspace + phase), which the Claude Code tool hook `scripts/hook_log.py`
+reads to find the workspace whose `results/state/tools.jsonl` it appends
+to. Without a session id the hook has nothing to look up and logs nothing.
 """
 
 import argparse
@@ -29,7 +47,8 @@ if str(REPO) not in sys.path:
 
 from hfss_spec.session import (                        # noqa: E402
     DEFAULT_CALL_BUDGET, HOST_CLAUDE_CODE, HOST_OPENCODE, PHASES, Session,
-    detect_host, start,
+    detect_host, history, register_session, run_info, start, trace_calls,
+    workspace_of,
 )
 
 
@@ -51,6 +70,9 @@ def main(argv=None):
     parser.add_argument("--session-id",
                         help="the harness's own id or slug for this session, so "
                              "scripts/run_card.py can find it later")
+    parser.add_argument("--task-doc", default="",
+                        help="the request document this run answers; recorded "
+                             "in run.json on the first declaration only")
     args = parser.parse_args(argv)
 
     state_dir = Path(args.workspace) / "results" / "state"
@@ -63,11 +85,20 @@ def main(argv=None):
             host_id = args.session_id
         session = start(args.phase, name=args.name, state_dir=state_dir,
                         call_budget=args.budget, host=host,
-                        host_session_id=host_id)
+                        host_session_id=host_id, task_doc=args.task_doc)
+        run = run_info(state_dir) or {}
+        hooked = False
+        if session.host_session_id:
+            hooked = register_session(session.host_session_id, workspace_of(state_dir),
+                                      session.phase, host=session.host,
+                                      now_ms=session.started_ms) is not None
         print(f"PASS: session declared phase={session.phase} "
               f"name={session.name or '-'} budget={session.call_budget} "
               f"host={session.host or '-'} "
-              f"session_id={session.host_session_id or '-'}")
+              f"session_id={session.host_session_id or '-'} "
+              f"run={run.get('run_id') or '-'} "
+              f"declared={len(history(state_dir))} "
+              f"hook_map={'registered' if hooked else 'unregistered'}")
         return 0
 
     session = Session.load(state_dir)
@@ -81,12 +112,25 @@ def main(argv=None):
         session.note_call(args.note_calls)
         session.save(state_dir)
 
+    run = run_info(state_dir) or {}
+    traced = trace_calls(state_dir)
+    if traced is not None:
+        calls_line = f"{traced}/{session.call_budget} (trace)"
+    elif session.calls:
+        calls_line = f"{session.calls}/{session.call_budget} (note_call)"
+    else:
+        calls_line = f"unaccounted (no trace); budget {session.call_budget}"
+    print(f"  run     {run.get('run_id') or '-'}")
     print(f"  phase   {session.phase}")
     print(f"  name    {session.name or '-'}")
-    print(f"  calls   {session.calls}/{session.call_budget}")
-    verdict = session.budget_verdict()
+    print(f"  calls   {calls_line}")
+    for record in history(state_dir):
+        print(f"  history {record['ts']} {record['phase']:<8} "
+              f"{record.get('host') or '-'} {record.get('host_session_id') or '-'}")
+    verdict = session.budget_verdict(trace_calls=traced, state_dir=state_dir)
     print(verdict if verdict.startswith("ESCALATE") else f"PASS: {verdict}")
-    return 2 if session.over_budget else 0
+    over = session.exceeds(traced) if traced is not None else session.over_budget
+    return 2 if over else 0
 
 
 if __name__ == "__main__":

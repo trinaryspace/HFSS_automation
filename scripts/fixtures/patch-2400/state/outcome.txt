@@ -1,0 +1,4 @@
+outcome=completed
+completions=1
+escape_hatch_scripts=0
+note=S11 minimum 2.317 GHz at -20 dB, inside the 2.28-2.52 GHz acceptance band (3.5% low, tolerance 5%); all four locked QA signals reported PASS. One solve submission, profile Normal Completion, 200 sweep points, banked to solved.txt. Readout route was the AEDT UI after one failed scripted get_solution_data (EC#6); no S11 plot artifact was written to results/, so the numeric result is user-transcribed from the UI. escape_hatch_scripts=0 is recorded pro forma: the spec-language escape hatch does not exist before phase 2, so every stage script here is the normal path, not an escape.

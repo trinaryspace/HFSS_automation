@@ -10,5 +10,43 @@
       "Bash(git diff*)",
       "Bash(git log*)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -I -S \"${CLAUDE_PROJECT_DIR}/scripts/hook_log.py\" || exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -I -S \"${CLAUDE_PROJECT_DIR}/scripts/hook_log.py\" || exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -I -S \"${CLAUDE_PROJECT_DIR}/scripts/hook_log.py\" || exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
   }
 }

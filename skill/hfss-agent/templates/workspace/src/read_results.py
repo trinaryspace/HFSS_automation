@@ -130,9 +130,24 @@ Usage:
 import collections
 import csv
 import os
+import re
 import tempfile
 
+import run_events
+
 CANDIDATE_ACCESSORS = ("full_matrix_real_imag", "get_expression_data")
+
+# The exception class a readout note names, if any: notes carry
+# `<Type>: <message>` wherever a route raised (`GrpcApiError`, `KeyError`,
+# ...). The `readout.attempt` event records that class so the run report can
+# count backend failures by kind (spec, pain-point class 7).
+_ERROR_CLASS = re.compile(r"\b([A-Z][A-Za-z0-9_]*(?:Error|Exception))\b")
+
+
+def error_class(note):
+    """The first exception class named in a readout note, or ''."""
+    match = _ERROR_CLASS.search(note or "")
+    return match.group(1) if match else ""
 
 # The things that can happen to a signal, and the only tokens allowed in
 # `results/state/readouts.txt`. They are the whole scientific point of the
@@ -775,11 +790,15 @@ class ReadoutSession:
     directory is used, whose path the note names.
     """
 
-    def __init__(self, hfss, recycle=None, export_dir=None, sphere=None):
+    def __init__(self, hfss, recycle=None, export_dir=None, sphere=None,
+                 state_dir=None):
         self.hfss = hfss
         self._recycle = recycle
         self.export_dir = export_dir
         self.sphere = sphere
+        # Where `readout.attempt` events land (run logging, ticket 03): the
+        # workspace's state dir by default, the same place `readouts.txt` goes.
+        self.state_dir = state_dir or run_events.STATE
         # `escalated` is the BUDGET (spent even by a recycle that raised);
         # `on_fresh_process` is the FACT (a replacement desktop actually came
         # up). Conflating the two is how a run claims "failed on a fresh
@@ -791,7 +810,20 @@ class ReadoutSession:
         self.recycle_note = None
 
     def read(self, expression, sweep=None, setup="Setup1", sphere=None):
-        """One signal, every route, at most one escalation. Returns a `Readout`."""
+        """One signal, every route, at most one escalation. Returns a `Readout`.
+
+        The attempt is also a `readout.attempt` event carrying the route
+        token, the error class the note names (if any) and the point count.
+        """
+        readout = self._read(expression, sweep=sweep, setup=setup, sphere=sphere)
+        run_events.emit("readout.attempt", stage="readout",
+                        detail="expression=%s route=%s error_class=%s points=%d"
+                               % (expression, readout.route,
+                                  error_class(readout.note) or "-", len(readout.y)),
+                        state_dir=self.state_dir)
+        return readout
+
+    def _read(self, expression, sweep=None, setup="Setup1", sphere=None):
         if sphere is None:
             sphere = self.sphere
         xs, ys, mechanism, note = read_signal(self.hfss, expression, sweep=sweep,

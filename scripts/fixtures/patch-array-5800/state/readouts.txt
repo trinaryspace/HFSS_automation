@@ -1,0 +1,31 @@
+s11: route=both-failed SYSTEMATIC on this pyAEDT/AEDT pairing - the read failed on the live channel AND on a freshly launched desktop process | live channel: get_solution_data raised on 'Setup1 : Sweep1': GrpcApiError: Failed to execute gRPC AEDT command: GetVariables; recycled desktop: released the pinned desktop on port 55583 (close_projects=False); pinned pid 16916 reaped; fresh desktop launched and pinned at port 64077 (pid 29620); fresh process: get_solution_data raised on 'Setup1 : Sweep1': GrpcApiError: Failed to execute gRPC AEDT command: GetVariables
+
+--- readout experiment, 2026-09-01 (TASK-readout-channel-vs-systematic) ---
+arm 1 (long-lived pinned desktop): NOT RUN. pid 25840 / port 57850 died on its
+  own between 2026-08-31 and 2026-09-01. The task doc anticipated this
+  ("it can die on its own at any moment; arm 1 is unrepeatable once it does").
+arm 2 (freshly launched process): RUN. Pin moved 57850/25840 -> 64077/29620,
+  which is the doc's own proof that a relaunch really happened.
+  verdict token: route=both-failed
+licence: LICENSE-ANSYS.ENGIN.UMICH.EDU:1055 reachable before and throughout,
+  so no arm failed for want of a seat.
+processes exercised: 6+ independently launched desktops, all failing.
+NOT the channel's age - every process today was seconds old.
+NOT a missing readout API - design_name, existing_analysis_sweeps,
+  odesign.GetVariables(), GetVariableValue, variable_manager.
+  independent_variables and post.all_report_names all returned real values.
+CAUSE LOCATED: pyAEDT tears down its own session mid-call. Traced:
+  get_solution_data -> report __init__ (standard.py:57) -> common.py:513
+  nominal_variation -> analysis.py:3035 Variable.evaluated_value ->
+  variables.py:2435 numeric_value -> release_desktop(False, False).
+  A second teardown fires immediately after Hfss() construction in some
+  configurations (once logging "released and closed").
+  Ruled out: garbage collection (reproduced with gc.disable()), the anonymous
+  Desktop() in ws_common.attach (reproduced holding an explicit Desktop),
+  and new_desktop=True vs attach-by-port (both reproduce).
+CONSEQUENCE: every "GrpcApiError: Failed to execute gRPC AEDT command: X" here
+  is a SYMPTOM of an already-dead session; X is merely whatever call came next,
+  which is why the name varies (GetVariables, GetSetups, ExportToFile,
+  OpenProject). The transport is not the fault.
+S11 was NOT read. The banked solve is intact; the UI remains the only surface
+  that has ever produced these numbers on this box.

@@ -1,0 +1,85 @@
+{
+ "bboxes": {
+  "AirBox": [
+   -70.0,
+   -65.0,
+   -25.1,
+   45.0,
+   65.0,
+   26.6
+  ],
+  "Ground": [
+   -45.0,
+   -40.0,
+   -0.1,
+   45.0,
+   40.0,
+   0.0
+  ],
+  "PatchBowtie": [
+   -10.1084,
+   -24.3094,
+   1.6,
+   45.0,
+   24.3094,
+   1.7
+  ],
+  "PortSheet": [
+   45.0,
+   -4.6677,
+   -0.1,
+   45.0,
+   4.6677,
+   9.2354
+  ],
+  "Substrate": [
+   -45.0,
+   -40.0,
+   0.0,
+   45.0,
+   40.0,
+   1.6
+  ]
+ },
+ "boundaries": {
+  "1": "Wave Port",
+  "Rad__M4WFEW": "Radiation"
+ },
+ "excitations": {},
+ "materials": {
+  "AirBox": "air",
+  "Ground": "pec",
+  "PatchBowtie": "pec",
+  "PortSheet": "",
+  "Substrate": "fr4_43"
+ },
+ "objects": [
+  "AirBox",
+  "Ground",
+  "PatchBowtie",
+  "PortSheet",
+  "Substrate"
+ ],
+ "setups": {
+  "Setup1": {}
+ },
+ "sweeps": [
+  "Setup1 - AirGap='25mm' CuT='0.10000000000000001mm' FeedL='45mm' FeedW='3.1118000000000001mm' PatchBase='20.216799999999999mm' PatchH='24.3094mm' PatchLeg='26.326899999999998mm' PortH='9.3353999999999999mm' PortW='9.3353999999999999mm' SubH='1.6000000000000001mm' SubL='80mm' SubW='90mm' : Table",
+  "Setup1 : LastAdaptive",
+  "Setup1 : Sweep_WY50SN"
+ ],
+ "variables": {
+  "AirGap": "25mm",
+  "CuT": "0.1mm",
+  "FeedL": "45mm",
+  "FeedW": "3.1118mm",
+  "PatchBase": "20.2168mm",
+  "PatchH": "24.3094mm",
+  "PatchLeg": "26.3269mm",
+  "PortH": "3*FeedW",
+  "PortW": "3*FeedW",
+  "SubH": "1.6mm",
+  "SubL": "80mm",
+  "SubW": "90mm"
+ }
+}

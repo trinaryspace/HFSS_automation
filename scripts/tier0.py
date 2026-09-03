@@ -26,6 +26,9 @@ Usage:
     python scripts/tier0.py            # everything
     python scripts/tier0.py --list     # show the suites without running
     python scripts/tier0.py -v         # stream each suite's own output
+    python scripts/tier0.py --workspace workspaces/<name>
+                                       # also record the summary line as a
+                                       # `gate.tier0` event in that workspace
 """
 
 import argparse
@@ -46,6 +49,41 @@ SUITES = [
     # milliseconds instead of after a solve.
     ("readout", [sys.executable, os.path.join(SRC, "test_read_results.py")]),
     ("run-card", [sys.executable, os.path.join(REPO, "scripts", "test_run_card.py")]),
+    # The two run-record writers (run logging, ticket 02): the outcome file
+    # the card parses and the append-only Review-gate log, each refusing the
+    # free text that made the last run's card read `unrecorded`.
+    ("record-state", [sys.executable, os.path.join(REPO, "scripts", "test_record.py")]),
+    # The step trace extractor over both harness stores (run-logging 04):
+    # the same steps.jsonl shape from a captured Claude Code transcript and a
+    # captured opencode family, usage once per request, subagents linked.
+    ("run-trace", [sys.executable, os.path.join(REPO, "scripts", "test_run_trace.py")]),
+    ("hook-log", [sys.executable, os.path.join(REPO, "scripts", "test_hook_log.py")]),
+    # The event log (run-logging 03): `hfss_spec/events.py` never raises and
+    # is a no-op without a state dir; the compiler leaves one stage.start /
+    # stage.end pair per Spine stage against the recorder; every script in
+    # the ticket's table emits its event.
+    ("events", [sys.executable, os.path.join(REPO, "hfss_spec", "test_events.py")]),
+    # The template runners' events, driven against the real fixture corpus:
+    # attach -> submit -> the watchdog's terminal line -> bank -> teardown,
+    # in that order, from the actual runner code paths.
+    ("run-events", [sys.executable, os.path.join(SRC, "test_run_events.py")]),
+    # The pain-point classifiers (run-logging 05): pure functions over the
+    # step trace, the event log and the machine state, tested against the
+    # real neon-eagle slice (the Aug 18 patch-array-5800 run), a real
+    # undeclared Claude Code session and the captured patch-array-5800
+    # results/state files. Attribution matches a hand count; per-kind costs
+    # never exceed the run.
+    ("painpoints", [sys.executable, os.path.join(REPO, "hfss_spec", "test_painpoints.py")]),
+    # The run report (run-logging 06): rendered on the shipped fixtures (the
+    # neon-eagle trace, the captured patch-array-5800 state, the real ledger
+    # slice) with no store access; byte-idempotent, the eleven sections in
+    # order, one PASS line, every unmeasurable with run_card's reason.
+    ("run-report", [sys.executable, os.path.join(REPO, "scripts", "test_run_report.py")]),
+    # The backfilled session histories (run-logging 10): every line ticket
+    # 01's shape plus `backfilled: true`, the seven Aug 18 lines the trace's
+    # own declaration instants, the committed copies reproducible, the
+    # script byte-stable; capture_state byte for byte.
+    ("backfill", [sys.executable, os.path.join(REPO, "scripts", "test_backfill.py")]),
     ("static-gate", [sys.executable, os.path.join(SRC, "00_static_gate.py")]),
     ("skill-markers", [sys.executable, os.path.join(REPO, "skill", "hfss-agent", "verify_skill.py")]),
     ("kb-checks", [sys.executable, os.path.join(REPO, "scraping", "verify_kb.py")]),
@@ -113,6 +151,9 @@ def main(argv=None):
     parser.add_argument("--list", action="store_true", help="list suites and exit")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="stream each suite's own output")
+    parser.add_argument("--workspace",
+                        help="record the summary line as a gate.tier0 event in "
+                             "this workspace's results/state/events.jsonl")
     args = parser.parse_args(argv)
 
     if args.list:
@@ -133,11 +174,26 @@ def main(argv=None):
     elapsed = time.time() - started
     total = len(SUITES) + 1
     if failed:
-        print("FAIL: tier0 suites=%d failed=%d (%s) elapsed=%.1fs"
-              % (total, len(failed), ", ".join(failed), elapsed))
-        return 1
-    print("PASS: tier0 suites=%d failed=0 elapsed=%.1fs" % (total, elapsed))
-    return 0
+        line = ("FAIL: tier0 suites=%d failed=%d (%s) elapsed=%.1fs"
+                % (total, len(failed), ", ".join(failed), elapsed))
+    else:
+        line = "PASS: tier0 suites=%d failed=0 elapsed=%.1fs" % (total, elapsed)
+    print(line)
+    record_gate(args.workspace, line, failed, elapsed)
+    return 1 if failed else 0
+
+
+def record_gate(workspace, line, failed, elapsed):
+    """The `gate.tier0` event (run logging, ticket 03); nothing without a workspace."""
+    if not workspace:
+        return
+    if REPO not in sys.path:
+        sys.path.insert(0, REPO)
+    from hfss_spec import events
+    root = workspace if os.path.isabs(workspace) else os.path.join(REPO, workspace)
+    events.emit(os.path.join(root, "results", "state"), "gate.tier0", verdict=line,
+                detail="failed=%s" % (",".join(failed) or "-"),
+                duration_ms=elapsed * 1000)
 
 
 if __name__ == "__main__":

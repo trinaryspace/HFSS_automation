@@ -1291,5 +1291,150 @@ class TestRecycleDesktop(unittest.TestCase):
         self.assertTrue(self.common._reap_pinned_process("0"))
 
 
+class TestSolveGate(unittest.TestCase):
+    """`08_solve.py` writes the solve gate in the call that submits the solve.
+
+    Run logging, ticket 02: `results/state/solve_submitted_at.txt` was empty
+    after the last run because nothing wrote it, so its active wall could
+    never be measured. The template now ships the launcher, and the gate is
+    appended inside `submit()` — after the in-flight probe and the user's
+    approval, never on a refusal or a failed submission. The AEDT entry
+    points are stood in by fakes (`attach` never launches; `analyze` records
+    its call), the watchdog launch is a fake `Popen`, and ws_common's STATE
+    and PROJECT are redirected to a throwaway tree: no AEDT, no license, no
+    desktop, no process spawned.
+    """
+
+    GATE = "solve_submitted_at.txt"
+
+    @classmethod
+    def setUpClass(cls):
+        import ws_common
+        cls.common = ws_common
+        cls.solve = load("08_solve")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self._state = os.path.join(self.tmp, "results", "state")
+        os.makedirs(self._state)
+        self._orig = (self.common.STATE, self.common.PROJECT)
+        self.common.STATE = self._state
+        self.common.PROJECT = os.path.join(self.tmp, "fixture.aedt")
+        self.addCleanup(self._restore)
+        self.analyze_calls = []
+        self.attach_calls = []
+        self.popen_calls = []
+        self.analyze_result = True
+
+        suite = self
+
+        class FakeHfss:
+            def analyze(self, **kw):
+                suite.analyze_calls.append(kw)
+                return suite.analyze_result
+
+            def cleanup_solution(self, **kw):
+                raise AssertionError("cleanup must be skipped with no stale results")
+
+        class FakeProc:
+            pid = 4242
+
+        def fake_attach(**kw):
+            suite.attach_calls.append(kw)
+            return FakeHfss()
+
+        def fake_popen(argv, **kw):
+            suite.popen_calls.append((argv, kw))
+            return FakeProc()
+
+        self.attach = fake_attach
+        self.popen = fake_popen
+
+    def _restore(self):
+        self.common.STATE, self.common.PROJECT = self._orig
+
+    def _gate_lines(self):
+        path = os.path.join(self._state, self.GATE)
+        if not os.path.isfile(path):
+            return None
+        with open(path) as f:
+            return f.read().splitlines()
+
+    def _run(self, argv=(), probe=None, now=None):
+        probe = probe or (lambda: (None, 0))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = self.solve.main(list(argv), attach=self.attach, probe=probe,
+                                   popen=self.popen, now=now)
+        return code, out.getvalue()
+
+    def test_template_ships_the_launcher_and_the_replay_never_runs_it(self):
+        self.assertTrue(os.path.isfile(os.path.join(SRC, "08_solve.py")))
+        verify = load("12_verify_sync")
+        picked = [os.path.basename(p) for p in verify.select_replay_scripts(SRC)]
+        self.assertNotIn("08_solve.py", picked)
+
+    def test_submission_writes_the_gate_in_the_same_call(self):
+        code, out = self._run(now=1755543600.25)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.analyze_calls, [{"setup": "Setup1", "blocking": False}])
+        self.assertEqual(self.attach_calls, [{"launch": False}])   # attach, never launch
+        self.assertEqual(len(self.popen_calls), 1)
+        self.assertEqual(self._gate_lines(), ["1755543600.25"])
+        self.assertEqual(float(self._gate_lines()[0]), 1755543600.25)
+        self.assertEqual(self.common.read_state("solve_started"), "1755543600.25")
+        self.assertEqual(out.count("PASS:"), 1)
+        self.assertIn("PASS: solve submitted blocking=False setup=Setup1 "
+                      "submitted_at=1755543600.25", out)
+
+    def test_the_gate_is_the_wall_clock_at_submission(self):
+        before = time.time()
+        code, _ = self._run()
+        after = time.time()
+        self.assertEqual(code, 0)
+        stamp = float(self._gate_lines()[0])
+        self.assertGreaterEqual(stamp, before)
+        self.assertLessEqual(stamp, after)
+
+    def test_a_re_submission_appends_and_keeps_the_first_line(self):
+        self._run(now=1755543600.0)
+        self._run(now=1755550800.0)
+        self.assertEqual(self._gate_lines(), ["1755543600.0", "1755550800.0"])
+        self.assertEqual(len(self.analyze_calls), 2)
+
+    def test_a_live_solve_refuses_without_approval_and_writes_no_gate(self):
+        code, out = self._run(probe=lambda: (42, 1))
+        self.assertEqual(code, 2)
+        self.assertIn("FAIL: solve not submitted", out)
+        self.assertIn("--approved", out)
+        self.assertNotIn("PASS:", out)
+        self.assertEqual(self.analyze_calls, [])
+        self.assertEqual(self.attach_calls, [])
+        self.assertEqual(self.popen_calls, [])
+        self.assertIsNone(self._gate_lines())
+
+    def test_the_users_go_submits_over_a_live_solve(self):
+        code, out = self._run(["--approved"], probe=lambda: (42, 1), now=1755543600.5)
+        self.assertEqual(code, 0, out)
+        self.assertIn("user approval recorded", out)
+        self.assertEqual(self._gate_lines(), ["1755543600.5"])
+
+    def test_old_results_are_not_a_live_solve(self):
+        code, _ = self._run(probe=lambda: (self.solve.IN_FLIGHT_WINDOW_S + 1, 1))
+        self.assertEqual(code, 0)
+        self.assertEqual(len(self._gate_lines()), 1)
+
+    def test_a_failed_submission_writes_no_gate(self):
+        self.analyze_result = False
+        with contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(RuntimeError):
+                self.solve.main([], attach=self.attach, probe=lambda: (None, 0),
+                                popen=self.popen)
+        self.assertEqual(len(self.analyze_calls), 1)
+        self.assertIsNone(self._gate_lines())
+        self.assertIsNone(self.common.read_state("solve_started"))
+        self.assertEqual(self.popen_calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

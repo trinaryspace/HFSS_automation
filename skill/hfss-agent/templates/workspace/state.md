@@ -36,7 +36,9 @@ One stage = one script = one Run, each ending in its `PASS:` Verification line:
 - Watchdog: `results/state/solve_progress.txt` (running | settling |
   complete | stalled — the agent reads only)
 - QA signals: <numbers per agreed signal, or "unreadable — flaky readout">
-- Run card: appended to `summary.md` by `scripts/run_card.py`
+- Run card: appended to `summary.md` by `scripts/run_card.py`, after
+  `scripts/record_outcome.py`; then `scripts/run_report.py` writes
+  `run-report.md`
 
 ## Pointers
 

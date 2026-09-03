@@ -15,6 +15,13 @@ spec is re-derived at run time.
 Output is one `PASS:` line per Spine stage plus a final summary line, and
 pyAEDT's INFO chatter is suppressed — a full build should cost the caller ten
 lines of context, not a thousand.
+
+Every one of those lines is also an event in `results/state/events.jsonl`
+(run logging, ticket 03): `compile.start`, a `stage.start` / `stage.end` pair
+per Spine stage with the stage's own `PASS:` line as the verdict, and
+`compile.end` with the summary line; the workspace's `ws_common.attach`
+records the `desktop.attach` / `desktop.launch` with port and pid. The
+dry-run's line lands as `gate.compile_spec`.
 """
 
 import argparse
@@ -22,6 +29,7 @@ import importlib.util
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -34,6 +42,7 @@ os.environ.setdefault("PYAEDT_LOG_LEVEL", "WARNING")
 logging.getLogger("Global").setLevel(logging.WARNING)
 logging.getLogger("pyaedt").setLevel(logging.WARNING)
 
+from hfss_spec import events                                      # noqa: E402
 from hfss_spec.compiler import BuildLog, CompileError, build      # noqa: E402
 from hfss_spec.loader import SpecLoadError, load_spec             # noqa: E402
 from hfss_spec.validate import SpecNotValidated                   # noqa: E402
@@ -62,10 +71,13 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     workspace = Path(args.workspace)
+    state_dir = workspace / "results" / "state"
     try:
         spec = load_spec(args.spec)
     except SpecLoadError as exc:
         sys.stdout.write(exc.report.text())
+        events.emit(state_dir, "gate.compile_spec", verdict=exc.report.summary(),
+                    detail=f"spec={args.spec}")
         return 1
 
     if args.dry_run:
@@ -74,11 +86,16 @@ def main(argv=None):
         report = validate(spec)
         sys.stdout.write(report.text())
         if not report.ok:
+            events.emit(state_dir, "gate.compile_spec", verdict=report.summary(),
+                        detail=f"spec={spec.name} dry-run")
             return 1
         print(f"  plan: {len(STAGES)} stages, {len(spec.geometry)} geometry ops, "
               f"{len(spec.excitations)} port(s), {len(spec.boundaries)} boundary(ies)")
-        print(f"PASS: compile_spec dry-run spec={spec.name} "
-              f"escape_hatch={spec.escape_hatch_count}")
+        line = (f"PASS: compile_spec dry-run spec={spec.name} "
+                f"escape_hatch={spec.escape_hatch_count}")
+        print(line)
+        events.emit(state_dir, "gate.compile_spec", verdict=line,
+                    detail=f"spec={spec.name} stages={len(STAGES)}")
         return 0
 
     # The phase boundary (ticket 14). Launching a desktop costs a licence seat
@@ -86,8 +103,8 @@ def main(argv=None):
     # Clarification session. An undeclared session is unguarded - see
     # hfss_spec.session.require - so this changes nothing for existing
     # workspaces and refuses only where a phase has actually been declared.
+    # The refusal itself is recorded by `require` as a `phase.refused` event.
     from hfss_spec.session import PhaseViolation, require as require_phase
-    state_dir = workspace / "results" / "state"
     try:
         if args.launch:
             require_phase("launch_desktop", state_dir)
@@ -96,20 +113,33 @@ def main(argv=None):
         print(f"FAIL: compile_spec phase-boundary - {exc}")
         return 1
 
+    started = time.monotonic()
+    events.emit(state_dir, "compile.start", stage="compile",
+                detail=f"spec={spec.name} launch={args.launch} "
+                       f"escape_hatch={spec.escape_hatch_count}")
+
+    def ended(line, code):
+        events.emit(state_dir, "compile.end", stage="compile", verdict=line,
+                    detail=f"spec={spec.name} stages={len(log.results)}",
+                    duration_ms=(time.monotonic() - started) * 1000)
+        return code
+
     ws = load_ws_common(workspace)
     hfss = ws.attach(launch=args.launch)
-    log = BuildLog(emit=lambda line: print(line, flush=True))
+    log = BuildLog(emit=lambda line: print(line, flush=True), state_dir=str(state_dir))
     try:
         build(spec, hfss, log)
     except SpecNotValidated as exc:
         sys.stdout.write(str(exc))
-        return _leave(ws, 1)
+        return _leave(ws, ended(f"FAIL: compile_spec spec={spec.name} not validated", 1))
     except CompileError as exc:
-        print(f"STAGE_FAILED: compile_spec {exc}")
-        return _leave(ws, 1)
+        line = f"STAGE_FAILED: compile_spec {exc}"
+        print(line)
+        return _leave(ws, ended(line, 1))
 
-    print(f"PASS: compile_spec spec={spec.name} stages={len(log.results)}")
-    return _leave(ws, 0)
+    line = f"PASS: compile_spec spec={spec.name} stages={len(log.results)}"
+    print(line)
+    return _leave(ws, ended(line, 0))
 
 
 def _leave(ws, code: int):

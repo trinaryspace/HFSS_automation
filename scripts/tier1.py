@@ -34,6 +34,10 @@ import sys
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO not in sys.path:
+    sys.path.insert(0, REPO)
+
+from hfss_spec import events  # noqa: E402
 
 SOLVE_STAGE = 8
 STAGE_RE = re.compile(r"^(\d{2})_.*\.py$")
@@ -104,6 +108,7 @@ def main(argv=None):
 
     workspace = os.path.abspath(os.path.join(REPO, args.workspace))
     src_dir = os.path.join(workspace, "src")
+    state_dir = os.path.join(workspace, "results", "state")
     if not os.path.isdir(src_dir):
         print("FAIL: tier1 no src/ under %s" % workspace)
         return 2
@@ -111,8 +116,10 @@ def main(argv=None):
     stages = build_stages(src_dir)
     refused = refused_stages(src_dir)
     if not stages:
-        print("FAIL: tier1 no build stages (NN_*.py below %02d) in %s"
-              % (SOLVE_STAGE, src_dir))
+        line = ("FAIL: tier1 no build stages (NN_*.py below %02d) in %s"
+                % (SOLVE_STAGE, src_dir))
+        print(line)
+        events.emit(state_dir, "gate.tier1", verdict=line)
         return 2
 
     print("  workspace: %s" % os.path.relpath(workspace, REPO).replace(os.sep, "/"))
@@ -121,19 +128,34 @@ def main(argv=None):
         print("  refused (solve and beyond, never run here): %s" % ", ".join(refused))
 
     if args.dry_run:
-        print("PASS: tier1 dry-run stages=%d refused=%d" % (len(stages), len(refused)))
+        line = "PASS: tier1 dry-run stages=%d refused=%d" % (len(stages), len(refused))
+        print(line)
+        events.emit(state_dir, "gate.tier1", verdict=line,
+                    detail="stages=%s" % ",".join(name for _n, name in stages))
         return 0
 
     started = time.time()
     failures = []
     for _number, name in stages:
+        # Each staged script is a Spine stage; its Verification line is the
+        # stage's verdict, so the boundary and the verdict land as one
+        # stage.start / stage.end pair (run logging, ticket 03).
+        events.emit(state_dir, "stage.start", stage=name)
+        stage_started = time.time()
         ok, verification, detail = run_stage(src_dir, name, args.timeout)
         if ok:
             print("  %-34s ok    %s" % (name, verification or ""))
+            events.emit(state_dir, "stage.end", stage=name,
+                        verdict="PASS: %s" % verification,
+                        duration_ms=(time.time() - stage_started) * 1000)
         else:
             print("  %-34s FAIL" % name)
             for line in detail.splitlines():
                 print("      | %s" % line)
+            events.emit(state_dir, "stage.end", stage=name,
+                        verdict="FAIL: %s %s" % (name, detail.strip().splitlines()[-1]
+                                                 if detail.strip() else "no output"),
+                        duration_ms=(time.time() - stage_started) * 1000)
             failures.append(name)
             break  # a failed stage invalidates everything after it
 
@@ -155,14 +177,18 @@ def main(argv=None):
 
     elapsed = time.time() - started
     if failures:
-        print("FAIL: tier1 stages=%d failed=%s elapsed=%.1fs"
-              % (len(stages), ",".join(failures), elapsed))
-        return 1
-    print("PASS: tier1 stages=%d solved=no snapshot=%s elapsed=%.1fs"
-          % (len(stages),
-             "yes" if snapshot and os.path.isfile(snapshot) else "no",
-             elapsed))
-    return 0
+        line = ("FAIL: tier1 stages=%d failed=%s elapsed=%.1fs"
+                % (len(stages), ",".join(failures), elapsed))
+    else:
+        line = ("PASS: tier1 stages=%d solved=no snapshot=%s elapsed=%.1fs"
+                % (len(stages),
+                   "yes" if snapshot and os.path.isfile(snapshot) else "no",
+                   elapsed))
+    print(line)
+    events.emit(state_dir, "gate.tier1", verdict=line,
+                detail="failed=%s" % (",".join(failures) or "-"),
+                duration_ms=elapsed * 1000)
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

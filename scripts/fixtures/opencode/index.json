@@ -1,0 +1,46 @@
+{
+  "ses_fe9ae6dd3ffe2a8knbeE1b4yrr": {
+    "captured_from": "opencode.db",
+    "card": {
+      "billed": 2170393,
+      "parts": 1179,
+      "slug": "neon-eagle",
+      "storesize": 2016716,
+      "time_created": 1787080839724,
+      "time_updated": 1787096471760,
+      "tokens_cache_read": 47977385,
+      "tokens_cache_write": 0,
+      "tokens_input": 2094310,
+      "tokens_output": 76083,
+      "tokens_reasoning": 142744
+    },
+    "subagents": {
+      "ses_fe8c117fdffeX8Q8m5QQ6By5Cz": {
+        "billed": 29419,
+        "parts": 26,
+        "slug": "hidden-falcon",
+        "storesize": 160475,
+        "time_created": 1787096393730,
+        "time_updated": 1787096414164,
+        "tokens_cache_read": 45392,
+        "tokens_cache_write": 0,
+        "tokens_input": 27888,
+        "tokens_output": 1531,
+        "tokens_reasoning": 469
+      },
+      "ses_fe964cc55ffeHbmOUhRVH9huBi": {
+        "billed": 21051,
+        "parts": 20,
+        "slug": "cosmic-knight",
+        "storesize": 67769,
+        "time_created": 1787085665194,
+        "time_updated": 1787085937999,
+        "tokens_cache_read": 26896,
+        "tokens_cache_write": 0,
+        "tokens_input": 19966,
+        "tokens_output": 1085,
+        "tokens_reasoning": 330
+      }
+    }
+  }
+}

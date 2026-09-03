@@ -1,0 +1,9 @@
+# Captured fixtures, the runs index and rendered run reports are asserted
+# byte-for-byte (sha256 / size in index.json; byte-idempotent renders), so
+# git must never convert their line endings on checkout. Everything else
+# follows the machine's core.autocrlf as before.
+scripts/fixtures/** -text
+docs/runs/** -text
+workspaces/*/run-report.md -text
+workspaces/*/run-report.json -text
+*.jsonl -text

@@ -37,8 +37,10 @@ Three inputs, one report (`.scratch/hfss-agent-run-logging/spec.md`):
    trace when it is missing or stale (a session's store newer than its
    trace file, or `sessions.jsonl` newer than the newest trace file) and
    otherwise reads what is there, so a workspace whose stores are gone
-   still reports from its last trace. It never opens a transcript for
-   content itself.
+   still reports from its last trace. A hooked run's
+   `results/state/tools.jsonl` (ticket 08) is merged into every refreshed
+   trace, as `run_trace.py --workspace` does. It never opens a transcript
+   for content itself.
 2. **Events** — `results/state/events.jsonl` (`hfss_spec.events`), the
    stage boundaries and verdicts the repo's own scripts wrote. The report's
    own `report.written` line is left out of the analysis.
@@ -49,7 +51,9 @@ Which sessions are the run's, in order of trust (each is named in the
 headline with how it was found):
 
 - `sessions.jsonl` / `session.json` with a host and session id (ticket 01):
-  `declared`.
+  `declared` — or `declared (backfilled history)` when every line naming
+  the session was written after the run by `scripts/fixtures/backfill.py`
+  (ticket 10); the headline counts those lines.
 - a declaration with a name but no id (the last run's `session.json` was
   overwritten by a readout experiment that recorded neither): the Claude
   Code transcript whose own `session.py --phase ... --name <name>` command
@@ -59,8 +63,12 @@ headline with how it was found):
   so a subagent's slug finds its run: `ledger slug`.
 - `--session HOST:ID` on the command line: `cli`.
 
-Sections, in this order (ticket 06): headline; top pain points; stage
-timeline; waiting; retries and rebuilds; context; backend; solve;
+Sections, in this order (ticket 06): headline; top pain points (one row
+per kind of pain — count, worst severity, summed cost, the heaviest
+evidence lines — ranked severity first, then cost: `painpoints.kind_rows`;
+the ten-heaviest-findings list of ticket 06 buried a run's recorded
+failures, which cost 0 tokens, under its reasoning blocks, and the whole
+list is still in `run-report.json`); stage timeline; waiting; retries and rebuilds; context; backend; solve;
 discipline; versus previous runs (the index rows of this recipe up to and
 including this run, newest last, with deltas — what the index holds once
 this report is written, so the two always agree); the run card (`scripts/run_card.py`'s own section: the
@@ -109,6 +117,7 @@ UNRECORDED = run_card.UNKNOWN_OUTCOME
 REASON_NO_TRACE = "no step trace (results/state/trace/ holds no steps)"
 REASON_NO_STORE = "no store access (trace only)"
 REASON_NO_STATE = "no machine state (results/state/ holds no state file)"
+BACKFILL_SCRIPT = "scripts/fixtures/backfill.py"
 REPORT_EVENT = "report.written"
 
 # The eleven sections, in the ticket's order: (key, title).
@@ -128,7 +137,8 @@ SECTIONS = (
 RETRY_KINDS = ("retry_same_command", "rebuild_chain", "identical_error_twice")
 BACKEND_KINDS = ("backend_error", "desktop_recycle")
 DISCIPLINE_KINDS = ("late_declaration", "undeclared_session", "probe_script", "foreground_poll",
-                    "whole_file_read", "recursive_listing", "design_misroute", "escalation")
+                    "whole_file_read", "recursive_listing", "design_misroute", "escalation",
+                    "session_record_overwritten")
 GAP_CLASSES = ("user_wait", "solver_wait", "unexplained")
 # The machine-state files read, beyond the ones the classifiers take.
 EXTRA_STATE_FILES = ("completions.txt", "solve_started.txt", "aedt_port.txt")
@@ -178,15 +188,19 @@ def ledger_slugs(workspace):
 
 def unnamed_declarations(state_dir):
     """Declaration names recorded without a session id: the history's
-    lines and the current `session.json`."""
-    names = []
+    lines and the current `session.json` — minus any name the history
+    records with an id (the backfilled record of the readout experiment
+    names its transcript; the scan is for what nothing names)."""
+    names, known = [], set()
     for record in phase_session.history(state_dir):
-        if not record.get("host_session_id") and record.get("name"):
+        if record.get("host_session_id") and record.get("name"):
+            known.add(str(record["name"]))
+        elif record.get("name"):
             names.append(str(record["name"]))
     current = phase_session.Session.load(state_dir)
     if current is not None and current.name and not current.host_session_id:
         names.append(current.name)
-    return list(dict.fromkeys(names))
+    return [n for n in dict.fromkeys(names) if n not in known]
 
 
 def transcript_declaring(name, root=None):
@@ -247,8 +261,13 @@ def discover_sessions(workspace, args):
     workspace = Path(workspace)
     state_dir = workspace / "results" / "state"
     found = []
+    records = phase_session.history(state_dir)
     for host, sid in run_trace.workspace_sessions(workspace):
-        _add(found, _entry(host, sid, "declared"))
+        mine = [r for r in records if str(r.get("host_session_id") or "") == sid]
+        how = "declared"
+        if mine and all(r.get("backfilled") for r in mine):
+            how = "declared (backfilled history)"
+        _add(found, _entry(host, sid, how))
     projects = getattr(args, "projects_dir", None)
     for name in unnamed_declarations(state_dir):
         hit = transcript_declaring(name, projects)
@@ -355,21 +374,25 @@ def refresh_trace(workspace, sessions, args):
         if missing_store:
             detail += "; not traceable: " + "; ".join(missing_store)
         return {"status": "fresh", "detail": detail}
-    written = steps = 0
+    written = steps = hooked = 0
     failures = list(missing_store)
+    hook_entries = run_trace.read_tool_log(workspace / "results" / "state" / run_trace.TOOLS_FILE)
     for entry in stale:
         try:
             family = _trace_family(entry, args)
         except (ValueError, OSError, sqlite3.Error) as exc:
             failures.append(f"{entry['session_id']}: {exc}")
             continue
+        # A hooked run's tools.jsonl (ticket 08): exit codes and per-call
+        # wall, merged exactly as `run_trace.py --workspace` merges them.
+        hooked += run_trace.merge_tool_log_families([(entry["host"], family)], hook_entries)
         for sid, family_steps in family.items():
             run_trace.write_steps(family_steps, trace_dir, sid)
             written += 1
             steps += len(family_steps)
     if not written and not existing:
         return {"status": "unavailable", "detail": "; ".join(failures) or "nothing traced"}
-    detail = f"sessions={written} steps={steps}"
+    detail = f"sessions={written} steps={steps} hooked={hooked}"
     if failures:
         detail += "; failed: " + "; ".join(failures)
     return {"status": "refreshed", "detail": detail}
@@ -551,8 +574,9 @@ def headline(workspace, sessions, families, attributed, rows, findings, trace, m
     elif "events" in sources:
         attribution = "stages from events.jsonl where an event covered the call, else read off the command"
     else:
-        attribution = ("between-stages / stage read off the command: no stage events recorded "
-                       "(the run predates the event log, ticket 03)")
+        attribution = ("command-derived: no stage events recorded (the run predates the event log, "
+                       "ticket 03, and events cannot be backfilled) — stage read off each command, "
+                       "else between-stages")
     state_files = sorted(machine_state)
     # What the report reads, not what this run of it did: the refresh
     # outcome varies between two runs and goes to stdout and the event.
@@ -569,7 +593,12 @@ def headline(workspace, sessions, families, attributed, rows, findings, trace, m
         run_id = f"{workspace.name}-{_iso(min(s['ts'] for s in stamped))[:10]}"
         derived = True
     commits = [r.get("skill_commit") for r in history if r.get("skill_commit")]
+    backfilled = [r for r in history if r.get("backfilled")]
+    by_run = [r for r in backfilled if r.get("declared_by_run") is not False]
     return {
+        "history": {"declarations": len(history), "backfilled": len(backfilled),
+                    "backfilled_by_run": len(by_run),
+                    "phases": list(dict.fromkeys(r.get("phase") for r in history))},
         "run_id": run_id or f"{UNRECORDED} (no run.json)",
         "run_id_source": "run.json" if run.get("run_id") else ("derived from the trace's first step; "
                                                                 "run.json absent" if derived else "absent"),
@@ -856,6 +885,21 @@ def _finding_row(i, f):
 
 
 FINDING_HEADER = ["#", "tokens", "wall", "kind", "sev", "phase/stage", "evidence", "fix"]
+TOP_HEADER = ["#", "kind", "n", "high", "sev", "tokens", "wall", "phases", "evidence (heaviest first)", "fix"]
+
+
+def render_top(rows):
+    """Section 2: one row per kind of pain, severity first, then cost."""
+    table = []
+    for i, r in enumerate(rows, start=1):
+        table.append([i, r["kind"], r["count"], r["high"], r["severity"], f"{r['cost_tokens']:,}",
+                      _duration(r["cost_wall_ms"]), ", ".join(r["phases"]),
+                      " ; ".join(r["evidence"]), r["fix_hint"]])
+    out = _table(TOP_HEADER, table)
+    out += ("\nOne row per kind: `n` findings, `high` of them high, cost summed over the kind "
+            "(a request counts once per kind), the heaviest evidence lines quoted; every finding "
+            "is in the sections below and in run-report.json.\n")
+    return out
 
 
 def _findings_table(findings, limit=None):
@@ -904,6 +948,16 @@ def render_headline(h):
              f"- machine state: {', '.join(h['machine_state']) if isinstance(h['machine_state'], list) else h['machine_state']}",
              f"- events: {h['events']}",
              f"- findings: {h['findings']} ({h['findings_high']} high)"]
+    hist = h.get("history") or {}
+    if hist.get("declarations"):
+        line = f"- sessions.jsonl: {hist['declarations']} declaration(s)"
+        if hist.get("backfilled"):
+            line += (f", {hist['backfilled']} backfilled by hand after the run ({BACKFILL_SCRIPT}): "
+                     f"{hist['backfilled_by_run']} record(s) of declarations the run made, "
+                     f"{hist['backfilled'] - hist['backfilled_by_run']} phase(s) the run never declared")
+        lines.append(line)
+    else:
+        lines.append("- sessions.jsonl: absent")
     lines.append("- tokens by phase session: " + (", ".join(
         f"{k} {v:,}" for k, v in h["tokens_by_phase"].items()) if h["tokens_by_phase"]
         else f"{UNMEASURABLE}: {REASON_NO_TRACE}"))
@@ -1011,7 +1065,7 @@ def render(report):
     out = [f"# Run report — {h['workspace']}\n"]
     renderers = {
         "headline": lambda: render_headline(h),
-        "top": lambda: _findings_table(report["top"]),
+        "top": lambda: render_top(report["top"]),
         "stages": lambda: render_stages(report["stages"]),
         "waiting": lambda: render_waiting(report["waiting"], limit),
         "retries": lambda: _findings_table(report["retries"], limit),
@@ -1069,7 +1123,7 @@ def build(workspace, args):
         "_trace_refresh": trace,          # this run's action; not rendered
         "headline": head,
         "top_n": args.top,
-        "top": findings[: args.top],
+        "top": painpoints.kind_rows(findings),
         "findings": findings,
         "stages": rows,
         "waiting": waiting_section(findings),
@@ -1106,7 +1160,8 @@ def main(argv=None):
     parser.add_argument("--projects-dir", help="Claude Code projects dir (default: ~/.claude/projects)")
     parser.add_argument("--session", action="append", metavar="HOST:ID",
                         help="a session to include besides the discovered ones (repeatable)")
-    parser.add_argument("--top", type=int, default=TOP_N, help="findings in the top section (default %d)" % TOP_N)
+    parser.add_argument("--top", type=int, default=TOP_N,
+                        help="findings shown per table in sections 4-9 (default %d); section 2 lists every kind" % TOP_N)
     parser.add_argument("--no-trace", action="store_true", dest="no_trace",
                         help="never touch a store; report from the trace on disk")
     parser.add_argument("--index", help="runs index to read and write (default docs/runs/index.jsonl)")

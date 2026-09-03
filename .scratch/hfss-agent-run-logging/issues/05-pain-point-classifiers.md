@@ -209,3 +209,42 @@ Verification, verbatim:
 - `PASS: tier0 suites=20 failed=0 elapsed=39.6s`
 - `python skill/hfss-agent/verify_skill.py` -> `ALL PASS`
 - `PASS: capture patch-array-5800 fixtures state.session1.md=4231 outcome.txt=155 state/aedt_port.txt=5 state/aedt_process_id.txt=5 state/completions.txt=6 state/model_snapshot.json=3333 state/outcome.txt=155 state/readouts.txt=2523 state/session.json=159 state/solve_progress.txt=18916 state/solve_started.txt=18 state/solve_watchdog_pid.txt=5 state/solved.txt=66 state/z_act.txt=108` (twice, byte-stable)
+
+### 2026-09-02 — misses from the acceptance run (ticket 10)
+
+Graded against `docs/hfss-agent-performance-analysis.md` sections 2–3,
+which describe `playful-river` (bowtie-3670, `ses_03a8008c2ffeEN5jJusT7PyFuO`,
+625 steps traced from opencode.db; report rendered on a temp copy with
+`--session`). Two misses, one small fix made and re-graded:
+
+1. **`rebuild_chain` sees only `compile_spec` calls.** The doc's "three full
+   clean rebuild chains (teardown → wipe project → rerun stages 01→04)" in
+   steps 46–89 are staged scripts run by hand — the run predates the
+   compiler — and the report shows only `retry_same_command`: `x2 in
+   between-stages: python src\02_geometry.py 2>&1 (seq 232..251)`. What the
+   classifier should match: the same ordered run of `src/0N_*.py` scripts
+   (01 → 02 → 03 → 04) repeated ≥ `REBUILD_MIN` times in one phase, with the
+   files edited between as the evidence, exactly as the compile form does.
+   Every pre-compiler run (playful-river, silent-engine) has this shape.
+2. **The sync saga has no finding of its own.** Steps 89–125 (introspect →
+   diff → amend → verify in a second desktop, twice, both desktops killed)
+   surface only as parts: `retry_same_command` `x3 in between-stages: python
+   src\diag_sync.py 2>&1 | Select-String … (seq 402..476)`, `desktop_recycle`
+   at seq 567 (below), `identical_error_twice` `RedirectStandardError at
+   seq 591 and 595`, and a 79,472 B reasoning block. What it should match:
+   a verify / diag script (`diag_sync`, `12_verify_sync`, `verify_spec_replay`)
+   run ≥ 2 times in one phase with a kill or launch between its runs — one
+   finding whose wall spans the first run to the last, costed like a chain.
+   On a post-ticket-03 run the `sync.verify` events give the same window.
+3. **Fixed here, re-graded FOUND:** `find_desktop_recycle` required
+   `ansysedt` in the kill command; playful-river killed by pid and checked
+   `Get-Process | Where-Object { $_.Name -match "ansys" }` (seq 567), so the
+   two desktops the doc says died were invisible. `ANSYSEDT_RE` now also
+   accepts `\bansys\b`; the real step is
+   `scripts/fixtures/opencode/ses_03a8008c2ffeEN5jJusT7PyFuO.steps-slice.jsonl`
+   (`TestDesktopRecycleByPid`), neon-eagle's kills unchanged, a `python -c
+   "import ansys.aedt.core"` variant stays negative.
+
+Not a miss, noted: the doc's output sizes (89–90 KB listings, 43.9 KB grep)
+are store-part bytes; the trace's `out_bytes` is the output text, so the
+same steps read `51,315 B` and `20,445 B` in the report.

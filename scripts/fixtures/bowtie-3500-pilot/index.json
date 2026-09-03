@@ -1,0 +1,79 @@
+{
+  "captured": "2026-09-02",
+  "captured_from_workspace": "C:\\Users\\afpim\\Repos\\HFSS_automation\\workspaces\\bowtie-3500-pilot",
+  "note": "Capture a workspace's `results/state/` files as fixtures, byte for byte.",
+  "files": {
+    "state/aedt_port.txt": {
+      "source": "results/state/aedt_port.txt",
+      "slice": "whole file",
+      "bytes": 5,
+      "sha256": "671db694c01a0d87bda203b8c258ba98ef0337b0be23c5bb18c69785417e3cc7"
+    },
+    "state/aedt_process_id.txt": {
+      "source": "results/state/aedt_process_id.txt",
+      "slice": "whole file",
+      "bytes": 5,
+      "sha256": "f65250d344a809099bf61a909c99ee10443caa106dc00690f724bd1cc7b222c0"
+    },
+    "state/boundaries.txt": {
+      "source": "results/state/boundaries.txt",
+      "slice": "whole file",
+      "bytes": 13,
+      "sha256": "1997a8a191599c1c088283b1a63703653ee4e7b83825b318bd23e610288f663c"
+    },
+    "state/materials.txt": {
+      "source": "results/state/materials.txt",
+      "slice": "whole file",
+      "bytes": 54,
+      "sha256": "589bd9aca7b9fde09807a05df07893471fd7efc98ed0dbea72721036f185ff68"
+    },
+    "state/mesh_ops.txt": {
+      "source": "results/state/mesh_ops.txt",
+      "slice": "whole file",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "state/model_snapshot.json": {
+      "source": "results/state/model_snapshot.json",
+      "slice": "whole file",
+      "bytes": 1476,
+      "sha256": "9f40d4a0462e958123f9e1b6369b939b93a92ec9455724bdfadf537b9581d63d"
+    },
+    "state/objects.txt": {
+      "source": "results/state/objects.txt",
+      "slice": "whole file",
+      "bytes": 45,
+      "sha256": "b5e1446ce6e6f0495a8b2abfdd6f7b86d538f183b41277d89abe9469b8afbb70"
+    },
+    "state/solve_progress.txt": {
+      "source": "results/state/solve_progress.txt",
+      "slice": "whole file",
+      "bytes": 16659,
+      "sha256": "5ad82ae604555c44978348f7b56a6d63f5b7932417368961461b275ccf3c706c"
+    },
+    "state/solve_started.txt": {
+      "source": "results/state/solve_started.txt",
+      "slice": "whole file",
+      "bytes": 17,
+      "sha256": "6974746f0456a1e23ebd7910b1987b4f1f12646c0a9eb046454fbe7306ef0ad2"
+    },
+    "state/solve_watchdog_pid.txt": {
+      "source": "results/state/solve_watchdog_pid.txt",
+      "slice": "whole file",
+      "bytes": 5,
+      "sha256": "12bea58a12796541ed684e12d281c9b31d7b27137b4fba622deaff5924408e69"
+    },
+    "state/sweeps.txt": {
+      "source": "results/state/sweeps.txt",
+      "slice": "whole file",
+      "bytes": 338,
+      "sha256": "3e5ca708ab6f7a83feb02c5616705da4db8297da7d16e82af4e67b2cb46fa7f5"
+    },
+    "state/validated.txt": {
+      "source": "results/state/validated.txt",
+      "slice": "whole file",
+      "bytes": 4,
+      "sha256": "3cbc87c7681f34db4617feaa2c8801931bc5e42d8d0f560e756dd4cd92885f18"
+    }
+  }
+}

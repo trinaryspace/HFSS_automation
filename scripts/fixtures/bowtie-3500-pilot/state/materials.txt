@@ -1,0 +1,1 @@
+AirBox=air,Ground=pec,PatchBowtie=pec,Substrate=FR4_43

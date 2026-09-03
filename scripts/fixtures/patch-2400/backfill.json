@@ -1,0 +1,6 @@
+{
+  "written": "2026-09-02",
+  "lines": 3,
+  "sha256": "02fb3fdc505b77ccef64b46299a11f302bea0fdc3bfe0c0059febd25a1c26d63",
+  "note": "Backfill `results/state/sessions.jsonl` for the runs that predate it."
+}

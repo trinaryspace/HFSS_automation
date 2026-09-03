@@ -79,6 +79,11 @@ SUITES = [
     # slice) with no store access; byte-idempotent, the eleven sections in
     # order, one PASS line, every unmeasurable with run_card's reason.
     ("run-report", [sys.executable, os.path.join(REPO, "scripts", "test_run_report.py")]),
+    # The backfilled session histories (run-logging 10): every line ticket
+    # 01's shape plus `backfilled: true`, the seven Aug 18 lines the trace's
+    # own declaration instants, the committed copies reproducible, the
+    # script byte-stable; capture_state byte for byte.
+    ("backfill", [sys.executable, os.path.join(REPO, "scripts", "test_backfill.py")]),
     ("static-gate", [sys.executable, os.path.join(SRC, "00_static_gate.py")]),
     ("skill-markers", [sys.executable, os.path.join(REPO, "skill", "hfss-agent", "verify_skill.py")]),
     ("kb-checks", [sys.executable, os.path.join(REPO, "scraping", "verify_kb.py")]),

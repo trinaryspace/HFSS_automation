@@ -775,10 +775,256 @@ class TestCostAndSeverity(unittest.TestCase):
             self.assertIn(f["kind"], P.KINDS)
             self.assertEqual(f["evidence"].count("\n"), 0)
             self.assertEqual(f["fix_hint"], P.FIX_HINTS[f["kind"]])
-        costs = [(f["cost_tokens"], f["cost_wall_ms"]) for f in findings]
-        self.assertEqual(costs, sorted(costs, reverse=True))
+        # Severity first (ticket 10), then cost within a severity.
+        ranks = [P.finding_rank(f) for f in findings]
+        self.assertEqual(ranks, sorted(ranks))
+        sevs = [P.SEVERITY_RANK[f["severity"]] for f in findings]
+        self.assertEqual(sevs, sorted(sevs))
+        for sev in P.SEVERITIES:
+            costs = [(f["cost_tokens"], f["cost_wall_ms"]) for f in findings if f["severity"] == sev]
+            self.assertEqual(costs, sorted(costs, reverse=True), sev)
         self.assertEqual(set(by_kind(findings)) - {"identical_error_twice", "undeclared_session", "unbanked"},
                          set(P.KINDS) - {"identical_error_twice", "undeclared_session", "unbanked"})
+
+
+# -- ticket 10: the acceptance run's rules -----------------------------------
+
+READOUT_STEPS = FIXTURES / "claude-code" / "e5cdcdf5-e3fe-4a62-9402-0e4010171c51.steps-slice.jsonl"
+READOUT = "e5cdcdf5-e3fe-4a62-9402-0e4010171c51"
+BACKFILL_DIR = FIXTURES / "patch-array-5800" / "state"
+
+
+def readout_steps():
+    """Five real steps of the 2026-09-01 readout experiment (Claude Code
+    session e5cdcdf5-…, 3.6 MB captured whole — too large to ship), copied
+    line for line by scripts/fixtures/capture_steps.py: 765 and 810 are the
+    heredoc commands, 187 / 483 / 721 the GrpcApiError texts."""
+    if "readout" not in _CACHE:
+        _CACHE["readout"] = [json.loads(line) for line in READOUT_STEPS.read_text(encoding="utf-8").splitlines()
+                             if line.strip()]
+    return {s["seq"]: dict(s) for s in _CACHE["readout"]}
+
+
+def backfilled_history():
+    return S.history(BACKFILL_DIR)
+
+
+class TestLaunchCommand(unittest.TestCase):
+    """`LAUNCH_RE` inside a heredoc body is data (ticket 06's false positive)
+    unless the same command runs the file it wrote."""
+
+    def test_real_heredoc_that_writes_a_probe_and_runs_it_is_a_launch(self):
+        # seq 765: `cat > probe_clean.py <<'EOF' ... new_desktop=True ... EOF`
+        # then `python ".../probe_clean.py"` — the desktop was launched.
+        cmd = readout_steps()[765]["command"]
+        self.assertIn("new_desktop=True", cmd)
+        stripped, bodies = P.split_heredocs(cmd)
+        self.assertNotIn("new_desktop=True", stripped)
+        self.assertEqual([t.rsplit("/", 1)[-1] for t, _ in bodies], ["probe_clean.py"])
+        self.assertTrue(P.launch_command(cmd))
+
+    def test_real_heredoc_that_appends_notes_is_not_a_launch(self):
+        # seq 810: `cat >> readouts.txt <<'EOF' ... 6+ independently launched
+        # desktops ... EOF` then `tail -6 readouts.txt` — nothing launched.
+        cmd = readout_steps()[810]["command"]
+        self.assertTrue(P.LAUNCH_RE.search(cmd), "the raw regex matches the body")
+        self.assertFalse(P.launch_command(cmd))
+
+    def test_real_compile_launch_and_a_grep_that_mentions_it(self):
+        steps = neon_steps()
+        launches = [s for s in steps if P._is_tool_use(s) and P._is_bash(s) and P.launch_command(s.get("command"))]
+        self.assertTrue(launches)
+        self.assertTrue(all(P.LAUNCHER_RE.search(s["command"]) for s in launches))
+        self.assertFalse(P.launch_command('grep -n "launch=True" src/ws_common.py'))
+        self.assertFalse(P.launch_command('echo "--launch"; cat src/ws_common.py'))
+
+    def test_late_declaration_ignores_the_heredoc_in_an_undeclared_phase(self):
+        # The same real step, attributed to no phase: the old rule flagged a
+        # "desktop launch in phase undeclared" for every probe the
+        # experiment wrote; only the ones it ran count, and seq 810 never.
+        use = readout_steps()[810]
+        self.assertEqual(P.find_late_declaration(P.attribute([use]), [], {}), [])
+        run = readout_steps()[765]
+        found = P.find_late_declaration(P.attribute([run]), [], {})
+        self.assertEqual([f["evidence"].split(":")[0] for f in found], ["desktop launch in phase undeclared"])
+
+
+class TestGrpcCommands(unittest.TestCase):
+    """The label names the AEDT command, or says none was named — never
+    `GrpcApiError GrpcApiError` (ticket 06's second false positive)."""
+
+    def test_real_failed_form_names_the_command(self):
+        # seq 187: `RuntimeError: GrpcApiError: GetVariables failed; ...`
+        text = readout_steps()[187]["output_head"]
+        self.assertIn("GrpcApiError: GetVariables failed", text)
+        self.assertEqual(P.grpc_commands(text), ["GetVariables"])
+        self.assertEqual(P.error_signature(readout_steps()[187]), "GrpcApiError GetVariables")
+
+    def test_real_prose_mention_is_not_an_error(self):
+        # seq 483: a ledger read — "a `GrpcApiError` on the later `Subtract`".
+        text = readout_steps()[483]["output_head"]
+        self.assertIn("GrpcApiError", text)
+        self.assertEqual(P.grpc_commands(text), [])
+        self.assertEqual(P.find_backend_error(P.attribute([readout_steps()[483]]), [], {}), [])
+
+    def test_real_error_line_without_a_command_is_labelled_unnamed(self):
+        # seq 721: a grep hit `GetMessages` raise GrpcApiError (even licensed)`.
+        text = readout_steps()[721]["output_head"]
+        self.assertEqual(P.grpc_commands(text), [P.UNNAMED_COMMAND])
+        found = P.find_backend_error(P.attribute([readout_steps()[721]]), [], {})
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0]["evidence"].startswith(f"GrpcApiError {P.UNNAMED_COMMAND} x1"))
+        self.assertNotIn("GrpcApiError GrpcApiError", found[0]["evidence"])
+
+    def test_real_neon_eagle_groups_unchanged(self):
+        found = [f for f in P.find_backend_error(P.attribute(neon_steps()), [], {}) if f["session"] == NEON]
+        self.assertEqual(len(found), 5)
+        self.assertFalse(any(P.UNNAMED_COMMAND in f["evidence"] for f in found))
+
+
+PLAYFUL_STEPS = FIXTURES / "opencode" / "ses_03a8008c2ffeEN5jJusT7PyFuO.steps-slice.jsonl"
+
+
+class TestDesktopRecycleByPid(unittest.TestCase):
+    """playful-river (bowtie-3670, docs/hfss-agent-performance-analysis.md
+    section 3 step 4: "killed both desktops twice") killed by pid and checked
+    `Get-Process | Where-Object { $_.Name -match "ansys" }` — no `ansysedt`
+    in the command, which the acceptance run found the rule required. One
+    real step, captured line for line by scripts/fixtures/capture_steps.py
+    from the trace `run_report.py` extracted from opencode.db."""
+
+    def test_real_kill_by_pid_checked_against_ansys_processes(self):
+        steps = [json.loads(line) for line in PLAYFUL_STEPS.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertEqual([s["seq"] for s in steps], [567])
+        self.assertIn('Stop-Process -Id 50580', steps[0]["command"])
+        self.assertNotIn("ansysedt", steps[0]["command"])
+        found = P.find_desktop_recycle(P.attribute(steps), [], {})
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0]["evidence"].startswith("1 desktop(s) killed from the shell in undeclared #-1 (seq 567..567): "
+                                                        "Stop-Process -Id 50580"))
+
+    def test_real_negatives_keep_a_pip_or_import_out(self):
+        steps = neon_steps()
+        kills = [f for f in P.find_desktop_recycle(P.attribute(steps), [], {}) if f["source"] == "trace"]
+        self.assertEqual([f["steps"] for f in kills], [[761, 762]])          # unchanged on neon-eagle
+        use = step(steps, NEON, 761)
+        probe = _variant(use, command='python -c "import ansys.aedt.core; print(1)"')
+        self.assertEqual(P.find_desktop_recycle(P.attribute([probe]), [], {}), [])
+
+
+class TestSessionRecordOverwritten(unittest.TestCase):
+    def test_real_positive_the_readout_experiment_overwrote_session_json(self):
+        found = P.find_session_record_overwritten(P.attribute(neon_steps()), [], machine_state())
+        self.assertEqual(len(found), 1)
+        f = found[0]
+        self.assertEqual((f["source"], f["phase"], f["stage"], f["steps"]), ("state", "solve", P.BETWEEN, []))
+        self.assertTrue(f["evidence"].startswith(
+            "session.json names readout-experiment-2026-09-01 (phase solve, 2026-09-01T19:01:49Z, host -, session -) "
+            "331 h 23 min after the run's last recorded instant (2026-08-18T23:38:24Z, solved.txt banked_at)"))
+        self.assertIn("the run's own declarations: patch-array-5800-clarify, patch-array-5800-build, "
+                      "patch-array-5800-solve, patch-array-5800-build-2, patch-array-5800-solve-1b, "
+                      "patch-array-5800-build-3", f["evidence"])
+        self.assertNotIn(";", f["evidence"].split("the run's own declarations:")[1])
+
+    def test_real_negative_the_runs_own_last_declaration(self):
+        # session.json rewritten by the real writer for the run's last
+        # declaration (solve-2, seq 822): the record is the run's own.
+        steps = neon_steps()
+        last = step(steps, NEON, 822)
+        own = S.Session(phase="solve", name="patch-array-5800-solve-2", started_ms=last["ts"])
+        state = machine_state()
+        state["session.json"] = json.dumps(S.asdict(own), indent=2, sort_keys=True)
+        self.assertEqual(P.find_session_record_overwritten(P.attribute(steps), [], state), [])
+
+    def test_real_negative_no_session_json_or_nothing_to_compare(self):
+        state = machine_state()
+        del state["session.json"]
+        self.assertEqual(P.find_session_record_overwritten(P.attribute(neon_steps()), [], state), [])
+        only = {"session.json": machine_state()["session.json"]}
+        self.assertEqual(P.find_session_record_overwritten([], [], only), [])
+
+    def test_with_the_backfilled_history_the_finding_is_the_same(self):
+        history = backfilled_history()
+        self.assertEqual(len(history), 8)
+        found = P.find_session_record_overwritten(P.attribute(neon_steps(), [], history), [], machine_state(),
+                                                  history=history)
+        self.assertEqual(len(found), 1)
+        self.assertIn("331 h 23 min after the run's last recorded instant", found[0]["evidence"])
+
+    def test_severity_high_from_state_and_in_analyze(self):
+        findings = P.analyze(neon_steps(), [], [], machine_state())
+        mine = by_kind(findings)["session_record_overwritten"]
+        self.assertEqual([(f["severity"], f["cost_tokens"]) for f in mine], [("high", 0)])
+        self.assertEqual(set(f["kind"] for f in findings if f["source"] == "state" and f["severity"] == "high"),
+                         {"backend_error", "desktop_recycle", "late_declaration", "session_record_overwritten"})
+
+
+class TestBackfilledHistory(unittest.TestCase):
+    def test_a_record_of_the_runs_declaration_attributes_like_the_trace(self):
+        steps = neon_steps()
+        by_trace = P.attribute([dict(s) for s in steps])
+        blanked = [dict(s, command="") if P.DECLARE_RE.search(s.get("command") or "") else dict(s) for s in steps]
+        by_history = P.attribute(blanked, [], backfilled_history())
+        self.assertEqual([(s["phase"], s["phase_index"]) for s in by_trace],
+                         [(s["phase"], s["phase_index"]) for s in by_history])
+        self.assertEqual(P.find_undeclared_session(by_history), [])
+
+    def test_a_phase_the_run_never_declared_keeps_undeclared_session_honest(self):
+        # bowtie-3500-pilot's lines (`declared_by_run: false`) on a session
+        # that declared nothing: attribution follows them, the finding says so.
+        line = dict(backfilled_history()[0], host_session_id=F0, ts_ms=0, backfilled=True, declared_by_run=False)
+        steps = P.attribute(claude_steps(), [], [line])
+        self.assertTrue(all(s["phase"] == "clarify" for s in steps))
+        self.assertEqual({s["phase_source"] for s in steps}, {P.HISTORY_BACKFILLED})
+        found = P.find_undeclared_session(steps)
+        self.assertEqual(len(found), 1)
+        self.assertIn("declared only by backfilled sessions.jsonl lines written after the run", found[0]["evidence"])
+
+
+class TestKindRows(unittest.TestCase):
+    def test_rows_sum_the_findings_and_rank_severity_first(self):
+        findings = P.analyze(neon_steps(), [], [], machine_state())
+        rows = P.kind_rows(findings)
+        self.assertEqual({r["kind"] for r in rows}, set(by_kind(findings)))
+        for r in rows:
+            mine = by_kind(findings)[r["kind"]]
+            self.assertEqual(r["count"], len(mine))
+            self.assertEqual(r["cost_tokens"], sum(f["cost_tokens"] for f in mine))
+            self.assertEqual(r["high"], sum(1 for f in mine if f["severity"] == "high"))
+            self.assertEqual(r["severity"], min((f["severity"] for f in mine), key=P.SEVERITY_RANK.__getitem__))
+            self.assertLessEqual(len(r["evidence"]), P.KIND_DIGEST)
+            self.assertEqual(r["evidence"], [findings[i]["evidence"] for i in r["findings"]])
+        keys = [(P.SEVERITY_RANK[r["severity"]], -r["cost_tokens"]) for r in rows]
+        self.assertEqual(keys, sorted(keys))
+
+    def test_the_digest_quotes_each_phase_first(self):
+        findings = P.analyze(neon_steps(), [], [], machine_state())
+        rows = {r["kind"]: r for r in P.kind_rows(findings)}
+        recycle = rows["desktop_recycle"]
+        self.assertEqual(recycle["count"], 3)
+        self.assertEqual(recycle["phases"], ["solve", "build"])
+        self.assertTrue(any("Stop-Process -Id 29756" in e for e in recycle["evidence"]))   # the build one
+        self.assertTrue(any("port 55583 -> port 64077" in e for e in recycle["evidence"]))
+        for row in rows.values():
+            # The digest holds the heaviest finding of each phase (in rank
+            # order, up to the digest size), then fills by rank.
+            mine = sorted(by_kind(findings)[row["kind"]], key=P.finding_rank)
+            expected = list(dict.fromkeys(f["phase"] for f in mine))[:P.KIND_DIGEST]
+            quoted = [findings[i] for i in row["findings"]]
+            self.assertTrue(set(expected) <= {f["phase"] for f in quoted}, row["kind"])
+            self.assertEqual(quoted, sorted(quoted, key=P.finding_rank))
+            self.assertEqual(len(quoted), min(len(mine), P.KIND_DIGEST))
+
+    def test_the_ledgers_five_pain_points_are_in_the_rows(self):
+        findings = P.analyze(neon_steps(), [], [], machine_state())
+        rows = {r["kind"]: r for r in P.kind_rows(findings)}
+        quoted = " ; ".join(" ; ".join(r["evidence"]) for r in rows.values())
+        for needle in ("design.yaml compiled at seq 568", "design.yaml compiled at seq 743",
+                       "GrpcApiError GetVariables x3 quoted by readouts.txt x2, z_act.txt x1",
+                       "Stop-Process -Id 29756", "pin before the first kill: port 64554",
+                       "8 s before the solve declaration at 2026-08-18T22:29:24Z",
+                       "session.json names readout-experiment-2026-09-01"):
+            self.assertIn(needle, quoted, needle)
 
 
 class TestStageTable(unittest.TestCase):

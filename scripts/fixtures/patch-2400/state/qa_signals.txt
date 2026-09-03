@@ -1,0 +1,1 @@
+convergence=solve Normal Completion — dS<=0.02 target on Setup1; final dS read via UI on this box (readout route: UI) | energy_pass=unreadable — flaky readout | in_band_resonance=unreadable — flaky readout (no csv) | port_excited=port=True rad=True csv=0 — unreadable — flaky readout (no csv)

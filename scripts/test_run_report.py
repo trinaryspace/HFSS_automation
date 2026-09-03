@@ -44,6 +44,9 @@ STATE_DIR = FIXTURES / "patch-array-5800" / "state"
 LEDGER_SLICE = FIXTURES / "patch-array-5800" / "state.session1.md"
 OC_SLICE = FIXTURES / "opencode" / "ses_fe9ae6dd3ffe2a8knbeE1b4yrr.jsonl"
 NEON = "ses_fe9ae6dd3ffe2a8knbeE1b4yrr"
+READOUT = "e5cdcdf5-e3fe-4a62-9402-0e4010171c51"
+HISTORY_FILE = "sessions.jsonl"
+HOOK_PAYLOAD = FIXTURES / "hooks" / "PostToolUseFailure.toolu_01Wq4yd3xcssNi3976krgrPL.json"
 NO_DB = "Z:/nonexistent/opencode.db"
 # An empty Claude Code projects dir, so the declaration scan never reads
 # this box's real transcripts (which do hold the 09-01 readout session).
@@ -56,9 +59,10 @@ REASONS = {run_card.REASON_NO_WORKSPACE, run_card.REASON_NO_START, run_card.REAS
            run_report.REASON_NO_STORE, run_report.REASON_NO_STATE}
 
 
-def materialize(root, trace=True, state=True, ledger=True):
+def materialize(root, trace=True, state=True, ledger=True, history=False):
     """A workspace from the fixtures: real ledger slice, real state, a
-    trace written from the real opencode slice."""
+    trace written from the real opencode slice. `history` adds ticket 10's
+    backfilled `sessions.jsonl` (the run itself wrote none)."""
     ws = Path(root) / "patch-array-5800"
     state_dir = ws / "results" / "state"
     state_dir.mkdir(parents=True)
@@ -66,6 +70,8 @@ def materialize(root, trace=True, state=True, ledger=True):
         shutil.copy(LEDGER_SLICE, ws / "state.md")
     if state:
         for name in os.listdir(STATE_DIR):
+            if name == HISTORY_FILE and not history:
+                continue
             shutil.copy(STATE_DIR / name, state_dir / name)
     if trace:
         family = run_trace.trace_opencode_family(run_trace.SliceStore(OC_SLICE), NEON)
@@ -182,9 +188,20 @@ class TestReportOnTheFixtures(unittest.TestCase):
         self.assertTrue(any("Stop-Process -Id 29756" in f["evidence"] for f in recycles))
         self.assertTrue(any("port 55583 -> port 64077" in f["evidence"] for f in recycles))
         self.assertEqual(len(kinds["rebuild_chain"]), 3)
+        # Section 2 is one row per kind (ticket 10), severity first, then
+        # cost, so the state-sourced findings (0 tokens) are in it.
         top = self.js["top"]
-        self.assertEqual(len(top), run_report.TOP_N)
-        self.assertEqual(top, self.js["findings"][:run_report.TOP_N])
+        self.assertEqual(top, painpoints.kind_rows(self.js["findings"]))
+        self.assertEqual([r["kind"] for r in top], [r["kind"] for r in painpoints.kind_rows(self.js["findings"])])
+        self.assertEqual({r["kind"] for r in top}, set(kinds))
+        section = self.md.split("## 2. Top pain points\n", 1)[1].split("\n## 3.", 1)[0]
+        for needle in ("design.yaml compiled at seq 568", "design.yaml compiled at seq 743",
+                       "GrpcApiError GetVariables x3 quoted by readouts.txt x2, z_act.txt x1",
+                       "Stop-Process -Id 29756", "8 s before the solve declaration",
+                       "session.json names readout-experiment-2026-09-01"):
+            self.assertIn(needle, section, needle)
+        highs = [r for r in top if r["severity"] == "high"]
+        self.assertEqual(highs, top[:len(highs)])
 
     def test_solve_section_reads_the_watchdog(self):
         s = self.js["solve"]
@@ -359,14 +376,18 @@ class TestDegradedInputs(unittest.TestCase):
         self.assertLess(ids.index("patch-array-5800-2026-07-07"), ids.index("silent-engine"))
         self.assertEqual(len(ids), 12)                                             # 7 + bowtie-1 + this + later + 2 seeds
 
-    def test_top_limits_the_findings_shown(self):
+    def test_top_limits_the_findings_shown_in_the_later_sections(self):
         ws = materialize(self.tmp)
         code, _, _ = run_main(["--workspace", str(ws), "--no-trace", "--db", NO_DB, "--top", "3"])
         self.assertEqual(code, 0)
         js = json.loads((ws / run_report.REPORT_JSON).read_text(encoding="utf-8"))
-        self.assertEqual(len(js["top"]), 3)
+        self.assertEqual(js["top_n"], 3)
+        self.assertEqual(len(js["top"]), len({f["kind"] for f in js["findings"]}))   # section 2: every kind
         md = (ws / run_report.REPORT_MD).read_text(encoding="utf-8")
         self.assertIn("more not shown (all in run-report.json)", md)
+        title = dict(run_report.SECTIONS)["retries"]
+        section = md.split(f"## 5. {title}\n", 1)[1].split("\n## 6.", 1)[0]
+        self.assertEqual(section.count("\n| ") - 1, 3)                        # header, separator, three rows
 
 
 class TestRunsIndex(unittest.TestCase):
@@ -540,6 +561,117 @@ class TestSessionDiscovery(unittest.TestCase):
         self.assertEqual(out["status"], "fresh")
         self.assertIn("not traceable", out["detail"])
         self.assertEqual(run_report.refresh_trace(ws2, [entry], ns(no_trace=True))["status"], "kept")
+
+
+class TestBackfilledWorkspace(unittest.TestCase):
+    """Ticket 10: the workspace as it is committed — the run's real state
+    plus the backfilled `sessions.jsonl` (eight lines, all `backfilled`)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+        cls.ws = materialize(cls.tmp, history=True)
+        cls.code, cls.out, cls.err = run_main(["--workspace", str(cls.ws), "--no-trace", "--db", NO_DB])
+        cls.md = (cls.ws / run_report.REPORT_MD).read_text(encoding="utf-8")
+        cls.js = json.loads((cls.ws / run_report.REPORT_JSON).read_text(encoding="utf-8"))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_headline_says_the_history_is_backfilled_and_attribution_command_derived(self):
+        self.assertEqual(self.code, 0, self.err)
+        head = self.md.split("## 2.")[0]
+        self.assertIn("- sessions.jsonl: 8 declaration(s), 8 backfilled by hand after the run "
+                      "(scripts/fixtures/backfill.py): 8 record(s) of declarations the run made, "
+                      "0 phase(s) the run never declared\n", head)
+        self.assertIn("- stage attribution: command-derived: no stage events recorded (the run predates the "
+                      "event log, ticket 03, and events cannot be backfilled) — stage read off each command, "
+                      "else between-stages\n", head)
+        self.assertIn("- active_wall_start: 2026-08-18T19:27:36Z (sessions.jsonl)\n", head)
+        self.assertEqual(self.js["headline"]["history"],
+                         {"declarations": 8, "backfilled": 8, "backfilled_by_run": 8,
+                          "phases": ["clarify", "build", "solve"]})
+        self.assertEqual(self.js["headline"]["skill_commit"], "2d47289")
+
+    def test_sessions_are_the_histories_and_nothing_is_scanned_for_twice(self):
+        sessions = self.js["headline"]["sessions"]
+        self.assertEqual([(s["host"], s["session_id"], s["how"], s["resolved"]) for s in sessions],
+                         [("opencode", NEON, "declared (backfilled history)", True),
+                          ("claude-code", READOUT, "declared (backfilled history)", False)])
+        self.assertIn(f"  - claude-code {READOUT} — declared (backfilled history) — unresolved: no trace file\n",
+                      self.md)
+        self.assertFalse(any("transcript scan" in s["how"] for s in sessions))
+        self.assertEqual(run_report.unnamed_declarations(self.ws / "results" / "state"), [])
+        self.assertIn("sessions=1/2", self.out)
+
+    def test_the_five_ledger_items_are_in_section_2(self):
+        section = self.md.split("## 2. Top pain points\n", 1)[1].split("\n## 3.", 1)[0]
+        rows = [ln for ln in section.splitlines() if ln.startswith("| ") and not ln.startswith("| #")]
+        for needle in ("design.yaml compiled at seq 568 under the DESIGN ws_common.py named before its edit at seq 596",
+                       "design.yaml compiled at seq 743 under the DESIGN ws_common.py named before its edit at seq 791",
+                       "GrpcApiError GetVariables x3 quoted by readouts.txt x2, z_act.txt x1 (readouts.txt: route=both-failed)",
+                       "Stop-Process -Id 29756 -Force -ErrorAction SilentlyContinue; Start-Sleep -Second; "
+                       "pin before the first kill: port 64554",
+                       "solve submitted 2026-08-18T22:29:16Z (watchdog_started=1787092156) in phase build, "
+                       "8 s before the solve declaration at 2026-08-18T22:29:24Z",
+                       "session.json names readout-experiment-2026-09-01 (phase solve, 2026-09-01T19:01:49Z, "
+                       "host -, session -) 331 h 23 min after the run's last recorded instant"):
+            self.assertTrue(any(needle in row for row in rows), needle)
+        self.assertNotIn("undeclared_session", section)          # the history declares the run
+
+    def test_byte_idempotent(self):
+        before = ((self.ws / run_report.REPORT_MD).read_bytes(), (self.ws / run_report.REPORT_JSON).read_bytes())
+        code, _, _ = run_main(["--workspace", str(self.ws), "--no-trace", "--db", NO_DB])
+        self.assertEqual(code, 0)
+        self.assertEqual(before, ((self.ws / run_report.REPORT_MD).read_bytes(),
+                                  (self.ws / run_report.REPORT_JSON).read_bytes()))
+
+
+class TestHookedRefresh(unittest.TestCase):
+    """The report's own trace refresh merges a hooked run's `tools.jsonl`
+    (ticket 08's leftover): a database inflated from the real neon-eagle
+    slice, a history naming it, one hook line shaped by `hook_log.line_for`
+    from the real captured PostToolUseFailure payload."""
+
+    def test_refresh_merges_the_tool_log(self):
+        from test_run_trace import materialize_db
+        import hook_log
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        ws = materialize(tmp, trace=False, history=True)
+        db = materialize_db(OC_SLICE, os.path.join(tmp, "opencode.db"))
+        family = run_trace.trace_opencode_family(run_trace.SliceStore(OC_SLICE), NEON)
+        results = {s["tool_use_id"]: s for s in family[NEON] if s["kind"] == "tool_result"}
+        use = next(s for s in family[NEON] if s["kind"] == "tool_use" and s["tool"] in painpoints.BASH_TOOLS
+                   and s.get("command") and not results[s["tool_use_id"]]["is_error"])
+        payload = json.loads(HOOK_PAYLOAD.read_text(encoding="utf-8"))
+        line = hook_log.line_for(payload, "solve", use["ts"], use["ts"] + 4321)
+        self.assertEqual((line["exit_code"], line["is_error"], line["duration_ms"]), (3, True, 4321))
+        # The real line's shape, re-addressed to the traced call (the hook
+        # never ran on 2026-08-18): no tool_use_id, so it joins by shape.
+        line.update(session_id=NEON, tool=use["tool"], command=use["command"], tool_use_id=None)
+        tools = ws / "results" / "state" / run_trace.TOOLS_FILE
+        tools.write_text(json.dumps(line) + "\n", encoding="utf-8")
+        code, out, err = run_main(["--workspace", str(ws), "--db", db])
+        self.assertEqual(code, 0, err)
+        self.assertIn("trace=refreshed", out)
+        steps = run_trace.read_steps(ws / run_trace.TRACE_DIR / f"{NEON}{run_trace.STEPS_SUFFIX}")
+        traced = {(s["kind"], s["tool_use_id"]): s for s in steps}
+        self.assertEqual(traced[("tool_use", use["tool_use_id"])]["latency_ms"], 4321)
+        self.assertTrue(traced[("tool_result", use["tool_use_id"])]["is_error"])
+        detail = next(e["detail"] for e in events.read(ws / "results" / "state")
+                      if e["event"] == run_report.REPORT_EVENT)
+        self.assertIn("hooked=1", detail)
+        # Without the log the same refresh merges nothing.
+        tools.unlink()
+        shutil.rmtree(ws / run_trace.TRACE_DIR)
+        code, out, _ = run_main(["--workspace", str(ws), "--db", db])
+        self.assertEqual(code, 0)
+        steps = run_trace.read_steps(ws / run_trace.TRACE_DIR / f"{NEON}{run_trace.STEPS_SUFFIX}")
+        traced = {(s["kind"], s["tool_use_id"]): s for s in steps}
+        self.assertNotEqual(traced[("tool_use", use["tool_use_id"])]["latency_ms"], 4321)
+        self.assertFalse(traced[("tool_result", use["tool_use_id"])]["is_error"])
 
 
 class TestStageLedger(unittest.TestCase):

@@ -51,6 +51,27 @@ and, for the misroute, the command-level signature that both
 patch-array-5800 misroutes left — a spec compiled, `ws_common.py` (the file
 that holds the `DESIGN` constant) edited, the same spec compiled again, all
 inside one build phase. The evidence line says which source it came from.
+
+Two rules the acceptance run (ticket 10) added on top of the cost grading:
+
+- A finding the run's own machinery recorded as a failure — a readout that
+  failed by route, a pin move, a submission before its declaration, an
+  overwritten session record, an unbanked solve (`RECORDED_FAILURE_KINDS`
+  with source `state` or `events`) — is `high` whatever it cost: the cost
+  of such a failure sits in the trace findings it caused, and the retro
+  (docs/agents/run-retro.md) files one issue per `high` finding, which is
+  where these belong. The token and wall thresholds are unchanged.
+- `kind_rows` summarises the findings one row per kind (count, worst
+  severity, summed cost — exact, since a request counts once per kind —
+  and the evidence of the heaviest few), ranked severity first, then cost.
+  That is the report's "Top pain points": a run's defining failures cost
+  0 tokens and would otherwise sort below three hundred reasoning blocks.
+
+A history line marked `backfilled` (scripts/fixtures/backfill.py) is a
+declaration written after the run from its trace and ledger, never by the
+run itself; it governs attribution like any other, and `declared_by_run:
+false` on it keeps `undeclared_session` honest for a run that declared no
+phase at all.
 """
 
 from __future__ import annotations
@@ -83,6 +104,9 @@ UNKNOWN_SPEC = "?"                   # a compile whose --spec the cut command lo
 DECLARE_CLUSTER_MS = 30_000          # same-phase declarations this close are one:
                                      # the first did not land (solve-1b: emitted
                                      # 22:29:06, failed on cwd; again 22:29:24)
+SESSION_RECORD_GRACE_MS = 60 * 60_000   # a declaration this long after the run's
+                                     # last recorded instant is a later experiment
+KIND_DIGEST = 3                      # evidence lines quoted per kind row
 
 PHASES = ("clarify", "build", "solve")
 UNDECLARED = "undeclared"
@@ -93,12 +117,20 @@ KINDS = ("heavy_output", "long_reasoning", "whole_file_read", "recursive_listing
          "retry_same_command", "identical_error_twice", "rebuild_chain",
          "foreground_poll", "probe_script", "idle_gap", "escalation",
          "late_declaration", "undeclared_session", "backend_error",
-         "desktop_recycle", "design_misroute", "solve_anomaly", "unbanked")
+         "desktop_recycle", "design_misroute", "solve_anomaly", "unbanked",
+         "session_record_overwritten")
 DISCIPLINE_KINDS = frozenset(("whole_file_read", "recursive_listing", "foreground_poll",
                               "probe_script", "late_declaration", "undeclared_session",
-                              "design_misroute"))
+                              "design_misroute", "session_record_overwritten"))
 WALL_ONLY_KINDS = frozenset(("idle_gap",))     # waiting spends no tokens
 SEVERITIES = ("high", "medium", "low")
+SEVERITY_RANK = {s: i for i, s in enumerate(SEVERITIES)}
+# A failure the run's machinery recorded is high whatever it cost (docstring).
+RECORDED_FAILURE_KINDS = frozenset(("backend_error", "desktop_recycle", "late_declaration",
+                                    "session_record_overwritten", "unbanked"))
+RECORDED_SOURCES = frozenset(("state", "events"))
+HISTORY_BACKFILLED = "history:backfilled"   # phase_source of a backfilled declaration
+UNNAMED_COMMAND = "(command not named)"
 
 STATE_FILES = ("solve_progress.txt", "readouts.txt", "aedt_port.txt",
                "aedt_process_id.txt", "session.json", "solved.txt", "outcome.txt",
@@ -124,6 +156,8 @@ FIX_HINTS = {
     "design_misroute": "read 'Active Design set to' at every compile; the DESIGN constant routes the build",
     "solve_anomaly": "a stalled or aborted terminal line needs a decision, not a resubmission",
     "unbanked": "run confirm_solve.py before teardown; unbanked results are purged",
+    "session_record_overwritten": "session.json is only the current session; an experiment on a finished "
+                                  "workspace declares under its own name and the record is sessions.jsonl",
 }
 
 # -- what the trace carries: tools and command patterns ---------------------
@@ -135,10 +169,22 @@ QUESTION_TOOLS = frozenset(("question", "AskUserQuestion", "ask_user", "ask"))
 TEXT_KEYS = ("output_head", "output", "error", "text")   # a future trace may carry these
 
 DECLARE_RE = re.compile(r"session\.py\b[^;&|\n]*?--phase\s+(clarify|build|solve)\b")
+# The name ends at whitespace or a shell operator: `--name x; echo done`
+# declared `x`, not `x;`.
+DECLARE_NAME_RE = re.compile(r"session\.py\b[^;&|\n]*?--name\s+[\"']?([^\s;&|\"']+)")
 COMPILE_RE = re.compile(r"compile_spec(?:\.py)?\b")
 SPEC_RE = re.compile(r"--spec\s+(\S+)")
 DRY_RUN = "--dry-run"
 LAUNCH_RE = re.compile(r"--launch\b|launch=True|new_desktop=True")
+# A launch is a script invocation carrying the flag; the same words inside a
+# heredoc (a file being written) or an echo / grep argument are data — unless
+# the same command then runs the file the heredoc wrote (the 09-01 readout
+# experiment's `cat > probe.py <<'EOF' ... new_desktop=True ... EOF; python
+# probe.py`), which launches a desktop as surely as `--launch` does.
+LAUNCHER_RE = re.compile(r"\bpython3?(?:\.exe)?\b|compile_spec|tier1")
+NOT_A_LAUNCHER_RE = re.compile(r"^\s*(?:echo|printf|grep|rg|cat|sed|awk|Write-Output|Select-String)\b")
+HEREDOC_OPEN_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n")
+HEREDOC_TARGET_RE = re.compile(r">>?\s*\"?([^\s\"<>|;&]+)\"?\s*$")
 SOLVE_SUBMIT_RE = re.compile(r"\b08_solve(?:\.py)?\b")
 WHOLE_FILE_CMD_RE = re.compile(r"(?:^|[\s;&|(])(?:cat|type|Get-Content|gc)\s")
 WHOLE_FILE_TARGET_RE = re.compile(r"solve_progress\.txt|\.log\b|verify[\\/]", re.IGNORECASE)
@@ -153,12 +199,22 @@ PROBE_RE = re.compile(r"\bpython3?(?:\.exe)?\s+-c\b")
 PROBE_NAME_RE = re.compile(r"probe|tmp", re.IGNORECASE)
 REDIRECT_WRITE_RE = re.compile(r">\s*\"?([^\s\"<>|;&]+)")
 KILL_RE = re.compile(r"Stop-Process\b|taskkill\b|\bkill\s+-?\d|\bpkill\b")
-ANSYSEDT_RE = re.compile(r"ansysedt", re.IGNORECASE)
+# A kill that names the desktop: `taskkill //IM ansysedt.exe`, or a kill by
+# pid checked against `Get-Process | Where-Object { $_.Name -match "ansys" }`
+# in the same command (playful-river seq 567, the two desktops of the sync
+# saga killed at once).
+ANSYSEDT_RE = re.compile(r"ansysedt|\bansys\b", re.IGNORECASE)
 GRPC_RE = re.compile(r"\b(GrpcApiError|AEDTRuntimeError)\b")
+# An error line reads `GrpcApiError: <message>` or `raise GrpcApiError(`; the
+# same word in prose (a doc the agent read: "`GrpcApiError` on `GetVariables`")
+# is not an error the run hit.
+GRPC_LINE_RE = re.compile(r"\b(GrpcApiError|AEDTRuntimeError)(?=\s*[:(])")
 # An AEDT command is a CamelCase name (GetVariables, Subtract, OpenProject);
 # the readout experiment's notes write the placeholder `command: X`, which is
 # prose, not an error.
 GRPC_CMD_RE = re.compile(r"Failed to execute gRPC AEDT command:\s*([A-Z][A-Za-z]{2,})")
+GRPC_FAILED_RE = re.compile(r"GrpcApiError:\s*([A-Z][A-Za-z]{2,}) failed\b")
+PIN_SEEN_RE = re.compile(r"(?:pin: |gRPC session on port |pinned at port |aedt_port=)(\d+)")
 ERROR_NAME_RE = re.compile(r"\b([A-Z]\w*(?:Error|Exception))\b")
 ROUTE_RE = re.compile(r"route=([\w\-]+)")
 ACTIVE_DESIGN_RE = re.compile(r"Active Design set to\s+([^\s,;]+)")
@@ -247,6 +303,73 @@ def _basename(path):
 def _segments(command):
     """A shell command split at `;`, `&&`, `||` — one invocation per segment."""
     return [s.strip() for s in re.split(r";|&&|\|\|", command or "") if s.strip()]
+
+
+def split_heredocs(command):
+    """`(stripped, bodies)`: the command with every heredoc body dropped, and
+    `[(target file or None, body)]` for each — what a `cat > f <<'EOF'`
+    writes is data, not a command the shell ran. A body whose closing marker
+    the trace's command cap cut off runs to the end of the command."""
+    out, bodies = [], []
+    rest = command or ""
+    while True:
+        m = HEREDOC_OPEN_RE.search(rest)
+        if not m:
+            out.append(rest)
+            return "".join(out), bodies
+        marker = m.group(2)
+        head = rest[:m.start()]
+        target = HEREDOC_TARGET_RE.search(head.splitlines()[-1] if head.splitlines() else "")
+        out.append(head + f"<<{marker} (heredoc body dropped)\n")
+        close = re.search(r"(?m)^" + re.escape(marker) + r"[ \t]*$", rest[m.end():])
+        body = rest[m.end():] if close is None else rest[m.end():m.end() + close.start()]
+        bodies.append((target.group(1) if target else None, body))
+        if close is None:
+            return "".join(out), bodies
+        rest = rest[m.end() + close.end():]
+
+
+def strip_heredocs(command):
+    """The command with every heredoc body dropped (`split_heredocs`)."""
+    return split_heredocs(command)[0]
+
+
+def _runs_file(stripped, target):
+    """True when the stripped command runs `target` (by its basename) with
+    a launcher."""
+    name = re.split(r"[\\/]", target)[-1]
+    for line in stripped.splitlines():
+        for segment in _segments(line):
+            if name in segment and LAUNCHER_RE.search(segment) and not NOT_A_LAUNCHER_RE.match(segment):
+                return True
+    return False
+
+
+def launch_command(command):
+    """True when the command itself launches a desktop: a python / compile_spec
+    / tier1 invocation carrying `--launch`, `launch=True` or `new_desktop=True`
+    outside any heredoc (not an echo / grep that merely mentions it), or a
+    heredoc carrying the flag whose written file the same command then runs."""
+    stripped, bodies = split_heredocs(command)
+    for line in stripped.splitlines():
+        for segment in _segments(line):
+            if LAUNCH_RE.search(segment) and LAUNCHER_RE.search(segment) \
+                    and not NOT_A_LAUNCHER_RE.match(segment):
+                return True
+    for target, body in bodies:
+        if target and LAUNCH_RE.search(body) and _runs_file(stripped, target):
+            return True
+    return False
+
+
+def grpc_commands(text):
+    """The AEDT commands the error lines of `text` name, `UNNAMED_COMMAND`
+    for an error line that names none, [] when the text carries no error
+    line (prose mentioning the class is not an error)."""
+    names = GRPC_CMD_RE.findall(text) + GRPC_FAILED_RE.findall(text)
+    if names:
+        return names
+    return [UNNAMED_COMMAND] if GRPC_LINE_RE.search(text) else []
 
 
 def compile_calls(command):
@@ -445,7 +568,9 @@ def declarations(steps, events, history):
         ts = record.get("ts_ms")
         if phase in PHASES and isinstance(ts, int):
             sid = record.get("host_session_id") or None
-            found.append((ts, phase, sid if sid in known else None, "history"))
+            source = HISTORY_BACKFILLED if (record.get("backfilled")
+                                            and record.get("declared_by_run") is False) else "history"
+            found.append((ts, phase, sid if sid in known else None, source))
     for event in events or ():
         if event.get("event") != "phase.declared" or event.get("phase") not in PHASES:
             continue
@@ -575,7 +700,8 @@ def attribute(steps, events=None, history=None):
     # clarify session's cost, not nobody's. Only a declaration that names the
     # session (or governs every session) backfills; a session none reaches
     # stays undeclared, which is `undeclared_session`'s signal.
-    for session_steps in _by_session(out).values():
+    sessions = _by_session(out)
+    for session_steps in sessions.values():
         pending = [s for s in session_steps if s["phase"] == UNDECLARED]
         if not pending or len(pending) == len(session_steps):
             continue
@@ -583,7 +709,26 @@ def attribute(steps, events=None, history=None):
                     key=lambda s: s.get("ts") or 0)
         for step in pending:
             step["phase"], step["phase_index"] = first["phase"], first["phase_index"]
-            step["phase_source"] = "backfill"
+            step["phase_source"] = (HISTORY_BACKFILLED if first["phase_source"] == HISTORY_BACKFILLED
+                                    else "backfill")
+    # A subagent that ran before its parent's first declaration is the
+    # parent's work too: it takes the parent's phase at the instant it
+    # started (the parent's own backfill, usually).
+    for session_steps in sessions.values():
+        parent = next((s.get("parent_session_id") for s in session_steps if s.get("parent_session_id")), None)
+        if parent is None or any(s["phase"] != UNDECLARED for s in session_steps):
+            continue
+        parent_steps = [s for s in sessions.get(parent, []) if s["phase"] != UNDECLARED]
+        if not parent_steps:
+            continue
+        start = min((s.get("ts") or 0) for s in session_steps)
+        before = [s for s in parent_steps if (s.get("ts") or 0) <= start]
+        model = max(before, key=lambda s: s.get("ts") or 0) if before \
+            else min(parent_steps, key=lambda s: s.get("ts") or 0)
+        for step in session_steps:
+            step["phase"], step["phase_index"] = model["phase"], model["phase_index"]
+            step["phase_source"] = (HISTORY_BACKFILLED if model["phase_source"] == HISTORY_BACKFILLED
+                                    else "backfill")
     return out
 
 
@@ -701,9 +846,9 @@ def error_signature(step):
     """What makes two failed results 'the same': the first error class the
     result's text names (when the trace carries text), else the command."""
     text = step_text(step)
-    m = GRPC_CMD_RE.search(text)
-    if m:
-        return f"GrpcApiError {m.group(1)}"
+    commands = grpc_commands(text)
+    if commands:
+        return f"GrpcApiError {commands[0]}"
     m = ERROR_NAME_RE.search(text)
     if m:
         return m.group(1)
@@ -969,7 +1114,7 @@ def find_late_declaration(steps, events=None, machine_state=None):
                             evidence=f"solve submitted {_iso(ms)} ({origin}) in phase "
                                      f"{current or 'undeclared'}, {late}"))
     for step in steps:
-        if _is_tool_use(step) and _is_bash(step) and LAUNCH_RE.search(step.get("command") or "") \
+        if _is_tool_use(step) and _is_bash(step) and launch_command(step.get("command")) \
                 and step.get("phase") not in ("build", "solve"):
             out.append(_finding("late_declaration", [step], stage=BETWEEN,
                                 evidence=f"desktop launch in phase {step.get('phase')}: {_cmd(step, 90)}"))
@@ -981,13 +1126,19 @@ def find_undeclared_session(steps, events=None, machine_state=None):
     for session, session_steps in _by_session(steps).items():
         if any(s.get("parent_session_id") for s in session_steps):
             continue                                  # a subagent inherits its parent's phase
-        if any(s.get("phase", UNDECLARED) != UNDECLARED for s in session_steps):
+        declared = [s for s in session_steps if s.get("phase", UNDECLARED) != UNDECLARED]
+        by_run = [s for s in declared if s.get("phase_source") != HISTORY_BACKFILLED]
+        if by_run:
             continue
         requests = {(session, s.get("request_id")) for s in session_steps if s.get("tokens_input") is not None}
+        if declared:
+            why = ("declared only by backfilled sessions.jsonl lines written after the run; "
+                   "the run itself declared no phase")
+        else:
+            why = "no phase declaration in history, events or trace"
         out.append(_finding("undeclared_session", session=session, requests=requests,
                             wall=_span_wall(session_steps),
-                            evidence=f"session {session}: {len(session_steps)} steps, no phase declaration "
-                                     f"in history, events or trace"))
+                            evidence=f"session {session}: {len(session_steps)} steps, {why}"))
     return out
 
 
@@ -997,10 +1148,7 @@ def find_backend_error(steps, events=None, machine_state=None):
     for step in steps:
         if not _is_result(step):
             continue
-        text = step_text(step)
-        if not GRPC_RE.search(text):
-            continue
-        commands = GRPC_CMD_RE.findall(text) or [GRPC_RE.search(text).group(1)]
+        commands = grpc_commands(step_text(step))
         for command in commands:
             groups[(step.get("session_id"), step.get("phase"), step.get("stage"), command)].append(step)
     out = []
@@ -1053,13 +1201,33 @@ def find_desktop_recycle(steps, events=None, machine_state=None):
                                              f"port {pin[0]}/pid {pin[1]} within {phase}"))
             last[phase] = pin
     calls = _call_index(steps)
-    for step in steps:
-        if _is_tool_use(step) and _is_bash(step):
-            command = step.get("command") or ""
-            if KILL_RE.search(command) and ANSYSEDT_RE.search(command):
-                pair = calls.get((step.get("session_id"), step.get("tool_use_id")), (step, None))
-                out.append(_finding("desktop_recycle", [s for s in pair if s], wall=_call_wall(step, calls),
-                                    evidence=f"desktop killed from the shell: {_cmd(step, 90)}"))
+    # A kill group is one phase instance's kills, with the pin the outputs
+    # last showed before its first kill (build-3's `Stop-Process -Id 29756`
+    # killed port 64554, the ledger's "mid-run desktop recycle"; the port it
+    # moved to never reached a tool output, so nothing here claims it).
+    kills = defaultdict(list)                  # (session, phase, index) -> [(use, last pin seen)]
+    for session_steps in _by_session(steps).values():
+        pin = None
+        for step in session_steps:
+            if _is_result(step):
+                seen = PIN_SEEN_RE.findall(step_text(step))
+                if seen:
+                    pin = seen[-1]
+            elif _is_tool_use(step) and _is_bash(step):
+                command = step.get("command") or ""
+                if KILL_RE.search(command) and ANSYSEDT_RE.search(command):
+                    kills[(step.get("session_id"), step.get("phase"), step.get("phase_index"))].append((step, pin))
+    for (session, phase, index), found in kills.items():
+        uses = [u for u, _ in found]
+        mine = []
+        for use in uses:
+            mine.extend(s for s in calls.get((use.get("session_id"), use.get("tool_use_id")), (use,)) if s)
+        pin = found[0][1]
+        out.append(_finding(
+            "desktop_recycle", mine, phase=phase, wall=sum(_call_wall(u, calls) for u in uses),
+            evidence=f"{len(uses)} desktop(s) killed from the shell in {phase} #{index} "
+                     f"(seq {uses[0]['seq']}..{uses[-1]['seq']}): {_cmd(uses[0], 80)}"
+                     + (f"; pin before the first kill: port {pin}" if pin else "")))
     text = (machine_state or {}).get("readouts.txt") or ""
     moves = []
     for m in PIN_MOVE_RE.finditer(text):
@@ -1225,12 +1393,119 @@ def find_unbanked(steps, events=None, machine_state=None):
     return out
 
 
+def current_session(machine_state):
+    """`session.json` as recorded: {name, phase, started_ms, host, host_session_id}, or None."""
+    text = (machine_state or {}).get("session.json")
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or data.get("phase") not in PHASES:
+        return None
+    started = data.get("started_ms")
+    return {"name": str(data.get("name") or ""), "phase": data["phase"],
+            "started_ms": int(started) if isinstance(started, (int, float)) else None,
+            "host": str(data.get("host") or ""), "host_session_id": str(data.get("host_session_id") or "")}
+
+
+def named_declarations(steps, events=None, history=None):
+    """`[(ts_ms, phase, name, source)]` — every declaration with the name it
+    was made under (the history's `name`, the event's `name=`, the trace's
+    `--name`), oldest first."""
+    found = []
+    for record in history or ():
+        if record.get("phase") in PHASES and isinstance(record.get("ts_ms"), int):
+            found.append((record["ts_ms"], record["phase"], str(record.get("name") or ""), "history"))
+    for event in events or ():
+        if event.get("event") == "phase.declared" and isinstance(event.get("ts_ms"), int):
+            m = re.search(r"name=(\S+)", event.get("detail") or "")
+            name = m.group(1) if m and m.group(1) != "-" else ""
+            found.append((event["ts_ms"], event.get("phase"), name, "events"))
+    for step in steps:
+        if not (_is_tool_use(step) and _is_bash(step) and step.get("ts") is not None):
+            continue
+        m = DECLARE_RE.search(step.get("command") or "")
+        if m:
+            n = DECLARE_NAME_RE.search(step.get("command") or "")
+            found.append((int(step["ts"]), m.group(1), n.group(1) if n else "", "trace"))
+    found.sort(key=lambda d: (d[0], d[3]))
+    return found
+
+
+def run_end_ms(events, machine_state):
+    """`(ts_ms, what)` — the last instant the run's own machinery recorded:
+    a bank, a watchdog terminal line, an outcome or a card. (None, None)
+    when nothing was recorded."""
+    marks = []
+    state = machine_state or {}
+    solved = key_values(state.get("solved.txt"))
+    try:
+        marks.append((int(float(solved["banked_at"])) * 1000, "solved.txt banked_at"))
+    except (KeyError, ValueError):
+        pass
+    for run in watchdog_runs(state.get("solve_progress.txt")):
+        if run["status"] != "running":
+            marks.append((run["end_ms"], f"watchdog {run['status']}"))
+    outcome = key_values(state.get("outcome.txt"))
+    try:
+        marks.append((int(float(outcome["recorded_at"])) * 1000, "outcome.txt recorded_at"))
+    except (KeyError, ValueError):
+        pass
+    for event in events or ():
+        if event.get("event") in ("solve.terminal", "solve.banked", "outcome.recorded", "card.written") \
+                and isinstance(event.get("ts_ms"), int):
+            marks.append((event["ts_ms"], event["event"]))
+    if not marks:
+        return None, None
+    return max(marks)
+
+
+def find_session_record_overwritten(steps, events=None, machine_state=None, history=None):
+    """`session.json` names a session that is not one of the run's own: its
+    name or instant matches no declaration made before the run's last
+    recorded instant (plus `SESSION_RECORD_GRACE_MS`), so a later experiment
+    overwrote the run's current-session record — patch-array-5800's reads
+    `readout-experiment-2026-09-01`, fourteen days after the run banked,
+    with no host or session id. With no recorded end the record must match
+    the latest declaration at all."""
+    current = current_session(machine_state)
+    if current is None:
+        return []
+    decls = named_declarations(steps, events, history)
+    end, what = run_end_ms(events, machine_state)
+    ts = current["started_ms"]
+    if end is not None:
+        own = [d for d in decls if d[0] <= end + SESSION_RECORD_GRACE_MS]
+        late = ts is not None and ts > end + SESSION_RECORD_GRACE_MS
+    else:
+        own = decls
+        late = False
+    matches = any(d[2] == current["name"] and (ts is None or abs(d[0] - ts) <= DECLARE_CLUSTER_MS)
+                  for d in own)
+    if matches and not late:
+        return []
+    if end is None and not decls:
+        return []                                  # nothing to compare against
+    names = list(dict.fromkeys(d[2] or "-" for d in own)) or ["none recorded"]
+    where = (f"{_duration(ts - end)} after the run's last recorded instant ({_iso(end)}, {what})"
+             if late else "matching no declaration of the run")
+    ident = f"host {current['host'] or '-'}, session {current['host_session_id'] or '-'}"
+    out = [_finding("session_record_overwritten", phase=current["phase"], stage=BETWEEN, source="state",
+                    evidence=f"session.json names {current['name'] or '-'} (phase {current['phase']}, "
+                             f"{_iso(ts)}, {ident}) {where}; the run's own declarations: "
+                             f"{', '.join(names[:6])}")]
+    return out
+
+
 CLASSIFIERS = (find_heavy_output, find_long_reasoning, find_whole_file_read,
                find_recursive_listing, find_retry_same_command, find_identical_error_twice,
                find_rebuild_chain, find_foreground_poll, find_probe_script, find_idle_gap,
                find_escalation, find_late_declaration, find_undeclared_session,
                find_backend_error, find_desktop_recycle, find_design_misroute,
-               find_solve_anomaly, find_unbanked)
+               find_solve_anomaly, find_unbanked, find_session_record_overwritten)
+HISTORY_CLASSIFIERS = frozenset((find_session_record_overwritten,))   # also take history=
 
 
 # -- cost, severity, the entry point ----------------------------------------
@@ -1290,6 +1565,8 @@ def attach_costs(findings, steps):
 
 
 def severity_of(finding, total_tokens):
+    if finding["kind"] in RECORDED_FAILURE_KINDS and finding.get("source") in RECORDED_SOURCES:
+        return "high"                               # a recorded failure, whatever it cost
     share = finding["cost_tokens"] / total_tokens if total_tokens else 0.0
     if share > HIGH_TOKEN_SHARE or finding["cost_wall_ms"] > HIGH_WALL_MS:
         return "high"
@@ -1300,17 +1577,70 @@ def severity_of(finding, total_tokens):
 
 
 def analyze(steps, events=None, history=None, machine_state=None):
-    """Every finding of every classifier, costed, graded, heaviest first."""
+    """Every finding of every classifier, costed, graded, `high` first and
+    heaviest first within a severity."""
     attributed = attribute(steps, events, history)
     findings = []
     for classifier in CLASSIFIERS:
-        findings.extend(classifier(attributed, events or [], machine_state or {}))
+        kwargs = {"history": history} if classifier in HISTORY_CLASSIFIERS else {}
+        findings.extend(classifier(attributed, events or [], machine_state or {}, **kwargs))
     attach_costs(findings, attributed)
     total = run_tokens(attributed)
     for finding in findings:
         finding["severity"] = severity_of(finding, total)
-    findings.sort(key=lambda f: (-f["cost_tokens"], -f["cost_wall_ms"], f["kind"], f["evidence"]))
+    findings.sort(key=finding_rank)
     return findings
+
+
+def finding_rank(finding):
+    """Severity first (`high`, `medium`, `low`), then tokens, then wall."""
+    return (SEVERITY_RANK[finding["severity"]], -finding["cost_tokens"], -finding["cost_wall_ms"],
+            finding["kind"], finding["evidence"])
+
+
+def kind_rows(findings, digest=KIND_DIGEST):
+    """One row per kind (the report's top section): `{kind, count, high,
+    severity, cost_tokens, cost_wall_ms, phases, sources, evidence,
+    findings, fix_hint}` — `severity` the worst of the kind, the costs
+    summed (exact: a request counts once per kind), `evidence` the lines of
+    the `digest` findings quoted — the heaviest of each phase the kind
+    touched first, then the heaviest remaining, heaviest first — and
+    `findings` their indexes in the list. Ranked severity first, then cost,
+    so a run's recorded failures (0 tokens) stand beside its token sinks
+    instead of below them; the per-phase pick keeps a build-phase recycle
+    visible beside three solve-phase ones."""
+    groups = {}
+    for index, finding in enumerate(findings):
+        groups.setdefault(finding["kind"], []).append((index, finding))
+    rows = []
+    for kind, mine in groups.items():
+        ordered = sorted(mine, key=lambda pair: finding_rank(pair[1]))
+        found = [f for _, f in ordered]
+        quoted, phases_seen = [], set()
+        for pair in ordered:
+            if len(quoted) < digest and pair[1]["phase"] not in phases_seen:
+                phases_seen.add(pair[1]["phase"])
+                quoted.append(pair)
+        for pair in ordered:
+            if len(quoted) >= digest:
+                break
+            if pair not in quoted:
+                quoted.append(pair)
+        quoted.sort(key=lambda pair: finding_rank(pair[1]))
+        rows.append({
+            "kind": kind, "count": len(found),
+            "high": sum(1 for f in found if f["severity"] == "high"),
+            "severity": min((f["severity"] for f in found), key=SEVERITY_RANK.__getitem__),
+            "cost_tokens": sum(f["cost_tokens"] for f in found),
+            "cost_wall_ms": sum(f["cost_wall_ms"] for f in found),
+            "phases": list(dict.fromkeys(f["phase"] for f in found)),
+            "sources": sorted({f["source"] for f in found}),
+            "evidence": [f["evidence"] for _, f in quoted],
+            "findings": [i for i, _ in quoted],
+            "fix_hint": FIX_HINTS[kind],
+        })
+    rows.sort(key=lambda r: (SEVERITY_RANK[r["severity"]], -r["cost_tokens"], -r["cost_wall_ms"], r["kind"]))
+    return rows
 
 
 def stage_table(steps, events=None, history=None):

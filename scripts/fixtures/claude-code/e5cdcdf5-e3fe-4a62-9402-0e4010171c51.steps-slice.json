@@ -1,0 +1,38 @@
+{
+  "captured": "2026-09-02",
+  "captured_from": "C:\\Users\\afpim\\Repos\\HFSS_automation\\.claude\\worktrees\\run-logging-plan\\workspaces\\patch-array-5800\\results\\state\\trace\\e5cdcdf5-e3fe-4a62-9402-0e4010171c51.steps.jsonl",
+  "session_id": "e5cdcdf5-e3fe-4a62-9402-0e4010171c51",
+  "note": "Capture named steps of a real step trace as a fixture, line for line.",
+  "steps": {
+    "187": {
+      "kind": "tool_result",
+      "tool": "Bash",
+      "bytes": 1819,
+      "sha256": "e7e0ec860593ab3979a7bf3a59e3a35249fc9d546aa82878aefd0865a01050c4"
+    },
+    "483": {
+      "kind": "tool_result",
+      "tool": "Bash",
+      "bytes": 2671,
+      "sha256": "edab30828bde85ebe015666fccb5b6c7454a1b1214a750cfe6da4b93bab7d16b"
+    },
+    "721": {
+      "kind": "tool_result",
+      "tool": "Bash",
+      "bytes": 1116,
+      "sha256": "44763ad811446b7f8677edbf474665cc0ca7bdc38088377585e7424a2c035fa6"
+    },
+    "765": {
+      "kind": "tool_use",
+      "tool": "Bash",
+      "bytes": 2435,
+      "sha256": "3297f7b0f0ad5015b69e4a183a47f99fe1485c15828570c9c54d5585cf30c334"
+    },
+    "810": {
+      "kind": "tool_use",
+      "tool": "Bash",
+      "bytes": 2676,
+      "sha256": "638b98bbf21c36efe83a7394daea11d0288007af7e76348dcec05e3788c11417"
+    }
+  }
+}

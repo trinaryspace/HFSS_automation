@@ -1,0 +1,1118 @@
+{
+  "entries": [
+    {
+      "path": ".Bowtie3670.asol.semaphore",
+      "size": 0,
+      "type": "file"
+    },
+    {
+      "path": ".Bowtie3670.asol_priv.semaphore",
+      "size": 0,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_MI0_V1175.sd",
+      "size": 0,
+      "type": "dir"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S29_ADP6_V1196.sd",
+      "size": 0,
+      "type": "dir"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S29_MI0_V1176.sd",
+      "size": 0,
+      "type": "dir"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S29_SD1_V1182.su",
+      "size": 835,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S29_SD2_V1185.su",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S29_SD3_V1188.su",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S29_SD4_V1191.su",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S29_SD5_V1194.su",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S29_SD6_V1197.su",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S29_V1112.profile",
+      "size": 226584,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S29_V1135.cmesh",
+      "size": 0,
+      "type": "dir"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1400_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1401_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1402_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1403_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1404_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1405_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1406_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1407_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1408_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1409_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1410_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1411_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1412_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1413_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1414_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1415_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1416_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1417_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1418_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1419_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1420_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1421_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1422_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1423_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1424_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1425_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1426_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1427_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1428_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1429_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1430_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1431_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1432_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1433_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1434_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1435_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1436_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1437_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1438_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1439_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1440_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1441_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1442_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1443_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1444_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1445_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1446_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1447_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1448_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1449_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1450_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1451_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1452_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1453_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1454_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1455_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1456_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1457_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1458_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1459_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1460_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1461_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1462_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1463_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1464_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1465_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1466_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1467_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1468_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1469_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1470_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1471_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1472_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1473_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1474_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1475_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1476_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1477_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1478_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1479_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1480_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1481_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1482_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1483_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1484_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1485_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1486_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1487_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1488_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1489_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1490_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1491_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1492_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1493_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1494_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1495_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1496_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1497_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1498_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1499_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1500_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1501_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1502_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1503_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1504_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1505_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1506_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1507_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1508_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1509_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1510_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1511_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1512_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1513_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1514_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1515_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1516_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1517_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1518_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1519_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1520_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1521_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1522_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1523_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1524_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1525_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1526_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1527_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1528_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1529_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1530_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1531_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1532_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1533_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1534_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1535_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1536_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1537_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1538_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1539_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1540_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1541_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1542_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1543_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1544_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1545_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1546_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1547_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1548_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1549_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1550_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1551_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1552_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1553_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1554_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1555_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1556_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1557_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1558_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1559_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1560_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1561_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1562_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1563_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1564_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1565_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1566_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1567_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1568_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1569_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1570_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1571_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1572_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1573_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1574_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1575_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1576_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1577_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1578_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1579_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1580_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1581_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1582_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1583_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1584_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1585_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1586_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1587_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1588_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1589_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1590_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1591_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1592_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1593_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1594_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1595_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1596_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1597_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1598_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_S37_V1171_F1599_SU.txt",
+      "size": 836,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_SOL30_M1_V1179.sd",
+      "size": 2606,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_SOL30_M2_V1183.sd",
+      "size": 2485,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_SOL30_M3_V1186.sd",
+      "size": 2484,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_SOL30_M4_V1189.sd",
+      "size": 2484,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_SOL30_M5_V1192.sd",
+      "size": 2487,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_SOL30_M6_V1195.sd",
+      "size": 2479,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_SOL31_M0_V1180.sd",
+      "size": 2480,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_SOL37_M0_V1199.sd",
+      "size": 281443,
+      "type": "file"
+    },
+    {
+      "path": "Bowtie3670.results/DV1602_V1136.imesh",
+      "size": 0,
+      "type": "dir"
+    }
+  ],
+  "other_bytes": 437896656,
+  "other_files": 2449,
+  "total_bytes": 438594403,
+  "total_files": 2666
+}

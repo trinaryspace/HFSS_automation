@@ -1,0 +1,177 @@
+# uslot-6300 — probe-fed U-slot patch, -10 dB S11 to cover 5.8–6.8 GHz.
+#
+# Recipe source: Borchardt & LaPointe, "U-Slot Patch Antenna Principle and
+# Design Methodology Using CMA and CMT", IEEE Access 2019, Sec. VI design
+# example: 2.4 GHz, h = 10 mm PTFE (er 2.1), 31 % 10-dB-RL bandwidth, with
+# final dimensions (mm) h=10, W=68, L=35, Uw=20, Uh=28, Uo=3.5, po=7,
+# tw=th=2.5, d=1 (square probe). That lossless PEC/er-2.1 design is
+# frequency-scaled by s = 2.4/6.3 = 0.38095 — an exact Maxwell scaling that
+# keeps the fractional bandwidth — and rounded to 0.01 mm. Predicted coupled
+# resonances (eq. 5, kappa = Uw/W = 0.294): 5.37 and 7.23 GHz; predicted
+# 10-dB band (31 % of 6.3 GHz): ~5.32–7.28 GHz, covering 5.8–6.8 with margin.
+#
+# Feed: the paper drives the structure with a gap source at the base of the
+# probe; here that is a lumped port on a small xz sheet bridging the ground
+# plane to the bottom of the probe (port_gap), the same sheet-name +
+# integration-line shape the patch-2400 record run proved on this box.
+spec_version: 1
+name: uslot-6300
+recipe: probe-fed-u-slot-patch
+solution_type: Modal            # explicit, never the default (env-compat #11)
+
+provenance:
+  source: "Borchardt & LaPointe, IEEE Access 7 (2019) 109375, Sec. VI PTFE design example, frequency-scaled 2.4 -> 6.3 GHz"
+  canonical_reading: Table
+  notes: >-
+    Final-dimensions list of Sec. VI-C is canonical; cross-checked in the
+    Clarification block against Fig. 2 (probe position p1 = Uo + Uh - tw - po
+    = 22 mm), eq. (5) (f+- = 2.05/2.75 GHz vs CMA 2.00/2.72) and Balanis L
+    (35.3 mm vs 35): consistent. Scaled dimensions rounded to 0.01 mm
+    (< 0.2 % change). Substrate/ground made finite (paper: infinite layered
+    Green's function).
+
+target:
+  quantity: center_frequency
+  value: 6.3GHz
+  tolerance_pct: 5
+
+variables:
+  f0: 6.3GHz
+  er: 2.1                         # PTFE, as the paper; documentation only
+  h: 3.81mm                       # 10 mm * s
+  patch_W: 25.9mm                 # W = 68 mm * s
+  patch_L: 13.33mm                # L = 35 mm * s
+  slot_W: 7.62mm                  # Uw = 20 mm * s  (kappa = Uw/W = 0.294)
+  slot_H: 10.67mm                 # Uh = 28 mm * s
+  slot_Uo: 1.33mm                 # Uo = 3.5 mm * s (slot centred in patch)
+  slot_tw: 0.95mm                 # base-bar thickness (y), 2.5 mm * s
+  slot_th: 0.95mm                 # arm thickness (x), 2.5 mm * s
+  probe_po: 2.67mm                # probe centre above the base bar's inner edge, 7 mm * s
+  probe_d: 0.38mm                 # square probe side, 1 mm * s
+  port_gap: 0.2mm                 # lumped-port gap between ground and probe base
+  sub_W: 50mm                     # finite substrate/ground, ~lambda0/4 beyond the patch
+  sub_L: 40mm
+  air_pad: "c0 / (3 * f0)"        # lambda0/3 = 15.86 mm at 6.3 GHz
+  slot_bot: "patch_L/2 - slot_Uo - slot_H"
+  probe_y: "slot_bot + slot_tw + probe_po"
+
+materials:
+  ptfe:
+    library: Teflon (tm)          # AEDT syslib, er 2.1 — read back as 'teflon (tm)' on this box
+  metal:
+    library: pec
+  air:
+    library: air
+
+geometry:
+  - op: box
+    name: Substrate
+    material: ptfe
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L, h]
+
+  # No material: a 2D sheet's material is not the mechanism that makes it
+  # metal. HFSS treats the surfaces of a *3D* pec body as PEC automatically,
+  # but "you can define PEC boundary on 2D sheet objects to represent lossless
+  # conductors such as ... patch antenna elements" (HFSS guide, Perfect E).
+  # An unbounded sheet is invisible to the solver, so the metal is assigned
+  # below as perfect_e boundaries.
+  - op: sheet
+    name: GroundPlane
+    plane: xy
+    origin: ["-sub_W/2", "-sub_L/2", "0mm"]
+    size: [sub_W, sub_L]
+
+  - op: sheet
+    name: Patch
+    plane: xy
+    origin: ["-patch_W/2", "-patch_L/2", h]
+    size: [patch_W, patch_L]
+
+  # The U-slot: a base bar plus two arms, cut from the patch. The U opens
+  # toward +y; the arm tips sit slot_Uo below the patch's +y edge.
+  - op: sheet
+    name: SlotBase
+    plane: xy
+    origin: ["-slot_W/2", slot_bot, h]
+    size: [slot_W, slot_tw]
+  - op: sheet
+    name: SlotArmL
+    plane: xy
+    origin: ["-slot_W/2", slot_bot, h]
+    size: [slot_th, slot_H]
+  - op: sheet
+    name: SlotArmR
+    plane: xy
+    origin: ["slot_W/2 - slot_th", slot_bot, h]
+    size: [slot_th, slot_H]
+  - op: subtract
+    name: Patch
+    tools: [SlotBase, SlotArmL, SlotArmR]
+    keep_tools: false
+
+  # The probe: a square-section PEC pin from the port gap up to the patch,
+  # on the patch centreline, inside the U.
+  - op: box
+    name: Probe
+    material: metal
+    origin: ["-probe_d/2", "probe_y - probe_d/2", port_gap]
+    size: [probe_d, probe_d, "h - port_gap"]
+
+  # The port sheet: xz rectangle at y = probe_y bridging ground (z=0) to the
+  # probe base (z=port_gap), as wide as the probe.
+  - op: sheet
+    name: PortSheet
+    plane: xz
+    origin: ["-probe_d/2", probe_y, "0mm"]
+    size: [probe_d, port_gap]
+
+  - op: box
+    name: AirBox
+    material: air
+    origin: ["-sub_W/2 - air_pad", "-sub_L/2 - air_pad", "-air_pad"]
+    size: ["sub_W + 2*air_pad", "sub_L + 2*air_pad", "h + 2*air_pad"]
+
+excitations:
+  - name: P1
+    type: lumped_port
+    on:
+      object: PortSheet
+    integration_line:
+      from:
+        edge_mid: [PortSheet, "-z", "min_y"]      # on the ground plane
+      to:
+        edge_mid: [PortSheet, "+z", "min_y"]      # at the probe base
+    impedance: 50ohm
+
+boundaries:
+  # The metal. Perfect E on the sheet, not a material — see the geometry note.
+  - name: PatchMetal
+    type: perfect_e
+    on:
+      object: Patch
+  - name: GroundMetal
+    type: perfect_e
+    on:
+      object: GroundPlane
+  - name: Rad1
+    type: radiation
+    on:
+      outer_faces: AirBox
+
+mesh:
+  - type: adaptive_only
+
+setup:
+  name: Setup1
+  solution_frequency: f0
+  max_passes: 20
+  delta_s: 0.02
+  sweep:
+    name: Sweep1
+    type: discrete
+    start: 4.5GHz
+    stop: 8.5GHz
+    count: 201
+
+qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]

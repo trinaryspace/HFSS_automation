@@ -1,0 +1,29 @@
+{
+  "artifact_entries": 222,
+  "case": "bowtie-3670",
+  "profiles": {
+    "DV1602_S29_V1112.profile": {
+      "stages": [
+        [
+          "Initial Meshing",
+          "00:00:01",
+          0
+        ],
+        [
+          "Adaptive Meshing",
+          "00:00:18",
+          6
+        ],
+        [
+          "Frequency Sweep",
+          "00:04:36",
+          0
+        ]
+      ],
+      "status": "Normal Completion",
+      "stop": "08/03/2026 02:48:08"
+    }
+  },
+  "source_results_root": "workspaces/bowtie-3670/bowtie_3670.aedtresults",
+  "total_files": 2666
+}

@@ -53,6 +53,15 @@ def load_ws_common(workspace: Path):
     path = workspace / "src" / "ws_common.py"
     if not path.exists():
         raise FileNotFoundError(f"no ws_common at {path}")
+    # The preamble imports its own siblings (`run_events`, run logging ticket
+    # 03). Loading it by file path does not put its directory on sys.path, so
+    # those imports fail with ModuleNotFoundError — the workspace's other
+    # entry points are run from `src/` and never saw it. Found on the
+    # uslot-6300 build, the first Route A launch against a template workspace
+    # carrying `run_events.py`.
+    src_dir = str(path.parent)
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
     spec = importlib.util.spec_from_file_location("_ws_common", path)
     module = importlib.util.module_from_spec(spec)
     sys.modules["_ws_common"] = module

@@ -124,6 +124,7 @@ def validate(spec: DesignSpec) -> Report:
     _check_boundaries(spec, findings)
     _check_setup(spec, findings, scope)
     _check_recipe_completeness(spec, findings)
+    _check_sheet_conductors(spec, findings)
     _check_model_relations(spec, findings, scope)
     return Report(findings)
 
@@ -424,6 +425,82 @@ def _check_recipe_completeness(spec: DesignSpec, findings: list[Finding]) -> Non
             hint="escape-hatch rate is the metric that says whether v1 is right",
         ))
 
+
+
+# Materials that mean "this is metal". A 2D sheet carrying one of these is the
+# defect below; a 3D body carrying one is correct and untouched by this rule.
+CONDUCTOR_MATERIALS = {
+    "pec", "copper", "gold", "silver", "aluminum", "aluminium", "brass",
+    "tin", "lead", "nickel", "iron", "steel_stainless", "tungsten",
+}
+
+# Boundary types that actually make a sheet conduct.
+_METAL_BOUNDARIES = {"perfect_e", "finite_conductivity", "impedance",
+                     "layered_impedance"}
+
+
+def _check_sheet_conductors(spec: DesignSpec, findings: list[Finding]) -> None:
+    """A conductor material on a 2D sheet is not honoured by HFSS.
+
+    HFSS treats the surfaces of a *3D* body made of `pec` as PEC boundaries
+    automatically, but a 2D sheet is only metal if a boundary says so: "You can
+    define PEC boundary on 2D sheet objects to represent lossless conductors
+    such as transmission line traces or patch antenna elements" (HFSS guide,
+    Perfect E). A sheet with `material: pec` and no boundary is invisible to
+    the solver — the model simulates as if the patch and the ground plane were
+    not there, converges happily, and reports a meaningless S-parameter.
+
+    Found on the `uslot-6300` run (2026-09-03) by the user at the Review gate,
+    after `validate_spec`, `precheck` and `compile_spec --dry-run` all passed a
+    patch whose radiator and ground did not exist. The pattern was inherited
+    from the authoring exemplar, so this is an ERROR rather than a warning:
+    the airbox-clearance warning is the standing proof that a warning gets
+    shipped past (four of five specs in one campaign).
+    """
+    surviving = {name for op in spec.geometry for name in op.object_names}
+    for op in spec.geometry:
+        for consumed in op.consumes:
+            if not op.keep_tools:
+                surviving.discard(consumed)
+    # An op names its own result, so a boolean target survives its own op.
+    for op in spec.geometry:
+        if op.op in ("unite", "subtract", "intersect", "connect"):
+            surviving.add(op.name)
+
+    bounded = {
+        target
+        for b in spec.boundaries if b.type in _METAL_BOUNDARIES
+        for target in (getattr(b.on, "object", None),
+                       getattr(b.on, "face_of", None),
+                       getattr(b.on, "outer_faces", None))
+        if target
+    }
+    ported = {
+        target
+        for e in spec.excitations
+        for target in (getattr(e.on, "object", None),
+                       getattr(e.on, "face_of", None))
+        if target
+    }
+
+    for index, op in enumerate(spec.geometry):
+        if op.op != "sheet" or op.name not in surviving:
+            continue
+        material = spec.materials.get(op.material) if op.material else None
+        library = getattr(material, "library", None) if material else None
+        looks_metal = (library or op.material or "").lower() in CONDUCTOR_MATERIALS
+        if not looks_metal:
+            continue
+        if op.name in bounded or op.name in ported:
+            continue
+        findings.append(Finding(
+            f"geometry[{index}].material", ERROR,
+            f"sheet {op.name!r} is metal by material only — HFSS does not "
+            f"honour a material on a 2D sheet, so this conductor would not "
+            f"exist in the solve",
+            hint="give it a `perfect_e` boundary (or finite_conductivity) and "
+                 "drop the material; a material makes metal only on a 3D body",
+        ))
 
 def _check_model_relations(spec: DesignSpec, findings: list[Finding],
                            scope: dict[str, Value]) -> None:

@@ -28,10 +28,11 @@ observed in that session, on AEDT 2024 R1 (`v241`) with pyAEDT 1.3.0.
 | 2d-code | `canon()` normalizes setup prop keys before comparing | template `12_verify_sync.py` | **DEFERRED - needs a licence.** Not a playbook item; blocked on capturing a real pair of setup blocks (`docs/agents/fixture-fidelity.md`). See entry 16 for the caution about blanket normalization. |
 | 2f | HfssDriven `Frequency` takes a LITERAL only; a design-variable name is accepted and silently discarded | `environment-compat.md`, new entry | **ready to approve** - measured 2026-09-01, and it cost a month of wrong solves |
 
-### Resolved 2026-09-01
+### Resolved 2026-09-03
 
 | # | proposal | outcome |
 |---|---|---|
+| 4 | metal on a 2D sheet is a boundary, not a material | **APPROVED and applied** as `environment-compat.md` entry 17, plus prevention: an ERROR rule in `hfss_spec/validate.py` with four tests, the corrected prose in `reference/design-spec.md`, and the three canonical specs that carried the pattern (`patch-2400`, `patch-2400-authoring`, `microstrip-50r`) fixed. Raised by the `uslot-6300` run 2026-09-03, where the maintainer caught the floating conductors in the UI after every offline gate had passed. |
 | 1 | register a `patch_resonance` estimator for `corporate-patch-array` | **NOT REGISTERED.** The recipe stays `UNCHECKED`. Of the three shapes offered, the maintainer took the third: n=1 supports a recorded datapoint, not a tolerance, and registering 5% would assert confidence the single hardware check does not support (it consumed ~70% of that budget). The measurement stands as the standing record in `.scratch/hfss-agent-parallel-tests/estimator-calibration.md`; revisit when a second hardware point exists. Cost of the decision: the `no-estimator` verdict the run already lived with. |
 | 2a | `unite` is like-to-like only | **APPROVED and applied** as `environment-compat.md` entry 14. |
 | 2b | 2D sheets expose no Material property | **APPROVED and applied** as `environment-compat.md` entry 15. |

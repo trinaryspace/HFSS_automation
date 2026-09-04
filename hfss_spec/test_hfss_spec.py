@@ -460,6 +460,78 @@ class TestValidator(unittest.TestCase):
             minimal_spec(qa_signals=["in_band_resonance"])))
         self.assertIn("in_band_resonance cannot be reported", report.text())
 
+    def test_metal_sheet_without_a_boundary_is_an_error(self):
+        """A `pec` sheet with no boundary does not exist in the solve.
+
+        The uslot-6300 defect: HFSS auto-PECs the surfaces of a 3D pec body,
+        but a 2D sheet conducts only if a boundary says so. Both offline gates
+        passed a patch whose radiator and ground were invisible.
+        """
+        floating = minimal_spec(
+            materials={"metal": {"library": "pec"}},
+            geometry=[
+                {"op": "box", "name": "Sub", "origin": ["0mm", "0mm", "0mm"],
+                 "size": ["w", "w", "1.6mm"]},
+                {"op": "sheet", "name": "Patch", "material": "metal",
+                 "plane": "xy", "origin": ["0mm", "0mm", "1.6mm"],
+                 "size": ["w", "w"]},
+            ])
+        report = validate(spec_from_dict(floating))
+        self.assertFalse(report.ok)
+        self.assertIn("metal by material only", report.text())
+
+    def test_a_perfect_e_boundary_makes_the_sheet_legal(self):
+        bounded = minimal_spec(
+            materials={"metal": {"library": "pec"}},
+            geometry=[
+                {"op": "box", "name": "Sub", "origin": ["0mm", "0mm", "0mm"],
+                 "size": ["w", "w", "1.6mm"]},
+                {"op": "sheet", "name": "Patch", "plane": "xy",
+                 "origin": ["0mm", "0mm", "1.6mm"], "size": ["w", "w"]},
+            ],
+            boundaries=[
+                {"name": "Rad", "type": "radiation", "on": {"outer_faces": "Sub"}},
+                {"name": "PatchMetal", "type": "perfect_e",
+                 "on": {"object": "Patch"}},
+            ])
+        self.assertNotIn("metal by material only",
+                         validate(spec_from_dict(bounded)).text())
+
+    def test_a_pec_3d_body_is_not_flagged(self):
+        """HFSS treats the surfaces of a 3D pec body as PEC on its own."""
+        solid = minimal_spec(
+            materials={"metal": {"library": "pec"}},
+            geometry=[
+                {"op": "box", "name": "Sub", "origin": ["0mm", "0mm", "0mm"],
+                 "size": ["w", "w", "1.6mm"]},
+                {"op": "box", "name": "Probe", "material": "metal",
+                 "origin": ["0mm", "0mm", "0mm"], "size": ["1mm", "1mm", "1mm"]},
+            ])
+        self.assertNotIn("metal by material only",
+                         validate(spec_from_dict(solid)).text())
+
+    def test_a_consumed_metal_sheet_is_not_flagged(self):
+        """A sheet united away is not a floating conductor."""
+        united = minimal_spec(
+            materials={"metal": {"library": "pec"}},
+            geometry=[
+                {"op": "box", "name": "Sub", "origin": ["0mm", "0mm", "0mm"],
+                 "size": ["w", "w", "1.6mm"]},
+                {"op": "sheet", "name": "Patch", "plane": "xy",
+                 "origin": ["0mm", "0mm", "1.6mm"], "size": ["w", "w"]},
+                {"op": "sheet", "name": "Feed", "material": "metal",
+                 "plane": "xy", "origin": ["0mm", "0mm", "1.6mm"],
+                 "size": ["1mm", "1mm"]},
+                {"op": "unite", "name": "Patch", "with": ["Feed"]},
+            ],
+            boundaries=[
+                {"name": "Rad", "type": "radiation", "on": {"outer_faces": "Sub"}},
+                {"name": "PatchMetal", "type": "perfect_e",
+                 "on": {"object": "Patch"}},
+            ])
+        self.assertNotIn("metal by material only",
+                         validate(spec_from_dict(united)).text())
+
     def test_reducer_placeholders_are_refused(self):
         broken = minimal_spec(geometry=[
             {"op": "unknown", "name": "Sub", "bbox": [0, 0, 0, 1, 1, 1]}])

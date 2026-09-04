@@ -5,7 +5,7 @@ here are appendable only through the smoke-matrix ceremony or an approved
 learning-loop amendment (ADR 0002). Readers: the hfss-agent skill consults
 this entry before promising any API on this machine.
 
-Last updated: **2026-08-17** — entry #6 (readout) amended under ADR 0002 with
+Last updated: **2026-09-03** — entry #17 (metal on 2D sheets) added under ADR 0002 with maintainer approval. Previously: **2026-08-17** — entry #6 (readout) amended under ADR 0002 with
 maintainer approval; the 08-02 text is retained inline for provenance. Base
 matrix still 2026-08-02 (ticket 02). Machine context: local Windows,
 AEDT 2024 R1 (`v241`, `C:\Program Files\AnsysEM\v241\Win64`), Python 3.10.0,
@@ -320,6 +320,57 @@ general "strip spaces and the `Is` prefix" rule can collapse two genuinely
 distinct keys, which would weaken the verifier in a direction nobody would
 notice. Provenance: `workspaces/patch-array-5800/state.md` (COMPAT NOTE
 candidate 3) and `summary.md` ("Model shape record").
+
+### 17. Metal on a 2D sheet is a BOUNDARY, not a material — and nothing warned
+
+A sheet assigned a conductor **material** (`pec`, copper, …) and given no
+boundary is **not metal**. It is inert geometry: the solver meshes around it as
+if it were not there, the solve converges, and the S-parameters describe a
+model missing its conductors.
+
+The rule, from the HFSS guide (Perfect E, quoted verbatim): *"Since no
+electromagnetic field exists inside 3D objects with pec material, HFSS treats
+the surfaces of these objects as PEC boundaries. You can define PEC boundary on
+2D sheet objects to represent lossless conductors such as transmission line
+traces or patch antenna elements."* The same section states boundary conditions
+are assigned **on** 2D sheet objects. So the material route is correct for a 3D
+body and does not exist for a sheet.
+
+Observed 2026-09-03 on the `uslot-6300` run. The patch and ground plane were
+sheets with `material: pec` and no boundary; `validate_spec`, `precheck` and
+`compile_spec --dry-run` all passed, `validate_simple()` returned True, and the
+model was one Review gate away from a solve whose S11 would have been
+meaningless. **The user caught it by eye in the UI** — no gate did. The pattern
+came from `knowledge/cases/patch-2400-authoring/design.yaml`, the file the
+skill tells patch authors to copy, and `reference/design-spec.md` explicitly
+said both patterns were legal. Three of five canonical specs carried it.
+
+The control is the human-built model in
+`knowledge/cases/_snapshots/patch-10GHZ-probe-fed.json` (ticket 12a): its metal
+is `antennaMetal` / `groundMetal` **Perfect E boundaries**, materials blank.
+A working expert model does it the boundary way.
+
+This entry supersedes the implication of entry 15. Entry 15 says a sheet's
+`MaterialValue` can be read from the saved project; that is true and is still
+the only way to *see* the value, but the value has no effect on the solve.
+Never treat a sheet's material as evidence that the sheet is metal.
+
+**Route-around**: give every conductor sheet a `perfect_e` (or
+`finite_conductivity`) boundary and leave its material unset; use
+`material: pec` only on 3D bodies. Enforced offline since 2026-09-03:
+`hfss_spec/validate.py` `_check_sheet_conductors` makes a metal-by-material
+sheet an **ERROR** (not a warning — the airbox-clearance warning is the
+standing proof that a warning ships), covered by four tests in
+`hfss_spec/test_hfss_spec.py`. The three affected canonical specs
+(`patch-2400`, `patch-2400-authoring`, `microstrip-50r`) were corrected in the
+same change.
+
+Approved by the maintainer 2026-09-03 under the ADR 0002 ceremony: *"What I
+caught about nothing assigned to the 2D sheet, please record that in the
+playbook and make sure the mistake isn't repeated again."* Provenance:
+`workspaces/uslot-6300/summary.md` (Read-back sync deltas; Learning-loop note
+1) and `workspaces/uslot-6300/state.md` (Review gate 1, pitfall 3).
+
 
 ## Appendix: environment state the matrix left behind
 

@@ -62,14 +62,12 @@ geometry:
 
   - op: sheet
     name: GroundPlane
-    material: metal
     plane: xy
     origin: ["-sub_W/2", "-sub_L/2", "0mm"]
     size: [sub_W, sub_L]
 
   - op: sheet
     name: Patch
-    material: metal
     plane: xy
     origin: ["-patch_W/2", "-patch_L/2", h]
     size: [patch_W, patch_L]
@@ -128,6 +126,17 @@ excitations:
     impedance: 50ohm
 
 boundaries:
+  # Metal is a BOUNDARY on a 2D sheet, never a material: HFSS auto-PECs the
+  # surfaces of a 3D pec body, but a sheet only conducts if a boundary says
+  # so (HFSS guide, Perfect E). See environment-compat #17.
+  - name: GroundMetal
+    type: perfect_e
+    on:
+      object: GroundPlane
+  - name: PatchMetal
+    type: perfect_e
+    on:
+      object: Patch
   - name: Rad1
     type: radiation
     on:

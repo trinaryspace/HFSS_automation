@@ -425,8 +425,11 @@ class Boundary(SpecModel):
     """A boundary condition.
 
     `perfect_e` on a sheet is how real models assign metal — 12a found
-    `antennaMetal` / `groundMetal` as Perfect E boundaries, not materials. Both
-    patterns are legal and the schema must express both (findings, ticket 12a).
+    `antennaMetal` / `groundMetal` as Perfect E boundaries, not materials, and
+    that is the ONLY way a 2D sheet becomes metal: HFSS auto-PECs the surfaces
+    of a 3D `pec` body, but a sheet with a conductor material and no boundary
+    is invisible to the solver. `validate._check_sheet_conductors` errors on
+    that; see `knowledge/playbook/environment-compat.md` #17.
     """
 
     name: str = Field(description="Boundary name in the design.")

@@ -70,8 +70,13 @@ patch specs in one campaign inherited it. Otherwise:
   model that simulates nonsense, which is the worst failure this tool has.
 - **`on:` must be quoted in YAML** — bare `on` is boolean `true` in YAML 1.1.
   The loader maps it back, but quoting it is clearer.
-- Metal can be a `material: pec` on a sheet **or** a `perfect_e` boundary. Both
-  are legal and real models use both; pick one per object and be consistent.
+- **Metal on a 2D sheet is a boundary, never a material.** HFSS treats the
+  surfaces of a *3D* `pec` body as PEC on its own, so `material: pec` is
+  right for a solid; a sheet conducts only if a boundary says so — give it
+  `perfect_e` (or `finite_conductivity`) and leave its material unset. A
+  `pec` sheet with no boundary is invisible to the solver: the model solves,
+  converges and reports a meaningless S-parameter. `validate_spec` now
+  errors on it; see `knowledge/playbook/environment-compat.md` #17.
 
 ## Airbox clearance
 

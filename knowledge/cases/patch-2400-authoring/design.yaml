@@ -12,8 +12,8 @@
 # So the roles are split rather than the record edited. This file is the same
 # patch — every Balanis dimension identical to the solved record — and it is
 # what `SKILL.md` and `reference/design-spec.md` now point authors at. Two
-# things differ, both because an exemplar that trips the validator is the
-# defect it is supposed to cure:
+# things differed originally, both because an exemplar that trips the validator
+# is the defect it is supposed to cure; a third was added 2026-09-03:
 #
 #   1. `air_pad` is the expression `c0 / (3 * f0)`, not a millimetre literal.
 #      That is lambda0/3 exactly, and it **stays** lambda0/3 if f0 moves — a
@@ -22,6 +22,12 @@
 #      link survives into the variable table.
 #   2. The sweep brackets 2.4 GHz by 0.6 GHz on each side instead of 0.4 on the
 #      near side, so the bracket warning does not fire either.
+#   3. The patch and ground carry `perfect_e` boundaries instead of a `pec`
+#      material. A material makes metal only on a 3D body; a 2D sheet needs a
+#      boundary or it does not exist in the solve. This file taught the wrong
+#      pattern until the `uslot-6300` run inherited it and the maintainer
+#      caught the floating conductors in the UI. Now an ERROR in
+#      `validate_spec`; see environment-compat #17.
 #
 # This case is deliberately **not** in `index.json`: it is not a sixth structure
 # the tool must build, it is the authoring exemplar for the first one. See
@@ -80,14 +86,12 @@ geometry:
 
   - op: sheet
     name: GroundPlane
-    material: metal
     plane: xy
     origin: ["-sub_W/2", "-sub_L/2", "0mm"]
     size: [sub_W, sub_L]
 
   - op: sheet
     name: Patch
-    material: metal
     plane: xy
     origin: ["-patch_W/2", "-patch_L/2", h]
     size: [patch_W, patch_L]
@@ -152,6 +156,17 @@ excitations:
     impedance: 50ohm
 
 boundaries:
+  # Metal is a BOUNDARY on a 2D sheet, never a material: HFSS auto-PECs the
+  # surfaces of a 3D pec body, but a sheet only conducts if a boundary says
+  # so (HFSS guide, Perfect E). See environment-compat #17.
+  - name: GroundMetal
+    type: perfect_e
+    on:
+      object: GroundPlane
+  - name: PatchMetal
+    type: perfect_e
+    on:
+      object: Patch
   - name: Rad1
     type: radiation
     on:

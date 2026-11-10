@@ -183,8 +183,17 @@ Live state:
   from my own build); waited out the 300 s window. Second attempt:
   `analyze` failed on its implicit Save (`GrpcApiError … Save`) at the same
   second AEDT wrote its autosave; a direct save 5 min later succeeded
-  (`17_save_probe.py`). Nothing was submitted either time. Third attempt
-  queued.
+  (`17_save_probe.py`). Third attempt failed identically, which ruled out
+  the autosave theory. ROOT CAUSE: `08_solve.cleanup_stale` globbed the whole
+  project results folder, found the FR-4 design's `.sd` files, and ran
+  `cleanup_solution` on the never-solved Rogers design; that errors, pyAEDT
+  releases the session on the error, and the next call (`Save`) fails. Fixed
+  here by scoping the glob to `<design>.results` / `<design>.asol`
+  (learning-loop candidate: the template has the same defect for any
+  multi-design project). FR-4 results verified intact (2.4 GB).
+- solve #2 (RO4350B variant A) — reason: user "Do A, then B"; submitted
+  2026-11-10 epoch 1794345805, `PASS: solve submitted`. Attempts 1–3 above
+  submitted nothing.
 - Stages: `30_variant_qa.py --tag <tag> --label <text>` (per-variant read +
   `results/s11_variants.png`), `31_set_variable.py feed_W 1.6mm` (variant B).
 

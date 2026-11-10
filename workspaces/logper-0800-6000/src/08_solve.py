@@ -80,8 +80,15 @@ def looks_live(age, procs):
 def cleanup_stale(hfss):
     """Remove stale solve results; skip when only asol skeletons exist."""
     d = results_dir()
-    sds = glob.glob(os.path.join(d, "**", "*.sd"), recursive=True)
-    big_asols = [p for p in glob.glob(os.path.join(d, "*.asol"))
+    # Scoped to THIS design's results. The project holds two designs, and a
+    # project-wide glob finds the other design's solved data, calls it stale,
+    # and runs `cleanup_solution` on a design that has never been solved. That
+    # call errors, pyAEDT releases the desktop session on the error, and the
+    # `Save` inside `analyze` then fails as `GrpcApiError ... Save` - measured
+    # twice on the RO4350B variant before the cause was found.
+    design = ws_common.DESIGN
+    sds = glob.glob(os.path.join(d, design + ".results", "**", "*.sd"), recursive=True)
+    big_asols = [p for p in glob.glob(os.path.join(d, design + ".asol"))
                  if os.path.getsize(p) > 100 * 1024]
     if not (sds or big_asols):
         print("no stale solve results (asol skeletons only) — cleanup skipped", flush=True)

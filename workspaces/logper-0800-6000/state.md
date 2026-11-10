@@ -106,7 +106,19 @@ Desktop alive, pinned in `results/state/aedt_port.txt`; project
 
 ## Session 3 — Solve + QA
 
-Not started.
+- solve #1 — reason: first solve of the gate-passed, sync-verified model;
+  user: "Ok that sounds good. Go for it". Submitted 2026-11-10 (epoch
+  1794332616), `PASS: solve submitted blocking=False setup=Setup1`.
+- QA stage ready: `src/09_plots_qa.py` (S11 vs CST + measured, QA 3–6,
+  `results/s11_vs_cst_meas.png`, `results/s11_comparison.csv`).
+
+Live state:
+- pin: `results/state/aedt_port.txt` = 58678, attached this session, not re-pinned
+- solve status: running (watchdog pid in `solve_watchdog_pid.txt`); last seen
+  stage=adaptive_meshing, initial mesh 41 s
+- solved marker: none yet (`solved.txt` absent — unbanked)
+- next action: on the watchdog's terminal line → `confirm_solve.py` (bank) →
+  `09_plots_qa.py` → outcome, summary, run card, run report
 
 ## Pitfalls / environment notes
 

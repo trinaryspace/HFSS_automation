@@ -65,7 +65,13 @@ never hand-edited; the staged scripts write it.
 
 ## Session 2 — Build
 
-Built 2026-11-10, AWAITING REVIEW GATE 1 (nothing solves until it passes).
+Built 2026-11-10. REVIEW GATE 1 PASSED 2026-11-10 — user, verbatim: "Ok
+that sounds good. Go for it" (after asking whether finite-conductivity
+sheets are valid/standard; answer: yes, t = 35 µm is 15–40 skin depths; kept
+as built). Read-back sync: `spec_acceptance` differences=0 (no UI tweaks);
+`verify_spec_replay.py` (extended here to replay add-ons 20–22 and carry
+`data/`): `PASS: sync replay matches snapshot`.
+Snapshot pointer: `results/state/model_snapshot.json` (= `as_built.json`).
 Desktop alive, pinned in `results/state/aedt_port.txt`; project
 `logper-0800-6000.aedt`, design `LogPer_CoaxFeed_NoCase`.
 
@@ -94,9 +100,9 @@ Desktop alive, pinned in `results/state/aedt_port.txt`; project
      gRPC — script 20 reads dimensions from object bounding boxes instead.
   4. `enable_adaptive_setup_broadband` KeyErrors on a fresh setup — script 22
      seeds `MultipleAdaptiveFreqsSetup` first.
-- Open item for the gate: `verify_spec_replay.py` replays `design.yaml` only,
-  so its diff will show the three add-ons as differences unless the replay
-  also runs scripts 20–22 in the copy.
+- Learning-loop candidate (not proposed yet): the template's
+  `verify_spec_replay.py` replays `design.yaml` only; a Route A + add-on
+  workspace needs the add-on stages replayed too (done locally here).
 
 ## Session 3 — Solve + QA
 

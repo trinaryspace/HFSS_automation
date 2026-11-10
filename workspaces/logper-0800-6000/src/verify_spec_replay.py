@@ -137,7 +137,26 @@ def stamp_copy():
     for name in discover_specs(ws_common.WORKSPACE):
         shutil.copy2(os.path.join(ws_common.WORKSPACE, name),
                      os.path.join(dest, name))
+    # logper-0800-6000: the Route-B add-on stages read `data/` (the captured
+    # CST FR-4 fit), so the copy must carry it or stage 21 cannot replay.
+    data_dir = os.path.join(ws_common.WORKSPACE, "data")
+    if os.path.isdir(data_dir):
+        shutil.copytree(data_dir, os.path.join(dest, "data"))
     return dest
+
+
+def discover_addons(copy):
+    """Route-B add-on stages (`2N_<name>.py`) present in the copy, in order.
+
+    This workspace is Route A plus three stages schema v1 cannot express
+    (feed bend, FR-4 dispersion, setup extras). The live model is the spec
+    AND those stages, so a replay that ran the spec alone would report them
+    as a `sync mismatch` - a false FAIL on a model that was never different.
+    """
+    src = os.path.join(copy, "src")
+    return sorted(n for n in os.listdir(src)
+                  if len(n) > 3 and n[0] == "2" and n[1].isdigit()
+                  and n[2] == "_" and n.endswith(".py"))
 
 
 def resolve_specs(copy, named=None):
@@ -211,6 +230,18 @@ def main(argv=None):
             print("  | " + line, flush=True)
         if rc != 0 or "STAGE_FAILED" in out:
             failed.append(spec)
+    if not failed:
+        for addon in discover_addons(copy):
+            print("  replay add-on:", addon, flush=True)
+            rc, out, err = run(python, [os.path.join(copy, "src", addon)],
+                               cwd=os.path.join(copy, "src"))
+            lines = [l for l in (out or "").strip().splitlines()
+                     if l.startswith(("PASS:", "STAGE_FAILED"))]
+            for line in lines[-1:]:
+                print("  | " + line[:200], flush=True)
+            if rc != 0 or "STAGE_FAILED" in out or not any(
+                    l.startswith("PASS:") for l in lines):
+                failed.append(addon)
     if not failed:
         rc, out, err = run(python, [os.path.join(copy, "src", "capture_state.py")],
                            cwd=os.path.join(copy, "src"))

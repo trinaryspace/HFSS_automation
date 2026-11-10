@@ -46,7 +46,10 @@ PROJECT = os.path.join(WORKSPACE, "logper-0800-6000.aedt")
 RESULTS = os.path.join(WORKSPACE, "results")
 STATE = os.path.join(RESULTS, "state")  # gitignored via workspaces/*/results/
 
-DESIGN = "LogPer_CoaxFeed_NoCase"
+# Two designs share this project: the FR-4 replica (default) and the RO4350B
+# variant. Every stage attaches through here, so one environment variable
+# selects the design for a whole command without touching any script.
+DESIGN = os.environ.get("HFSS_WS_DESIGN") or "LogPer_CoaxFeed_NoCase"
 SOLUTION_TYPE = "Modal"  # explicit, never the default (env-compat #11)
 AEDT_VERSION = "2024.1"
 

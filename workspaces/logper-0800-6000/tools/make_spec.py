@@ -13,6 +13,7 @@ y transverse, z normal. Substrate occupies 0..h. The coax lies on the z=h
 copper (KiCad F.Cu, CST "BOTTOM_RAD"); the far copper is at z=0 (KiCad B.Cu,
 CST "TOP_RAD").
 """
+import sys
 from pathlib import Path
 
 N = 15  # elements per layer: n even on one side, n odd on the other
@@ -305,9 +306,68 @@ setup:
 qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]
 ''']
     text += g
-    target = Path(__file__).resolve().parent.parent / "design.yaml"
-    target.write_text("\n".join(text), encoding="utf-8", newline="\n")
+    body = "\n".join(text)
+    variant = sys.argv[1] if len(sys.argv) > 1 else "fr4"
+    if variant == "fr4":
+        filename = "design.yaml"
+    elif variant == "ro4350b":
+        filename = "design_ro4350b.yaml"
+        body = to_ro4350b(body)
+    else:
+        raise SystemExit(f"unknown variant {variant!r} (fr4 | ro4350b)")
+    target = Path(__file__).resolve().parent.parent / filename
+    target.write_text(body, encoding="utf-8", newline="\n")
     print(f"wrote {target}")
+
+
+RO4350B_NOTE = '''\
+# VARIANT: the same antenna on Rogers RO4350B, 20 mil (0.508 mm).
+# Design "LogPer_RO4350B_20mil" in the same project (HFSS_WS_DESIGN selects it).
+# Identical copper to the FR-4 design: only `h` and the substrate material
+# differ. There is NO CST or measured reference for this variant.
+#   A = this file as written (feed_W 4 mm)
+#   B = the same design with the variable feed_W re-tuned (about 1.6 mm) for a
+#       ~50 ohm paired-strip feed line on the thinner board
+# Add-on stages: 20 (bend) and 22 (setup) apply; 21 (FR-4 dispersion) does not.
+#
+'''
+
+RO4350B_MATERIAL = '''\
+  # Rogers RO4350B, design Dk 3.66 and Df 0.0037 (10 GHz), treated as constant
+  # over 0.4-6.5 GHz. Inline rather than the AEDT library entry so the values
+  # are stated here.
+  ro4350b:
+    permittivity: 3.66
+    loss_tangent: 0.0037
+'''
+
+FR4_MATERIAL = '''\
+  # Placeholder constants (band-centre of CST's fit). src/21_fr4_dispersion.py
+  # replaces them with eps'(f), tand(f) datasets taken from CST's exported
+  # "FR-4 (lossy)" fit: 4.81 @ 0.8 GHz -> 4.65 @ 6 GHz, tand 0.023-0.025.
+  fr4_cst:
+    permittivity: 4.72
+    loss_tangent: 0.024
+'''
+
+
+def to_ro4350b(body: str) -> str:
+    """The FR-4 spec with the substrate swapped. Every replacement must hit
+    exactly once, so a drifted template fails here instead of silently
+    producing an FR-4 board labelled Rogers."""
+    swaps = [
+        ("name: logper-0800-6000\n", "name: logper-ro4350b-20mil\n"),
+        ("  h: 1.5mm                        # dielectric_thickness\n",
+         "  h: 0.508mm                      # RO4350B 20 mil\n"),
+        (FR4_MATERIAL, RO4350B_MATERIAL),
+        ("    material: fr4_cst\n", "    material: ro4350b\n"),
+    ]
+    for old, new in swaps:
+        if body.count(old) != 1:
+            raise SystemExit(f"variant swap expected exactly one {old!r}, "
+                             f"found {body.count(old)}")
+        body = body.replace(old, new)
+    return RO4350B_NOTE + body
 
 
 if __name__ == "__main__":

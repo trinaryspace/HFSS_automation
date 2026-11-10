@@ -43,6 +43,15 @@ def load():
 
 def main():
     hfss = ws_common.attach()
+    # The RO4350B design shares this project and this add-on set. Its
+    # substrate is not FR-4, so there is nothing to make dispersive: say so and
+    # pass, rather than touching a material the design does not use.
+    substrate = hfss.modeler["Substrate"]
+    used = (substrate.material_name or "").lower() if substrate else ""
+    if used != MATERIAL.lower():
+        print("PASS: fr4_dispersion skipped - Substrate is %r, not %r"
+              % (used, MATERIAL), flush=True)
+        return
     freq_hz, eps, tand = load()
 
     for name in (DS_EPS, DS_TAND):          # delete-then-create (ADR 0008)

@@ -173,19 +173,22 @@ def main() -> None:
     g += lines_for_layer("Bot", '"0mm"', -1, "pcb_L")
     g += ['''
   # --- coax, lying on the coax-side feed line, base (x=0) to coax_L ---------
-  - op: cylinder
-    name: InnerCond
-    material: cu_pure
-    axis: x
-    origin: ["0mm", "0mm", zc]
-    radius: r_in
-    height: coax_L
+  # Order matters for idempotency: CoaxDiel keeps InnerCond as a cloned tool,
+  # so on a re-run the stale CoaxDiel must be deleted (by its own op) BEFORE
+  # InnerCond is recreated, or AEDT renames the new one InnerCond_2.
   - op: cylinder
     name: CoaxDiel
     material: ptfe_coax
     axis: x
     origin: ["0mm", "0mm", zc]
     radius: r_d
+    height: coax_L
+  - op: cylinder
+    name: InnerCond
+    material: cu_pure
+    axis: x
+    origin: ["0mm", "0mm", zc]
+    radius: r_in
     height: coax_L
   - op: subtract
     name: CoaxDiel

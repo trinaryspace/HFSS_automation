@@ -578,8 +578,13 @@ def _create_boundary(hfss, spec: DesignSpec, boundary: Boundary) -> None:
     elif boundary.type == "perfect_h":
         hfss.assign_perfecth_to_sheets(target, name=boundary.name)
     elif boundary.type == "finite_conductivity":
-        hfss.assign_finite_conductivity_to_sheets(
-            target, name=boundary.name, conductivity=_number(boundary.conductivity))
+        # `assign_finite_conductivity_to_sheets` does not exist on pyAEDT
+        # 1.3.0 — the `_to_sheets` suffix is the perfect_e/perfect_h pattern
+        # and does not generalise. The real call is `assign_finite_conductivity`
+        # (spine-api.md), which takes objects or faces.
+        hfss.assign_finite_conductivity(
+            target, conductivity=_number(boundary.conductivity),
+            name=boundary.name)
     else:
         raise CompileError(
             f"boundary type {boundary.type!r} has no v1 creator — use an "

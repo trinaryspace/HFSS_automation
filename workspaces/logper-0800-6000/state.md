@@ -5,7 +5,7 @@ Three phase sessions bound by this file (ADR 0007): Clarification → Build
 not from the prior conversation. Machine state lives in `results/state/*.txt` —
 never hand-edited; the staged scripts write it.
 
-## Session 1 — Clarification (PENDING USER CONFIRMATION — nothing builds yet)
+## Session 1 — Clarification (locked)
 
 - Started: 2026-11-10T16:40:00Z
 - Request: faithful HFSS replica of the ByTechLab PCB log-periodic antenna
@@ -60,13 +60,43 @@ never hand-edited; the staged scripts write it.
   6. radiation (indicative until Phase B — CST's far-field data is the
      with-case model): peak directivity 6–7 dBi toward the tip (+x) at
      1–6 GHz; radiation efficiency 0.6–0.8
-- Pending decisions: user confirmation of Recipe, Assumptions 1–7, QA signals.
+- CONFIRMED 2026-11-10 by the user, verbatim: "yep that sounds good, build
+  it" — Recipe, Assumptions 1–7 and QA signals 1–6 are locked.
 
 ## Session 2 — Build
 
-Not started. Route A: `validate_spec` → `precheck` → `compile_spec --launch`
-→ add-on scripts 20/21/22 → `validate_simple` → `capture_state.py` → Review
-gate → read-back sync.
+Built 2026-11-10, AWAITING REVIEW GATE 1 (nothing solves until it passes).
+Desktop alive, pinned in `results/state/aedt_port.txt`; project
+`logper-0800-6000.aedt`, design `LogPer_CoaxFeed_NoCase`.
+
+| Stage | How | Verification line |
+|-------|-----|-------------------|
+| Spec → model | `compile_spec.py` | `PASS: compile_spec spec=logper-0800-6000 stages=9` (geometry ops=48, ports=1, boundaries=3, validate_simple=True) |
+| Feed bend | `src/20_feed_bend.py` | `PASS: feed_bend bend_R=1.500mm r_in=0.255mm bend_bbox_ok united=3->1 substrate_notched` |
+| FR-4 dispersion | `src/21_fr4_dispersion.py` | `PASS: fr4_dispersion rows=60 f=0.05..6GHz eps=4.8856..4.6485 tand=0.0022..0.0249` |
+| Setup extras | `src/22_setup_extras.py` | `PASS: setup_extras solve_type=BroadBand band=0.8GHz..6GHz passes=12 delta_s=0.02 sweeps=[FieldPts, Sweep1] far_field=[FF_Sphere] validate_simple=True` |
+| Snapshot | `src/capture_state.py` | `PASS: capture_state objects=8 boundaries=4 setups=1 sweeps=4 variables=54` |
+| Pictures | `src/13_model_picture.py` | `results/model_{top,bottom,isometric}.jpg` |
+
+- Rebuild order is fixed: `compile_spec` → 20 → 21 → 22 (the compile resets
+  the wire, the FR-4 constants and Setup1; each add-on restores its part).
+- As built: 6 solids (AirBox, Substrate, Shield, CoaxDiel, InnerCond,
+  PortCap) + 2 sheets (TopCu, BotCu); boundaries TopCuMetal, BotCuMetal
+  (finite conductivity), Rad1, P1 (wave port).
+- Pitfalls hit:
+  1. compiler called `assign_finite_conductivity_to_sheets` (absent in pyAEDT
+     1.3.0) — fixed to `assign_finite_conductivity`, the same lines the main
+     checkout already carries uncommitted.
+  2. re-run renamed `InnerCond` → `InnerCond_2`: a kept subtract tool's name
+     stays reserved while the old blank exists. Fixed by op order (CoaxDiel
+     before InnerCond) in `tools/make_spec.py`.
+  3. `variable_manager[...].numeric_value` raises an AEDT API error over
+     gRPC — script 20 reads dimensions from object bounding boxes instead.
+  4. `enable_adaptive_setup_broadband` KeyErrors on a fresh setup — script 22
+     seeds `MultipleAdaptiveFreqsSetup` first.
+- Open item for the gate: `verify_spec_replay.py` replays `design.yaml` only,
+  so its diff will show the three add-ons as differences unless the replay
+  also runs scripts 20–22 in the copy.
 
 ## Session 3 — Solve + QA
 

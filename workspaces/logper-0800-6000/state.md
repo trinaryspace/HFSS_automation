@@ -155,6 +155,39 @@ Live state:
 - next action: outcome → summary + run card → run report; then Phase B
   (PLA case) needs its own Clarification.
 
+## RO4350B 20 mil variant (second design, same project)
+
+- Request 2026-11-10, verbatim: "I don't want the case. please in the same
+  project add another design for rogers RO4350B 20mil substrate. Its going to
+  be the exact same design (log periodic, dipoles) but different substrate."
+  Phase B (PLA case) is CANCELLED.
+- Decision, verbatim: "Do A, then B. But it might also haeve a much bigger
+  effect so be prepared to start a redesign as well (Don't execute yet, just
+  start thinking about it as you simulate A and B)".
+  A = identical copper (feed_W 4 mm). B = same design, feed_W re-tuned to
+  ~1.6 mm (closed-form 48 Ω paired-strip on 0.508 mm). Redesign: THINK ONLY.
+- Design `LogPer_RO4350B_20mil`; select with env `HFSS_WS_DESIGN`. Spec
+  `design_ro4350b.yaml` = `tools/make_spec.py ro4350b` (only `h` 0.508 mm and
+  substrate `ro4350b` 3.66 / 0.0037 differ). Assumption: Dk 3.66 / Df 0.0037
+  proposed, not objected to.
+- Built: `PASS: compile_spec spec=logper-ro4350b-20mil stages=9`; 20 PASS; 21
+  skipped (not FR-4); 22 PASS; validate_simple True. Snapshot
+  `results/state/as_built_ro4350b_A.json`.
+- Gate 2 recorded pass on the user's instruction to simulate; NOT separately
+  reviewed in the UI and no second-desktop replay run for this design.
+- No CST/measured reference exists; the FR-4 HFSS result is the comparison.
+  Estimates before solving: feed line ~22 Ω at 4 mm; band edge up 10–15 %;
+  efficiency ≥ 0.9.
+- FR-4 machine state archived in `results/state/fr4/`.
+- Solve A: first submission refused by the in-flight guard (results 58 s old
+  from my own build); waited out the 300 s window. Second attempt:
+  `analyze` failed on its implicit Save (`GrpcApiError … Save`) at the same
+  second AEDT wrote its autosave; a direct save 5 min later succeeded
+  (`17_save_probe.py`). Nothing was submitted either time. Third attempt
+  queued.
+- Stages: `30_variant_qa.py --tag <tag> --label <text>` (per-variant read +
+  `results/s11_variants.png`), `31_set_variable.py feed_W 1.6mm` (variant B).
+
 ## Pitfalls / environment notes
 
 - `python` on PATH is 3.12 without pydantic/pyAEDT; the repo needs

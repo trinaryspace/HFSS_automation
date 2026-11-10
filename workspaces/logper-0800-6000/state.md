@@ -134,6 +134,16 @@ Desktop alive, pinned in `results/state/aedt_port.txt`; project
      below the 6–7 dBi range, the rest in range; radiation efficiency
      0.755 / 0.736 / 0.745 / 0.749 / 0.758 / 0.761 — all within 0.6–0.8
      (CST with case: 0.767 / 0.740 / 0.629 / 0.705 / 0.668 / 0.693)
+- Radiation cross-check (user asked if the numbers are consistent;
+  `src/11_pattern_check.py`, full sphere takes >10 min to export):
+  gain = D·η and realized gain = gain·(1−|S11|²) hold to 0.02 dB at all six
+  points. Peak is end-fire toward the tip at 1–3 GHz (≤3° off +x), squints
+  10° at 4 GHz, 18° at 5 GHz, and at 6 GHz sits 42° off, out of the board
+  plane (θ 132°, the far-copper side), with boresight only 0.65 dB below the
+  peak. Front/back 14–23 dB. (1/4π)∮D dΩ = 0.98–1.00 at 2–6 GHz but 1.066 at
+  1 GHz → the 1 GHz directivity may be ~0.3 dB high (box is 0.31 λ there).
+  Boresight realized gain HFSS vs CST-with-case (dBi): 5.57/5.58, 4.64/4.95,
+  4.35/3.57, 3.92/4.06, 4.00/4.02, 3.53/4.89.
 - Deliverables in `results/`: `s11_vs_cst_meas.png`, `s11_comparison.csv`,
   `AgentReadout_dB_S_1_1.csv`, `AgentReadout_AntennaParams.csv`,
   `convergence.txt`, `model_{top,bottom,isometric}.jpg`.

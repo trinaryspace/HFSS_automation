@@ -112,13 +112,38 @@ Desktop alive, pinned in `results/state/aedt_port.txt`; project
 - QA stage ready: `src/09_plots_qa.py` (S11 vs CST + measured, QA 3–6,
   `results/s11_vs_cst_meas.png`, `results/s11_comparison.csv`).
 
+- Solve #1 terminal line: `status=complete … profile_status=normal_completion`
+  — initial mesh 41 s, adaptive 6 passes in 6 min 21 s, sweeps 27 min 56 s
+  (2351 s total). Banked: `PASS: confirm_solve banked status=Normal
+  Completion sweep_points=71`.
+- Result QA (`09_plots_qa.py`, `10_convergence_port.py`; S11 route =
+  report-export on the live channel, `get_solution_data` unfilled as usual):
+  1. convergence: PASS — ΔS 0.0154 ≤ 0.02 at pass 6 of 12, 121,574 elements
+     (ΔS by pass: 0.413, 0.152, 0.051, 0.039, 0.015)
+  2. port: P1 excited, one mode; `re(Zo(P1))` reads 50.00 Ω, which is the
+     renormalised value — the raw line impedance (expected 50.3 Ω) NOT read
+  3. passivity: PASS — max S11 −0.72 dB
+  4. band edge: PASS — HFSS 0.808 GHz, CST 0.808 GHz (−0.1 %), measured 0.820
+  5. in-band S11: PASS — per-GHz means HFSS / CST / measured (dB):
+     1–2: −12.22 / −12.29 / −13.34; 2–3: −10.55 / −11.03 / −11.79;
+     3–4: −8.88 / −9.69 / −11.22; 4–5: −8.71 / −8.16 / −10.54;
+     5–6: −7.49 / −8.52 / −9.33 (largest gap to CST 1.03 dB);
+     worst in-band −6.32 dB at 5.80 GHz (CST −6.84, measured −5.21)
+  6. radiation (indicative; CST reference is WITH case): peak directivity
+     6.94 / 6.26 / 6.09 / 5.92 / 6.60 / 6.35 dBi at 1…6 GHz — 4 GHz is 0.08 dB
+     below the 6–7 dBi range, the rest in range; radiation efficiency
+     0.755 / 0.736 / 0.745 / 0.749 / 0.758 / 0.761 — all within 0.6–0.8
+     (CST with case: 0.767 / 0.740 / 0.629 / 0.705 / 0.668 / 0.693)
+- Deliverables in `results/`: `s11_vs_cst_meas.png`, `s11_comparison.csv`,
+  `AgentReadout_dB_S_1_1.csv`, `AgentReadout_AntennaParams.csv`,
+  `convergence.txt`, `model_{top,bottom,isometric}.jpg`.
+
 Live state:
-- pin: `results/state/aedt_port.txt` = 58678, attached this session, not re-pinned
-- solve status: running (watchdog pid in `solve_watchdog_pid.txt`); last seen
-  stage=adaptive_meshing, initial mesh 41 s
-- solved marker: none yet (`solved.txt` absent — unbanked)
-- next action: on the watchdog's terminal line → `confirm_solve.py` (bank) →
-  `09_plots_qa.py` → outcome, summary, run card, run report
+- pin: `results/state/aedt_port.txt` = 58678, desktop alive, project open
+- solve status: complete, normal completion
+- solved marker: `solved.txt` present — banked
+- next action: outcome → summary + run card → run report; then Phase B
+  (PLA case) needs its own Clarification.
 
 ## Pitfalls / environment notes
 

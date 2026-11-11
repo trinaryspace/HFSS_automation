@@ -280,6 +280,44 @@ Live state:
   just try to stay where we can use that 300mm cable." ⇒ practical ceiling
   ≈ 285 mm of board (300 mm pigtail, ≈ 295 mm after cutting the U.FL end,
   less slack); k_el ≤ ≈ 1.40. Prefer shorter where it costs nothing.
+- solve #3 (variant B) STOPPED by me at 21:20 after ≈ 2 h (clean stop,
+  `PASS: stop_solve … returned='stopped'`). Evidence: 23 sweep points done
+  (≈ ⅓ of A's pace), only 2 big `hf3d` (14.7 GB each) because of memory
+  pressure, my background waiter reaped for low memory, free disk swinging
+  2.1–4.3 GB (solver working files + pagefile at 43.7 GB). After the stop:
+  RAM free 38 GB, disk free 23.8 GB. B was also unrepresentative (RG316's
+  2.09 mm shield on a 1.6 mm trace). Its partial data is cleared
+  (`19_cleanup_solution.py`); design `LogPer_RO4350B_20mil` is left UNSOLVED
+  with feed_W = 1.6 mm. Variant B has NO result.
+- TUNING MODE for redesign iterations: `LOGPER_TUNING=1` → script 22 makes
+  the broadband setup and keeps only the interpolating S11 sweep (no
+  FieldPts, no far-field sphere); spec variable `pad_div` = 6 → radiation box
+  at λ/6 of 0.8 GHz (62 mm). Final verification: pad_div 4, tuning off.
+- v2 iteration 1 (`LogPer_RO4350B_v2`): k_el 1.15, feed_Wt = feed_Wb =
+  1.6 mm, micro-coax 0.31 / 0.92 / 1.15 mm; board 234.6 × 178 mm. Built:
+  compile PASS (9 stages), 20 PASS (bend 1.0 mm), 21 skipped, 22 PASS
+  TUNING, validate_simple True.
+  solve #4 — reason: redesign iteration 1 under the standing authorisation;
+  submitted 21:32 (epoch 1794364346). NOTE: `poll_solve` is not multi-design
+  aware, so its verdict is ignored; completion is read from the design's own
+  profile Status (`…/tmp/wait_solve.ps1`, foreground, 9-minute chunks).
+- solve #4 RESULT (v2 it1): Normal Completion 23:06, 1 h 34 min (adaptive
+  15 min, 8 passes, ΔS 0.0198, 143,877 elements, 1.03 M unknowns, 5.8 GB per
+  process; 96 sweep points). Banked (`solved_v2_it1.txt`). Numbers
+  (`results/v2_it1/`): first −10 dB crossing 0.790 GHz; per-GHz mean S11
+  −15.37 / −13.79 / −12.89 / −12.65 / −10.41 dB; 89 % of 1–6 GHz ≤ −10 dB;
+  worst −7.65 dB at 1.85 GHz; spikes near 1.55, 1.85, 2.43, 3.52 GHz and a
+  flat −9.7 dB over 5.3–6 GHz. Already better than the FR-4 original.
+  ⇒ k_el 1.15 puts the edge at 0.79 GHz: KEEP 1.15 (board 234.6 mm).
+- Diagnosis (`32_tip_impedance.py`, complex S11 de-embedded by the coax's
+  233.6 mm at ε_r 1.70): locus centre per band = 39+9j, 40+12j, 43+18j,
+  51+23j, 58+25j, 82+21j Ω (0.8–1 … 5–6 GHz) ⇒ ≈ 1 nH series inductance at
+  the tip = the centre conductor's loop from the coax end over the board
+  edge. Fix: shunt C = L/Z0² ≈ 0.4 pF = 6.3 mm² extra strip overlap.
+- v3 (`LogPer_RO4350B_v3`, spec `design_ro4350b_v3.yaml`) = v2 + tip pad
+  (`pad_L` 3 mm × `pad_W` 3.7 mm on both layers, last 3 mm before the coax
+  end). Built: compile PASS (50 ops), 20 PASS, 22 PASS TUNING,
+  validate_simple True. solve #5 — reason: iteration 2, tip-pad matching.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions
   asked 2026-11-10): recommend scale-and-retune of this geometry — one scale
   factor on the element variables from the simulated band-edge shift, plus

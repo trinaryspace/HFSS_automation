@@ -319,8 +319,15 @@ qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]
         feed_wt = sys.argv[3] if len(sys.argv) > 3 else "1.6mm"
         feed_wb = sys.argv[4] if len(sys.argv) > 4 else feed_wt
         body = to_ro4350b_v2(to_ro4350b(body), k_el, feed_wt, feed_wb)
+    elif variant == "ro4350b_v3":
+        filename = "design_ro4350b_v3.yaml"
+        k_el = sys.argv[2] if len(sys.argv) > 2 else "1.15"
+        feed_wt = sys.argv[3] if len(sys.argv) > 3 else "1.6mm"
+        feed_wb = sys.argv[4] if len(sys.argv) > 4 else feed_wt
+        body = to_tip_pad(to_ro4350b_v2(to_ro4350b(body), k_el, feed_wt, feed_wb))
     else:
-        raise SystemExit(f"unknown variant {variant!r} (fr4 | ro4350b | ro4350b_v2)")
+        raise SystemExit(
+            f"unknown variant {variant!r} (fr4 | ro4350b | ro4350b_v2 | ro4350b_v3)")
     target = Path(__file__).resolve().parent.parent / filename
     target.write_text(body, encoding="utf-8", newline="\n")
     print(f"wrote {target}")
@@ -483,6 +490,41 @@ def to_ro4350b_v2(body: str, k_el: str, feed_wt: str, feed_wb: str) -> str:
     if "feed_W/" in body or "feed_W]" in body:
         raise SystemExit("v2: a reference to the old feed_W variable survived")
     return V2_NOTE + body
+
+
+V3_NOTE = '''\
+# REDESIGN v3 = v2 + a matching pad at the tip - design "LogPer_RO4350B_v3".
+# Why: v2 iteration 1, de-embedded to the tip, sits near 50 ohm in resistance
+# but carries +9 to +25 ohm of reactance rising with frequency - about 1 nH in
+# series, the centre conductor's loop from the coax end over the board tip.
+# A shunt capacitance C = L / Z0^2 = 0.4 pF at the same place cancels it to
+# first order. On 0.508 mm RO4350B that is 6.3 mm^2 of extra overlap between
+# the two feed strips: both are widened from feed_W* to pad_W over the last
+# pad_L before the coax end.  C_extra = eps0 * 3.66 * (pad_W - feed_W) * pad_L / h
+#
+'''
+
+
+def to_tip_pad(body: str) -> str:
+    """v2 with a widened feed-strip section (TopPad / BotPad) at the tip."""
+    body = body[len(V2_NOTE):]
+    body = _sub_once(r"^name: logper-ro4350b-v2\n", "name: logper-ro4350b-v3\n", body)
+    body = _sub_once(r'^(  coax_L: "pcb_L - feed_cut"\n)',
+                     '  coax_L: "pcb_L - feed_cut"\n'
+                     "  pad_L: 3mm                      # tip matching pad, along the board\n"
+                     "  pad_W: 3.7mm                    # tip matching pad, across the board\n",
+                     body)
+    top = ('  - op: sheet\n    name: TopPad\n    plane: xy\n'
+           '    origin: ["coax_L - pad_L", "-pad_W/2", h]\n'
+           '    size: [pad_L, pad_W]\n'
+           '  - op: unite\n    name: TopCu\n    with: [TopPad, ')
+    bot = ('  - op: sheet\n    name: BotPad\n    plane: xy\n'
+           '    origin: ["coax_L - pad_L", "-pad_W/2", "0mm"]\n'
+           '    size: ["pad_L + feed_cut", pad_W]\n'
+           '  - op: unite\n    name: BotCu\n    with: [BotPad, ')
+    body = _sub_once(r"  - op: unite\n    name: TopCu\n    with: \[", top, body)
+    body = _sub_once(r"  - op: unite\n    name: BotCu\n    with: \[", bot, body)
+    return V3_NOTE + V2_NOTE + body
 
 
 if __name__ == "__main__":

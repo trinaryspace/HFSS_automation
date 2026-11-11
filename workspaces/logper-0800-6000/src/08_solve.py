@@ -79,6 +79,14 @@ def looks_live(age, procs):
 
 def cleanup_stale(hfss):
     """Remove stale solve results; skip when only asol skeletons exist."""
+    # A variant solved by changing a variable must NOT clean: `cleanup_solution`
+    # deletes every variation's solution on the design, so solving variant B
+    # (feed_W 1.6 mm) erased variant A's solved fields from the project. Set
+    # SOLVE_KEEP_SOLUTIONS=1 to solve a new variation alongside the old ones.
+    if os.environ.get("SOLVE_KEEP_SOLUTIONS") == "1":
+        print("SOLVE_KEEP_SOLUTIONS=1 - existing solutions kept, cleanup skipped",
+              flush=True)
+        return
     d = results_dir()
     # Scoped to THIS design's results. The project holds two designs, and a
     # project-wide glob finds the other design's solved data, calls it stale,

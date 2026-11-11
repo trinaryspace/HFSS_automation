@@ -220,6 +220,20 @@ Live state:
 - Variant B: `PASS: set_variable … feed_W=1.6mm (was 4mm) validate_simple=True`;
   solve #3 submission queued behind the guard window (reason: user "Do A,
   then B").
+- solve #3 (variant B, feed_W 1.6 mm) — reason: user "Do A, then B" and,
+  mid-turn, "Execute on variant B now"; submitted 2026-11-10 epoch
+  1794356373, `PASS: solve submitted`. LOSS: the stage printed
+  `cleanup_solution: True` first — it deleted variant A's solved fields from
+  the Rogers design (cleanup removes all variations). A's exported numbers
+  survive in `results/ro4350b_A/` and its bank record in
+  `solved_ro4350b_A.txt`; A's fields would need a re-solve. `08_solve.py` now
+  honours `SOLVE_KEEP_SOLUTIONS=1` to prevent a repeat. FR-4 untouched.
+- Redesign targets, user 2026-11-10: band 0.8–6 GHz; length < 250 mm, width
+  free; S11 < −10 dB; single-lobe beam; propose a coax and WAIT for
+  confirmation; explore other feeds; stock is 6.6 mil or 20 mil RO4350B, 1 oz
+  both sides; it will be fabricated; free to change the design, original as
+  baseline. Paper: `knowledge/reference-papers/log_periodic_reference.pdf`
+  (main checkout, loose in the root — not in a project folder).
 - Redesign (THINK ONLY until the user answers the 7 clarification questions
   asked 2026-11-10): recommend scale-and-retune of this geometry — one scale
   factor on the element variables from the simulated band-edge shift, plus

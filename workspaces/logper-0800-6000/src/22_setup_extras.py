@@ -38,7 +38,11 @@ SETUP = "Setup1"
 FIELD_SWEEP = "FieldPts"
 SPHERE = "FF_Sphere"
 F_LO, F_HI = "0.8GHz", "6GHz"
-MAX_PASSES, MAX_DELTA_S = 12, 0.02
+# LOGPER_MAX_PASSES caps the adaptive passes for a tuning iteration: each
+# extra pass grows the mesh ~25 %, and passes 8 -> 9 took the per-point memory
+# from ~6 GB to ~11 GB on the Rogers board. The final verification uses 12.
+MAX_PASSES = int(os.environ.get("LOGPER_MAX_PASSES") or 12)
+MAX_DELTA_S = 0.02
 
 
 def main():

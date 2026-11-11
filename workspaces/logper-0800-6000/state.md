@@ -330,6 +330,19 @@ Live state:
   has a land): raises the feed-line impedance toward ≈ 65 Ω to lift the
   37 Ω centre to 50. Variable edit, `SOLVE_KEEP_SOLUTIONS=1` (it2 kept).
   solve #6 — reason: iteration 3, feed impedance; submitted 01:24.
+- solve #6 ABORTED by me at 01:47 (`18_stop_solve.py --abort`), 22 min in,
+  during adaptive passes: the low-disk tripwire fired at 1.0 GB free with
+  three `hf3d` at 11.3 GB committed each. After the abort: disk free 14.2 GB
+  (pagefile only 24.9 → 21.3 GB, so ≈ 10 GB was the solver's temporary
+  files). Lesson: pass 9 doubles the per-process footprint (6 → 11 GB).
+  New knobs: `LOGPER_MAX_PASSES` (script 22) and `SOLVE_CORES` (08_solve).
+- solve #7 — reason: iteration 3 resubmitted with `LOGPER_MAX_PASSES=8`
+  (default parallelism, `SOLVE_KEEP_SOLUTIONS=1`); submitted 01:54, disk
+  free 19.2 GB. Tuning results at 8 passes are less converged (it1 reached
+  ΔS 0.0198 at pass 8); the final verification must run 12 passes with
+  `SOLVE_CORES=2`.
+- DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
+  Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions
   asked 2026-11-10): recommend scale-and-retune of this geometry — one scale
   factor on the element variables from the simulated band-edge shift, plus

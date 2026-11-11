@@ -119,7 +119,16 @@ def submit(hfss, setup=SOLVE_SETUP, now=None):
     is appended, so the gate never names a submission that did not happen.
     """
     t0 = time.time()
-    rv = hfss.analyze(setup=setup, blocking=False)
+    # SOLVE_CORES caps how many frequency points HFSS solves at once (it runs
+    # one core per point). Each parallel point on the thin Rogers board holds
+    # ~11 GB committed plus gigabytes of temporary files; four at once took the
+    # system disk to 1 GB free (2026-11-11). Unset = AEDT's own HPC default.
+    cores = os.environ.get("SOLVE_CORES")
+    if cores:
+        print("SOLVE_CORES=%s - capping parallel frequency points" % cores, flush=True)
+        rv = hfss.analyze(setup=setup, cores=int(cores), blocking=False)
+    else:
+        rv = hfss.analyze(setup=setup, blocking=False)
     print("analyze(blocking=False) -> %s submission in %.1f s" % (rv, time.time() - t0),
           flush=True)
     if not rv:

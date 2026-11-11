@@ -318,6 +318,18 @@ Live state:
   (`pad_L` 3 mm × `pad_W` 3.7 mm on both layers, last 3 mm before the coax
   end). Built: compile PASS (50 ops), 20 PASS, 22 PASS TUNING,
   validate_simple True. solve #5 — reason: iteration 2, tip-pad matching.
+- solve #5 RESULT (v3 it2, tip pad): Normal Completion 01:17, ≈ 2 h (9
+  adaptive passes, ΔS 0.0128, 182,997 elements; 96 sweep points). Banked
+  (`solved_v3_it2.txt`). Numbers (`results/v3_it2/`): first −10 dB crossing
+  0.783 GHz; per-GHz mean S11 −15.77 / −15.64 / −16.49 / −14.86 / −15.56 dB;
+  99 % of 1–6 GHz ≤ −10 dB; worst −8.21 dB at 1.54 GHz (one narrow spike).
+  Outside the band S11 climbs to ≈ −6 dB by 6.5 GHz. Tip impedance: locus
+  centre 36–39 Ω with +3…+8j Ω in every band ⇒ the pad cancelled the
+  inductance; what is left is a RESISTIVE offset, antenna ≈ 37 Ω.
+- it3 = v3 with `feed_Wb` 0.8 mm (was 1.6; top stays 1.6 so the 1.15 mm braid
+  has a land): raises the feed-line impedance toward ≈ 65 Ω to lift the
+  37 Ω centre to 50. Variable edit, `SOLVE_KEEP_SOLUTIONS=1` (it2 kept).
+  solve #6 — reason: iteration 3, feed impedance; submitted 01:24.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions
   asked 2026-11-10): recommend scale-and-retune of this geometry — one scale
   factor on the element variables from the simulated band-edge shift, plus

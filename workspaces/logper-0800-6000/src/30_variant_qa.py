@@ -37,6 +37,9 @@ QUANTITIES = ["PeakDirectivity", "RadiationEfficiency", "PeakRealizedGain", "Pea
 # Fixed colour per variant (validated categorical order: blue, orange, aqua).
 STYLE = {"fr4": ("#2a78d6", "FR-4 1.5 mm (replica)"),
          "ro4350b_A": ("#eb6834", None), "ro4350b_B": ("#1baf7a", None)}
+# Later variants take the palette's next slots in order (yellow, magenta,
+# green, violet, red) - never a generated hue.
+EXTRA = ["#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 SURFACE, INK, MUTED, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#dddcd6"
 
 
@@ -104,9 +107,19 @@ def plot(curves, out):
 
     fig, ax = plt.subplots(figsize=(10, 5.2), facecolor=SURFACE)
     ax.set_facecolor(SURFACE)
+    # Colour follows the variant, in the palette's fixed order: a variant keeps
+    # its slot however many are added after it. The baseline and the newest
+    # variant are drawn heavier so the eye finds "before" and "now" first.
+    order = [t for t in curves if t != "fr4"]
+    newest = order[-1] if order else None
     for tag, (label, freqs, s11) in curves.items():
-        color = STYLE.get(tag, ("#6250d6", None))[0]
-        ax.plot(freqs, s11, lw=2.0, color=color, label=label)
+        if tag in STYLE:
+            color = STYLE[tag][0]
+        else:
+            color = EXTRA[(order.index(tag)) % len(EXTRA)]
+        heavy = tag in ("fr4", newest)
+        ax.plot(freqs, s11, lw=2.2 if heavy else 1.2, color=color, label=label,
+                alpha=1.0 if heavy else 0.75, zorder=3 if heavy else 2)
     ax.axhline(-10.0, lw=1, color=MUTED, ls=(0, (4, 3)), zorder=1)
     ax.annotate("-10 dB", (0.42, -10.0), xytext=(0, 4), textcoords="offset points",
                 fontsize=8.5, color=MUTED)

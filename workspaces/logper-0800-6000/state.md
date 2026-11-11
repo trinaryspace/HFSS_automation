@@ -358,6 +358,20 @@ Live state:
   pattern data yet). feed_Wb back to 1.6 mm restores it2's stored variation;
   script 22 non-tuning adds FieldPts (1…6 GHz) + FF_Sphere, pass cap 9;
   `SOLVE_KEEP_SOLUTIONS=1`, `SOLVE_CORES=2`; submitted 03:08.
+- solve #8 LOST: the laptop crashed ≈ 03:28–03:40 on 2026-11-11 (last
+  profile write 03:28, during adaptive passes; disk 14.6 GB free and the
+  solver between passes at my last reading). Cause unknown; the user called
+  it an unrelated issue. Reboot 14:38. All tracked work was already pushed.
+- RESUME 2026-11-11 16:24, user verbatim: "laptop is now stable, restart all
+  the simulations and continue your work". Fresh AEDT (stale pin 58678
+  cleared → port 64795, pid 21600; stale lock removed on open). FR-4
+  solution intact (convergence ΔS 0.0154, Converged). AEDT then went
+  unresponsive ≈ 20 min recomputing the 98,826-row far-field report left in
+  the FR-4 design; that report is now deleted (`24_delete_report.py`; its CSV
+  is kept). v3's interrupted partial solution cleared.
+- solve #9 — reason: verification of it2 (v3, feed_Wb 1.6 mm) WITH fields:
+  FieldPts 1…6 GHz + FF_Sphere, pass cap 9, pad_div 6, `SOLVE_CORES=3`;
+  submitted 16:53, disk free 34 GB.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

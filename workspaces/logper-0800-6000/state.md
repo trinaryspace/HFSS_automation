@@ -234,6 +234,22 @@ Live state:
   both sides; it will be fabricated; free to change the design, original as
   baseline. Paper: `knowledge/reference-papers/log_periodic_reference.pdf`
   (main checkout, loose in the root — not in a project folder).
+- Paper read 2026-11-10 (analyze-papers note
+  `Literature_analyzer/agent_out/design-a-compact-printed-log-periodic-…-78bcaf63.md`):
+  Carrel's six steps (σ = 0.243τ − 0.051; N, B_s, B_ar eqs 2–4; L1 = λ/2 at
+  f_lower; eqs 6–11), then lengths/widths/spacings ÷ √ε_eff with a MICROSTRIP
+  ε_eff (eq 12, printed with "+" in both terms). Its τ and σ are NOT stated;
+  the final Table 1 is CST-optimised and not a constant ratio (arm lengths
+  77.5, 65, 60, 55, 50, 45, 40, 31.8, 27.5, 21.2, 15, 10 mm). FR-4 ε_r 4.3,
+  tanδ 0.025, 1.58 mm. Feed: connector AT THE TIP, no coax on the boom;
+  unequal strip widths 3.5 mm (top) / 5 mm (bottom) act as the balun; an extra
+  10 mm plain dipole at the tip pulled S11 under −10 dB near 2.4 GHz.
+  dims cross-check: eq 5 + eq 12 reproduce the paper's own L1 (156 vs 155 mm,
+  reading L as one arm) — consistent for ITS board. INCONSISTENT as a
+  substrate-scaling rule: eq 12 predicts MORE loading on a thinner board
+  (ε_eff 3.4 on 20 mil RO4350B vs 3.7 on its FR-4), but variant A shows the
+  band edge moving UP (0.81 → ~1.09 GHz), i.e. less loading. Do not scale to
+  Rogers with eq 12; use the simulated shift.
 - Redesign (THINK ONLY until the user answers the 7 clarification questions
   asked 2026-11-10): recommend scale-and-retune of this geometry — one scale
   factor on the element variables from the simulated band-edge shift, plus

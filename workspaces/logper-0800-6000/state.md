@@ -194,6 +194,37 @@ Live state:
 - solve #2 (RO4350B variant A) — reason: user "Do A, then B"; submitted
   2026-11-10 epoch 1794345805, `PASS: solve submitted`. Attempts 1–3 above
   submitted nothing.
+- solve #2 watchdog anomaly — terminal line `status=stalled stage=finalizing
+  elapsed_s=934 … fsu=71`. One evidence read: 5 `hf3d` processes live,
+  Rogers profile `DV104_S101_V139.profile` written 18 s earlier, no terminal
+  Status, 0 Rogers SU files. Verdict: FALSE STALL — `poll_solve` counts
+  stage artifacts project-wide, so the FR-4 design's 71 SU files made it
+  believe the sweep was over. Solve left running, NOT resubmitted; completion
+  is being read from the Rogers design's own profile Status. (Learning-loop
+  candidate: watchdog is not multi-design aware.)
+- solve #2 RESULT (variant A): Normal Completion, stop 19:09:48; adaptive
+  27 min 18 s, sweep 2 h 18 min 16 s; banked (`solved_ro4350b_A.txt`, 86
+  sweep points). Converged at pass 9 of 12, ΔS 0.0116, 258,669 elements
+  (FR-4: pass 6, 121,574). Pass-1 mesh is the SAME size as FR-4's (40,277 vs
+  40,191): the cost is three extra adaptive passes, not a bigger initial
+  mesh — my earlier "twice as big from the first pass" was wrong (I compared
+  different pass numbers), as was "both converged in six passes".
+  My profile waiter's "no terminal status" was a regex bug (escaped quotes).
+- Variant A numbers (`results/ro4350b_A/`, `results/s11_variants.png`):
+  first −10 dB crossing 1.091 GHz (FR-4 0.808); per-GHz mean S11 −7.49 /
+  −7.05 / −6.66 / −6.84 / −6.40 dB; worst in-band −1.66 dB at 1.36 GHz; only
+  9 % of 1–6 GHz at or below −10 dB; S11 spikes to ≈ −2 dB every ≈ 0.38 GHz
+  (standing wave on the mismatched feed line). Radiation efficiency 0.84 /
+  0.89 / 0.86 / 0.80 / 0.86 / 0.86 at 1…6 GHz (FR-4 0.74–0.76); peak
+  directivity 5.13 / 6.83 / 7.13 / 5.87 / 6.75 / 7.74 dBi.
+- Variant B: `PASS: set_variable … feed_W=1.6mm (was 4mm) validate_simple=True`;
+  solve #3 submission queued behind the guard window (reason: user "Do A,
+  then B").
+- Redesign (THINK ONLY until the user answers the 7 clarification questions
+  asked 2026-11-10): recommend scale-and-retune of this geometry — one scale
+  factor on the element variables from the simulated band-edge shift, plus
+  feed width; RG316's 2.09 mm shield caps the feed line near 40 Ω on 20 mil.
+  The cited paper could not be fetched (MDPI 403, ZCU repository 503).
 - Stages: `30_variant_qa.py --tag <tag> --label <text>` (per-variant read +
   `results/s11_variants.png`), `31_set_variable.py feed_W 1.6mm` (variant B).
 

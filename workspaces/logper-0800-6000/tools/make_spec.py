@@ -466,6 +466,13 @@ def to_ro4350b_v2(body: str, k_el: str, feed_wt: str, feed_wb: str) -> str:
                      f'  pcb_L: "xc{N-1} + tip_len"\n'
                      '  pcb_Wbase: "2*bt_L1 + 40mm"     # baseline: 160 = 2*60 + 40\n'
                      '  coax_L: "pcb_L - feed_cut"\n', body)
+    # Radiation-box clearance as a variable divisor: lambda/pad_div at f_lo.
+    # 6 (62 mm) while tuning the match - it roughly halves the air volume and
+    # the memory per frequency point; 4 (94 mm, the replica's value) for the
+    # final verification, set with `31_set_variable.py pad_div 4`.
+    body = _sub_once(r'^  air_pad: [^\n]*\n',
+                     "  pad_div: 6                      # 6 = tuning, 4 = final verification\n"
+                     '  air_pad: "c0 / (pad_div * f_lo)"\n', body)
     body = _sub_once(r"\nmaterials:\n.*?\n\ngeometry:", V2_MATERIALS + "\n\ngeometry:", body)
     body = _sub_once(r"material: ptfe_coax\n", "material: fep_coax\n", body)
     body = _sub_once(r"material: cu_pure\n", "material: cu_coax\n", body, count=3)

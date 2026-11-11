@@ -276,6 +276,10 @@ Live state:
   every completed solve; `SOLVE_KEEP_SOLUTIONS=1` whenever a design already
   holds a solution worth keeping; never touch the FR-4 design's results.
   Target: 0.8–6 GHz, S11 < −10 dB, single forward lobe, length < 250 mm.
+  LENGTH RELAXED 2026-11-10, verbatim: "250mm isn't a super hard requirement,
+  just try to stay where we can use that 300mm cable." ⇒ practical ceiling
+  ≈ 285 mm of board (300 mm pigtail, ≈ 295 mm after cutting the U.FL end,
+  less slack); k_el ≤ ≈ 1.40. Prefer shorter where it costs nothing.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions
   asked 2026-11-10): recommend scale-and-retune of this geometry — one scale
   factor on the element variables from the simulated band-edge shift, plus

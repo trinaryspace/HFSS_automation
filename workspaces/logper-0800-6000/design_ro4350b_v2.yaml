@@ -82,7 +82,8 @@ variables:
   wire_tail: 0.25mm               # cnd_off1: wire protrudes below the far copper
   cap_L: 1mm                      # PEC cap backing the internal wave port
   zc: "h + coax_zoff"
-  air_pad: "c0 / (4 * f_lo)"      # lambda/4 at the LOWEST frequency (93.7 mm)
+  pad_div: 6                      # 6 = tuning, 4 = final verification
+  air_pad: "c0 / (pad_div * f_lo)"
   s0: 1
   s1: "s0 * tau"
   s2: "s1 * tau"

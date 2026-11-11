@@ -341,6 +341,23 @@ Live state:
   free 19.2 GB. Tuning results at 8 passes are less converged (it1 reached
   ΔS 0.0198 at pass 8); the final verification must run 12 passes with
   `SOLVE_CORES=2`.
+- solve #7 RESULT (v3 it3, feed_Wb 0.8 mm, 8-pass cap): Normal Completion
+  02:58, 64 min; NOT converged (ΔS 0.046 at pass 8, 140,440 elements).
+  Banked (`solved_v3_it3.txt`). WORSE than it2: per-GHz mean S11 −11.95 /
+  −11.31 / −10.67 / −10.72 / −13.66 dB; 61 % of 1–6 GHz ≤ −10 dB; worst
+  −4.31 dB at 1.38 GHz. Tip locus: centre barely moved (33–45 Ω) but mean
+  radius 0.07 → 0.27 ⇒ unequal strips create a standing wave. REJECTED;
+  `feed_Wb` restored to 1.6 mm. it2 stays the best.
+- it2's violations of −10 dB inside 0.8–6 GHz: 1.53–1.55 GHz (peak −8.21 dB)
+  and one point at 1.88 GHz (−9.94 dB). Both ≈ 2× the half-wave resonance
+  of the two largest elements (0.79 GHz and 0.79/τ) ⇒ full-wave
+  re-resonance of the big elements, the classic LPDA anomaly. Candidate
+  cures: matched termination at the base end of the feed line (via + ≈ 50 Ω
+  resistor), or a shorted stub there. NOT yet tried.
+- solve #8 — reason: radiation check of it2 (no Rogers design has any
+  pattern data yet). feed_Wb back to 1.6 mm restores it2's stored variation;
+  script 22 non-tuning adds FieldPts (1…6 GHz) + FF_Sphere, pass cap 9;
+  `SOLVE_KEEP_SOLUTIONS=1`, `SOLVE_CORES=2`; submitted 03:08.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

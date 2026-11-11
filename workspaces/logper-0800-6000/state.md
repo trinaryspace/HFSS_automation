@@ -250,7 +250,23 @@ Live state:
   (ε_eff 3.4 on 20 mil RO4350B vs 3.7 on its FR-4), but variant A shows the
   band edge moving UP (0.81 → ~1.09 GHz), i.e. less loading. Do not scale to
   Rogers with eq 12; use the simulated shift.
-- Redesign (THINK ONLY until the user answers the 7 clarification questions
+- REDESIGN v2 AUTHORISED 2026-11-10, user verbatim: "Ok if you think it'll
+  work proceed with the redesign". Decisions: 20 mil board ("whichever is
+  easier"); coax = Taoglas CAB.01061 (SMA(F) bulkhead to MHF I, 300 mm of
+  1.37 mm micro-coax, $5.35, Digi-Key), jacket stripped, braid 1.15 mm.
+  Spec `design_ro4350b_v2.yaml` = `tools/make_spec.py ro4350b_v2 <k_el>
+  <feed_Wt> [feed_Wb]`; design name `LogPer_RO4350B_v2`. validate_spec 0
+  errors. Placeholders k_el 1.15 (board 234.6 mm; limit 250 mm ⇒ k_el ≤ 1.228)
+  and feed 1.6 mm — BOTH to be set from variant B's result before building.
+  Model assumptions: coax dielectric ε_r 1.70 so the datasheet radii make
+  50 Ω; coax conductor σ 2.6e7 so modelled loss matches the datasheet's
+  3.7 dB/m at 6 GHz; bend_R 1.0 mm. First iteration changes ONLY scale, feed
+  width and coax; the paper's extra tip dipole and unequal strips are held
+  as second-step levers so effects stay attributable.
+  Gate plan: tuning iterations are solved without a stop each (2.5–3 h per
+  solve); the visual Review gate is held on the final candidate before
+  fabrication. Not yet built — the desktop is solving variant B.
+- (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions
   asked 2026-11-10): recommend scale-and-retune of this geometry — one scale
   factor on the element variables from the simulated band-edge shift, plus
   feed width; RG316's 2.09 mm shield caps the feed line near 40 Ω on 20 mil.

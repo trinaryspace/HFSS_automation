@@ -313,8 +313,14 @@ qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]
     elif variant == "ro4350b":
         filename = "design_ro4350b.yaml"
         body = to_ro4350b(body)
+    elif variant == "ro4350b_v2":
+        filename = "design_ro4350b_v2.yaml"
+        k_el = sys.argv[2] if len(sys.argv) > 2 else "1.15"
+        feed_wt = sys.argv[3] if len(sys.argv) > 3 else "1.6mm"
+        feed_wb = sys.argv[4] if len(sys.argv) > 4 else feed_wt
+        body = to_ro4350b_v2(to_ro4350b(body), k_el, feed_wt, feed_wb)
     else:
-        raise SystemExit(f"unknown variant {variant!r} (fr4 | ro4350b)")
+        raise SystemExit(f"unknown variant {variant!r} (fr4 | ro4350b | ro4350b_v2)")
     target = Path(__file__).resolve().parent.parent / filename
     target.write_text(body, encoding="utf-8", newline="\n")
     print(f"wrote {target}")
@@ -368,6 +374,108 @@ def to_ro4350b(body: str) -> str:
                              f"found {body.count(old)}")
         body = body.replace(old, new)
     return RO4350B_NOTE + body
+
+
+V2_NOTE = '''\
+# REDESIGN v2 for RO4350B 20 mil - design "LogPer_RO4350B_v2".
+# Targets (user, 2026-11-10): 0.8-6 GHz, S11 below -10 dB, one forward lobe,
+# board under 250 mm long (width free), to be fabricated on 20 mil RO4350B
+# with 1 oz copper. The FR-4 original is the baseline; changes from it:
+#   k_el      one scale factor on every element dimension and spacing, to put
+#             the low band edge back at 0.8 GHz on the lighter-loading board.
+#             Taken from the SIMULATED band-edge shift, not from the paper's
+#             microstrip eps_eff formula (which predicts the wrong direction).
+#   feed_Wt / feed_Wb   top (coax-side) and bottom feed-strip widths, separate
+#             so unequal strips (the paper's balun) are a variable edit.
+#   coax      Taoglas 1.37 mm micro-coax (CAB.01061), jacket stripped: braid
+#             1.15 mm, FEP 0.92 mm, conductor 0.31 mm. It must be no wider than
+#             feed_Wt, which RG316 (2.09 mm) was not on a 20 mil board.
+#   bend_R    1.0 mm (was 1.5): the coax axis is lower on the thin board.
+# Everything else - tau, element count, bow-tie shape - is the baseline's.
+#
+'''
+
+V2_MATERIALS = '''
+materials:
+  # Rogers RO4350B, design Dk 3.66 and Df 0.0037 (10 GHz), treated as constant
+  # over 0.4-6.5 GHz.
+  ro4350b:
+    permittivity: 3.66
+    loss_tangent: 0.0037
+  # Coax dielectric. Real FEP is 2.1; 1.70 is the value that makes these
+  # datasheet radii a 50 ohm line with a solid centre conductor (the real one
+  # is 7-strand, 50 +/- 3 ohm). Same device CST's model used for RG316.
+  fep_coax:
+    permittivity: 1.70
+    loss_tangent: 0.0007
+  # Coax conductors. Solid copper at these radii gives about 2.4 dB/m at
+  # 6 GHz; the Taoglas datasheet says 3.7 dB/m (stranding, braid, foil). The
+  # conductivity is reduced so the modelled cable loss matches the datasheet.
+  cu_coax:
+    permittivity: 1.0
+    conductivity: 26000000
+  cap_pec:
+    library: pec
+  air:
+    library: air'''
+
+
+def _sub_once(pattern: str, repl: str, body: str, count: int = 1) -> str:
+    """Regex replace that must hit exactly `count` times, or the build stops."""
+    import re
+    new, n = re.subn(pattern, lambda m: repl, body, flags=re.M | re.S)
+    if n != count:
+        raise SystemExit(f"v2 swap {pattern!r}: expected {count}, found {n}")
+    return new
+
+
+def to_ro4350b_v2(body: str, k_el: str, feed_wt: str, feed_wb: str) -> str:
+    """The RO4350B variant turned into the parametric redesign."""
+    body = body[len(RO4350B_NOTE):]
+    body = _sub_once(r"^name: logper-ro4350b-20mil\n", "name: logper-ro4350b-v2\n", body)
+    # dimensions that become derived are removed here and re-declared after
+    # the xc chain, because AEDT needs a variable's dependencies to exist
+    body = _sub_once(r"^  pcb_L: [^\n]*\n", "", body)
+    body = _sub_once(r"^  pcb_Wbase: [^\n]*\n", "", body)
+    body = _sub_once(r"^  feed_cut: [^\n]*\n", "", body)
+    body = _sub_once(r'^  coax_L: [^\n]*\n', "", body)
+    body = _sub_once(r"^  feed_W: [^\n]*\n",
+                     f"  feed_Wt: {feed_wt}                  # coax-side feed strip width\n"
+                     f"  feed_Wb: {feed_wb}                  # far-side feed strip width\n", body)
+    body = _sub_once(r"^  tau: [^\n]*\n",
+                     f"  k_el: {k_el}                      # element scale vs the FR-4 baseline\n"
+                     "  tau: 0.85                       # as the baseline\n", body)
+    for name, base in (("bt_L1", "60mm"), ("bt_We1", "30mm"), ("bt_Wr1", "5mm"),
+                       ("bt_x1", "18mm"), ("bt_sp1", "30mm")):
+        body = _sub_once(rf"^  {name}: [^\n]*\n",
+                         f'  {name}: "{base} * k_el"\n', body)
+    body = _sub_once(r"^  r_in: [^\n]*\n",
+                     "  r_in: 0.155mm                   # 0.31 mm conductor (Taoglas 1.37 mm cable)\n", body)
+    body = _sub_once(r"^  r_d: [^\n]*\n",
+                     "  r_d: 0.46mm                     # 0.92 mm FEP insulation\n", body)
+    body = _sub_once(r"^  r_sh: [^\n]*\n",
+                     "  r_sh: 0.575mm                   # 1.15 mm braid, jacket stripped\n", body)
+    body = _sub_once(r"^  coax_zoff: [^\n]*\n",
+                     '  coax_zoff: "r_sh - 0.015mm"     # shield rests on the trace, sunk 0.015 mm\n', body)
+    body = _sub_once(r"^  bend_R: [^\n]*\n",
+                     "  bend_R: 1mm                     # centre-conductor bend radius\n"
+                     '  feed_cut: "bend_R"              # coax-side strip stops one bend radius short\n', body)
+    body = _sub_once(r'^(  xc14: [^\n]*\n)',
+                     f'  xc{N-1}: "xc{N-2} + bt_sp1 * s{N-2}"\n'
+                     "  tip_len: 7.55mm                 # last element centre to the tip, as the baseline\n"
+                     f'  pcb_L: "xc{N-1} + tip_len"\n'
+                     '  pcb_Wbase: "2*bt_L1 + 40mm"     # baseline: 160 = 2*60 + 40\n'
+                     '  coax_L: "pcb_L - feed_cut"\n', body)
+    body = _sub_once(r"\nmaterials:\n.*?\n\ngeometry:", V2_MATERIALS + "\n\ngeometry:", body)
+    body = _sub_once(r"material: ptfe_coax\n", "material: fep_coax\n", body)
+    body = _sub_once(r"material: cu_pure\n", "material: cu_coax\n", body, count=3)
+    body = _sub_once(r'origin: \["0mm", "-feed_W/2", h\]\n    size: \[coax_L, feed_W\]',
+                     'origin: ["0mm", "-feed_Wt/2", h]\n    size: [coax_L, feed_Wt]', body)
+    body = _sub_once(r'origin: \["0mm", "-feed_W/2", "0mm"\]\n    size: \[pcb_L, feed_W\]',
+                     'origin: ["0mm", "-feed_Wb/2", "0mm"]\n    size: [pcb_L, feed_Wb]', body)
+    if "feed_W/" in body or "feed_W]" in body:
+        raise SystemExit("v2: a reference to the old feed_W variable survived")
+    return V2_NOTE + body
 
 
 if __name__ == "__main__":

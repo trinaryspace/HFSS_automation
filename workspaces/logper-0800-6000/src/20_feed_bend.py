@@ -87,7 +87,8 @@ def main():
         points,
         segment_type="Arc",
         name=BEND,
-        material="cu_pure",
+        # the wire's own material: `cu_pure` on the replica, `cu_coax` on v2
+        material=m["InnerCond"].material_name or "cu_pure",
         xsection_type="Circle",
         xsection_width="2*r_in",
         xsection_bend_type="Curved",

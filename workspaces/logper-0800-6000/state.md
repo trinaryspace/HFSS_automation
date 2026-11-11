@@ -266,6 +266,16 @@ Live state:
   Gate plan: tuning iterations are solved without a stop each (2.5–3 h per
   solve); the visual Review gate is held on the final candidate before
   fabrication. Not yet built — the desktop is solving variant B.
+- STANDING AUTHORISATION 2026-11-10 (user leaving overnight), verbatim: "I
+  want you to work on this the entire time. Since your FR4 design was so
+  good, keep proceeding without me checking over everything and slowly work
+  towards a good design. Don't be afraid to debug, optimize and keep working".
+  ⇒ redesign iterations are built and solved without Review-gate stops; each
+  solve is recorded here as `solve #n — reason`. Guard rails kept: no
+  resubmission after an anomaly without reading the evidence first; bank
+  every completed solve; `SOLVE_KEEP_SOLUTIONS=1` whenever a design already
+  holds a solution worth keeping; never touch the FR-4 design's results.
+  Target: 0.8–6 GHz, S11 < −10 dB, single forward lobe, length < 250 mm.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions
   asked 2026-11-10): recommend scale-and-retune of this geometry — one scale
   factor on the element variables from the simulated band-edge shift, plus

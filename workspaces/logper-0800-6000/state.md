@@ -552,6 +552,33 @@ Live state:
   5° sphere, SOLVE_CORES=3; submitted 03:32, running at 03:34. The box is
   smaller than λ/6, so the 1 GHz pattern and efficiency are the least
   certain numbers of this run.
+- solve #23 RESULT — FULL RUN of k_el 1.27, τ 0.844 (pad_div 7): Normal
+  Completion 05:00, 88 min; pass 9 ΔS 0.0255 (target 0.02 NOT quite met;
+  passes 6–9: 0.042, 0.044, 0.042, 0.026), 199,066 elements; 86 sweep
+  points. Banked (`solved_v3_k127.txt`). `results/v3_k127/` incl.
+  `report_s11.png`, `report_patterns.png` (`tools/report_plots.py`).
+  S11: first −10 dB crossing 0.748 GHz; per-GHz mean −16.32 / −15.36 /
+  −16.33 / −14.85 / −15.47 dB; 97 % of 1–6 GHz ≤ −10 dB; −15.4 dB at
+  0.80 GHz; −11.5 dB at 6.00 GHz. Above −10 dB inside 0.8–6 GHz: 1.41–1.42
+  (−9.2) and 1.68–1.78 (peak −8.2 at 1.73).
+  Bands (worst / mean dB): ISM 902–928 −20.9 / −21.1; 1.71–1.78 −8.2 / −8.7;
+  1.805–1.88 −12.5 / −16.9; 1.85–1.99 −17.5 / −18.0; 2.11–2.20 −12.0 /
+  −12.2; 2.30–2.40 −10.9 / −14.1; ISM 2.40–2.4835 −11.8 / −12.1; 2.5–2.69
+  −13.6 / −20.2; 3.3–3.8 −11.8 / −15.9; Wi-Fi 5.15–5.895 −13.1 / −16.5.
+  ⇒ the coarse run's "straddle" did not hold: the element-1 harmonic landed
+  at 1.73 GHz (coarse said 1.70), inside the AWS uplink 1.71–1.78.
+  Radiation at 1…6 GHz: peak directivity 6.62 / 6.28 / 6.58 / 6.18 / 6.27 /
+  6.05 dBi; radiation efficiency 0.823 / 0.805 / 0.789 / 0.789 / 0.776 /
+  0.749; peak realized gain 5.72 / 5.20 / 5.31 / 5.05 / 5.00 / 4.47 dBi.
+  Beam (5° cuts): one main lobe at every frequency; within 5° of the tip in
+  the E-plane at 1–5 GHz; H-plane broad (105–145°) with the peak up to 15°
+  off but ≤ 0.1 dB above the tip value; front/back 17–29 dB. At 6 GHz the
+  H-plane peak is 65° off the tip (6.01 dBi) with 4.92 dBi toward the tip.
+- `31_set_variable.py` compares the read-back as text, so "0.840" vs "0.84"
+  reports STAGE_FAILED after the value IS applied (and skips its save).
+- solve #24 — reason: coarse scan point k_el 1.356, τ 0.84 (board
+  ≈ 264 mm, largest arm 81.4 mm) aimed at dropping the element-1 harmonic to
+  ≈ 1.62 GHz, below the 1.71 GHz band edge; submitted 05:03, solving.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

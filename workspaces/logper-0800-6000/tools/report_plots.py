@@ -121,6 +121,56 @@ def plot_patterns(tag):
     return out
 
 
+def cut_points(e, h, f):
+    """Both cuts as [(angle from the tip in degrees, dBi)], -180..180."""
+    e_pts = sorted({(p if p <= 180 else p - 360): v for t, p, v in e[f] if p < 359.9}.items())
+    h_map = {}
+    for t, p, v in h[f]:
+        a = (90.0 - t) if p < 90.0 else (90.0 + t)
+        h_map[round(((a + 180.0) % 360.0) - 180.0, 3)] = v
+    return e_pts, sorted(h_map.items())
+
+
+def plot_polar(tag):
+    """The same two cuts as polar plots: the tip direction is at the top."""
+    e_path = RESULTS / tag / "AgentReadout_cutE.csv"
+    h_path = RESULTS / tag / "AgentReadout_cutH.csv"
+    if not (e_path.exists() and h_path.exists()):
+        return None
+    e, h = load_cut(e_path), load_cut(h_path)
+    freqs = sorted(e)
+    floor = -25.0
+    fig, axes = plt.subplots(2, len(freqs), figsize=(2.6 * len(freqs), 6.0),
+                             facecolor=SURFACE, subplot_kw={"projection": "polar"})
+    for j, f in enumerate(freqs):
+        for i, pts in enumerate(cut_points(e, h, f)):
+            ax = axes[i][j]
+            ax.set_facecolor(SURFACE)
+            ang = [math.radians(a) for a, _ in pts] + [math.radians(pts[0][0])]
+            val = [max(v, floor) for _, v in pts] + [max(pts[0][1], floor)]
+            ax.plot(ang, val, lw=1.8, color=BLUE)
+            ax.set_theta_zero_location("N")       # tip direction at the top
+            ax.set_theta_direction(-1)
+            ax.set_ylim(floor, 10)
+            ax.set_yticks([-20, -10, 0, 10])
+            ax.set_yticklabels(["-20", "-10", "0", "10"], fontsize=6.5, color=MUTED)
+            ax.set_xticks([math.radians(a) for a in (0, 90, 180, 270)])
+            ax.set_xticklabels(["tip", "90", "back", "-90"], fontsize=7.5, color=MUTED)
+            ax.grid(color=GRID, lw=0.6)
+            ax.spines["polar"].set_color(GRID)
+            if i == 0:
+                ax.set_title("%.0f GHz" % f, fontsize=10, color=INK, pad=12)
+    fig.text(0.012, 0.70, "E-plane\n(board plane)", fontsize=9, color=MUTED, va="center")
+    fig.text(0.012, 0.27, "H-plane\n(normal to board)", fontsize=9, color=MUTED, va="center")
+    fig.suptitle("Radiation pattern, total directivity in dBi (rings every 10 dB)",
+                 x=0.012, ha="left", fontsize=11, color=INK)
+    fig.subplots_adjust(left=0.10, right=0.965, top=0.86, bottom=0.04, wspace=0.35, hspace=0.25)
+    out = RESULTS / tag / "report_patterns_polar.png"
+    fig.savefig(out, dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+    return out
+
+
 def main(argv):
     tag = argv[0]
     label = argv[2] if len(argv) > 2 else tag
@@ -133,6 +183,7 @@ def main(argv):
         baseline = (bf, bv, "FR-4 original (HFSS replica)")
     print("wrote", plot_s11(tag, label, baseline))
     print("wrote", plot_patterns(tag))
+    print("wrote", plot_polar(tag))
     table = RESULTS / tag / "AgentReadout_AntennaParams.csv"
     if table.exists():
         rows = list(csv.reader(open(table, encoding="utf-8-sig")))

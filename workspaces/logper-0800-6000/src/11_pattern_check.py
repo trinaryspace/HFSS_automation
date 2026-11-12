@@ -29,6 +29,13 @@ EXPR = "dB(DirTotal)"
 
 
 def main():
+    # Optional output folder under results/ (so one design's sphere export does
+    # not overwrite another's): python src/11_pattern_check.py <tag>
+    import sys
+    global RESULTS
+    if len(sys.argv) > 1:
+        RESULTS = os.path.join(ws_common.RESULTS, sys.argv[1])
+        os.makedirs(RESULTS, exist_ok=True)
     hfss = ws_common.attach()
     path, note = read_results.export_report_csv(
         hfss, EXPR, export_dir=RESULTS, sweep="Setup1 : FieldPts",

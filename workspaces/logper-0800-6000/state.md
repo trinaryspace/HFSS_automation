@@ -372,6 +372,39 @@ Live state:
 - solve #9 — reason: verification of it2 (v3, feed_Wb 1.6 mm) WITH fields:
   FieldPts 1…6 GHz + FF_Sphere, pass cap 9, pad_div 6, `SOLVE_CORES=3`;
   submitted 16:53, disk free 34 GB.
+- solve #9 RESULT (v3 it2 verified, fields): Normal Completion 18:10,
+  77 min at SOLVE_CORES=3; converged pass 9, ΔS 0.0107, 179,141 elements;
+  80 sweep points. Banked (`solved_v3_it2_verify.txt`). `results/v3_it2v/`:
+  first −10 dB crossing 0.787 GHz; per-GHz mean S11 −14.41 / −16.44 /
+  −16.26 / −14.64 / −15.74 dB; 97 % of 1–6 GHz ≤ −10 dB; S11 −12.85 dB at
+  0.80 GHz and −11.41 dB at 6.00 GHz. Violations inside 0.8–6 GHz: 1.56–1.65
+  GHz (peak −9.16 dB) and 2.37–2.43 GHz (peak −8.60 dB).
+  REPEATABILITY: the earlier solve of the SAME design had its spikes at
+  1.54 GHz (−8.21) and 1.88 GHz (−9.94). The narrow spikes move by ≈ 60–500
+  MHz and ≈ 1–1.5 dB between two converged solves ⇒ treat "worst spike ≈ −8.5
+  to −9 dB somewhere in 1.5–2.5 GHz" as the honest statement; the −10 dB
+  target is NOT robustly met there.
+  Radiation at 1…6 GHz: peak directivity 6.81 / 6.64 / 6.36 / 6.63 / 6.42 /
+  6.66 dBi; radiation efficiency 0.824 / 0.826 / 0.812 / 0.806 / 0.794 /
+  0.769; peak realized gain 5.96 / 5.80 / 5.35 / 5.61 / 5.25 / 5.19 dBi
+  (FR-4 replica: 5.55 / 4.63 / 4.35 / 4.07 / 4.73 / 4.18).
+  Pattern check (`11_pattern_check.py v3_it2v`) running in the background.
+- BEAM CHECK of v3 it2 (`33_pattern_cuts.py --tag v3_it2v`, two principal
+  cuts; lobes counted offline with a 3 dB prominence rule): ONE main lobe at
+  every frequency in both planes. Peak within 8° of the tip at 1–5 GHz,
+  equal to the design's peak directivity (so the maximum lies in these
+  planes). E-plane −3 dB width 68–82°, H-plane 114–162°; front/back
+  20–24 dB. At 6 GHz the H-plane peak sits 52° off the tip toward the
+  far-copper side (6.64 dBi) with 5.83 dBi straight off the tip — a broad
+  tilted beam, as the FR-4 replica had (42°). Other lobes ≥ 9 dB down.
+  The script's own "highest lobe outside main beam" figure is unreliable on
+  a rippled broad beam; ignore it.
+- FAR-FIELD READ PITFALL: the full 2° sphere (`11_pattern_check.py`) ran > 1 h
+  on v3 with AEDT unresponsive; the session was blocked from killing AEDT.
+  Use `33_pattern_cuts.py` (seconds). Also `post.export_report_to_file`
+  failed with `GrpcApiError GetPropValue` on a far-field table; the report
+  module's own `ExportToFile` works. Far-field CSVs are WIDE: one row per
+  frequency, one column per direction named in the header.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

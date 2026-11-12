@@ -479,6 +479,33 @@ Live state:
   smallest 6.34 mm. Known risk: element 1's 2nd harmonic ≈ 1.77 GHz sits in
   the 1.8/1.9 cell band at any usable scale (seen once at −9.94 dB). NOT
   BUILT — waiting for AEDT to be free.
+- solve #14 ENDED by the user ≈ 01:30 (they ended `ansysedt.exe` in Task
+  Manager at my suggestion). Relaunch: port 61665, pid 48152. v3's verified
+  solution survived. Root cause of the crawl confirmed and removed: v3 still
+  held `AgentReadout_dB_DirTotal` (the full 2° sphere table from the hung
+  read) plus `AgentReadout_AntennaParams`; both deleted from v3, and the
+  antenna table from v4. `22_setup_extras.py` now makes a 5° sphere
+  (`LOGPER_FF_STEP`).
+- v6 (16 elements, k_el 1.21) built, but the initial mesher fails on it:
+  Auto → mesh3d internal error (solve #15); TAU + Phi off → same error
+  (solve #16); Classic meshes (solve #17) but is the mesher that could not
+  converge v5 — ABORTED by me at ≈ 01:58, data cleared. v6 is left built,
+  unsolved. The 16th element is shelved.
+- USER 2026-11-12 ≈ 01:57, verbatim: "These long simulations are slowing
+  things down. Figure out whats taking time, make the sim coarser or
+  something to get indicators/direction and then go from there. I expect
+  some full results (patterns, s11, etc) in the morning."
+- COARSE MODE (direction only, ≈ ±2 dB near −10 dB): `LOGPER_MAX_PASSES=6`,
+  `LOGPER_TUNING=1`, `pad_div` 8 (47 mm box), submit with `--approved`
+  after confirming `hf3d` = 0 (skips the 5-minute guard), on the 15-element
+  design `LogPer_RO4350B_v3`, which meshes with the default mesher. Scale is
+  scanned by the variable `k_el` with `SOLVE_KEEP_SOLUTIONS=1`.
+  Time budget seen: 6 passes ≈ 9 min; sweep to follow.
+  PLAN: coarse scan of k_el → pick → ONE full run (9 passes, pad_div 6,
+  FieldPts + 5° sphere, no far-field reports in the tree during the solve)
+  → S11 + `33_pattern_cuts.py` → morning report.
+- solve #18 — reason: coarse scan point k_el 1.21 (board 246.5 mm);
+  submitted 01:59.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

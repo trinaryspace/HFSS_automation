@@ -101,9 +101,14 @@ def main():
     if not sweep:
         raise RuntimeError("could not create sweep %s" % FIELD_SWEEP)
 
+    # 5-degree sphere by default (2,701 directions instead of 16,471 at 2
+    # degrees). AEDT recomputes any far-field report in the design as each
+    # field point lands; at 2 degrees that cost ~35 minutes per point and
+    # hours over a night (2026-11-11/12). LOGPER_FF_STEP overrides.
+    ff_step = int(os.environ.get("LOGPER_FF_STEP") or 5)
     sphere = hfss.insert_infinite_sphere(
-        definition="Theta-Phi", phi_start=0, phi_stop=360, phi_step=2,
-        theta_start=0, theta_stop=180, theta_step=2, units="deg", name=SPHERE)
+        definition="Theta-Phi", phi_start=0, phi_stop=360, phi_step=ff_step,
+        theta_start=0, theta_stop=180, theta_step=ff_step, units="deg", name=SPHERE)
     if not sphere:
         raise RuntimeError("could not create far-field sphere %s" % SPHERE)
 

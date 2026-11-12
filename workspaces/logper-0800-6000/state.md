@@ -424,6 +424,15 @@ Live state:
   19 0.8`; design `LogPer_RO4350B_v5`): τ 0.88, N 19, spacing × 0.8 (same
   taper angle, board ≈ 235 mm, smallest arm 6.9 mm), tip pad kept, no
   termination. validate_spec 0 errors.
+- v5 built (compile PASS 58 ops; 20 PASS; 22 PASS TUNING, 9-pass cap;
+  board 235.2 × 178 mm). solve #11 — reason: denser-array iteration;
+  submitted 21:05 → profile Status `Error` after 26 s: "Definition Mesh,
+  process mesh3d : Unexpected internal software error" (initial mesher;
+  nothing solved). Evidence read once from the profile.
+  Fix: `25_initial_mesh.py` with `LOGPER_MESH_METHOD=AnsoftClassic`.
+  solve #12 — reason: same iteration with the classic initial mesher;
+  submitted 21:12, running (meshing passed). NOTE: v5 is meshed by a
+  different mesher than v2–v4, a small extra uncertainty when comparing.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

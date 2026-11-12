@@ -542,6 +542,16 @@ Live state:
   no far-field reports in the design, SOLVE_CORES=3; submitted 03:28.
   After it: bank → `30_variant_qa.py --tag v3_k127` → `33_pattern_cuts.py`
   → `tools/band_report.py` → plots → report.
+- solve #20 FAILED at initial meshing (same mesh3d internal error) with
+  pad_div 6, although the identical copper meshed at pad_div 8 in solve #19.
+  ⇒ the default mesher's failure depends on the AIR BOX size, not only on
+  the antenna. Retried by box size with `--approved` (no solver running
+  each time): pad_div 5 → error (#21); 5.5 → error (#22); 7 → MESHED (#23).
+- solve #23 — reason: the full-accuracy run of the chosen geometry at
+  pad_div 7 (53.5 mm clearance, λ/7 at 0.8 GHz); 9-pass cap, FieldPts +
+  5° sphere, SOLVE_CORES=3; submitted 03:32, running at 03:34. The box is
+  smaller than λ/6, so the 1 GHz pattern and efficiency are the least
+  certain numbers of this run.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

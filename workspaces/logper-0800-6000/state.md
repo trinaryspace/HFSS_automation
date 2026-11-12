@@ -622,7 +622,16 @@ Live state:
   15`; validate_spec 0 errors) — NOT yet compiled or replayed against the
   live design.
   NOT done: Review gate with the user, replay verification, λ/4-box check,
-  denser array, any fabrication output.
+  denser array.
+- FAB PACKAGE (2026-11-12, user: LPKF, 50 µm feature / 15 µm spacing):
+  `tools/export_fab.py` reads `design_ro4350b_final.yaml` and writes `fab/`
+  (KiCad board + project, drawing); Gerbers/DXF/STEP/DRC come from
+  `kicad-cli` (commands in `fab/README.md`). Exported copper extents equal
+  the live model's bounding boxes. The user opened and re-saved the board in
+  KiCad 10, so the tracked `.kicad_pcb` is in KiCad 10 format; re-running the
+  exporter rewrites it in the older format (KiCad converts on open). Tip
+  half-hole Ø0.5 mm is NOT in the HFSS model. The project was saved
+  2026-11-12 10:57 and the user declared the work done for now.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

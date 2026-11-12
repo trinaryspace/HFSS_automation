@@ -192,7 +192,13 @@ fails on it).
 
 **Not done**: Review gate on the candidate; replay verification; a check with
 a λ/4 radiation box (the mesher failed at every larger box tried); mounting
-holes, stiffener and connector are not modelled; no fabrication output.
+holes, stiffener and connector are not modelled.
+
+**Fabrication package** (2026-11-12): `fab/` holds a KiCad project and board,
+Gerbers, DXF, a bare-board STEP and an A3 mechanical drawing, generated from
+`design_ro4350b_final.yaml` by `tools/export_fab.py`; see `fab/README.md`.
+The outline adds a Ø0.5 mm half-hole at the tip that the HFSS model does not
+have (it notches by the wire radius only).
 
 ## Learning-loop notes
 

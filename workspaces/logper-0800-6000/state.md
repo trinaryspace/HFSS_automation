@@ -445,6 +445,21 @@ Live state:
 - solve #13 — reason: v5 again with `LOGPER_MESH_METHOD=AnsoftTAU`,
   `LOGPER_MESH_PHI=0` (solution cleared first); meshing passed, submitted
   23:02, tuning mode, 9-pass cap, SOLVE_CORES=3.
+- solve #13 ABORTED by me at ≈ 23:35 (v5, TAU mesher, Phi off): adaptive
+  ΔS by pass 0.396, 0.335, 0.490, 0.306, 0.233, 0.302, 0.186, 0.126 — NOT
+  converging within 9 passes; 1.13 M unknowns at pass 9. Converging it would
+  need 3–4 more passes (≈ 2–2.7 M unknowns, tens of GB per point) and a
+  multi-hour sweep. Partial data cleared. VERDICT on the denser array
+  (τ 0.88, N 19): UNTESTED, not disproven — it cannot be verified on this
+  machine within a sensible budget. `LogPer_RO4350B_v5` is left built,
+  unsolved, with TAU / Phi-off mesh settings.
+- CANDIDATE = v3 it2 (`LogPer_RO4350B_v3`, `design_ro4350b_v3.yaml`: k_el
+  1.15, feed 1.6 / 1.6 mm, tip pad 3 × 3.7 mm, micro-coax). Tried and
+  rejected on top of it: unequal strips (it3), 50 Ω base termination (v4).
+- solve #14 — reason: FINAL VERIFICATION of the candidate at full settings:
+  `pad_div` 4 (radiation box λ/4 at 0.8 GHz = 93.7 mm), FieldPts + FF_Sphere,
+  9-pass cap (it converged at pass 9 before), `SOLVE_KEEP_SOLUTIONS=1`,
+  `SOLVE_CORES=3`; submitted 23:41, disk free 76 GB.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

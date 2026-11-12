@@ -433,6 +433,18 @@ Live state:
   solve #12 — reason: same iteration with the classic initial mesher;
   submitted 21:12, running (meshing passed). NOTE: v5 is meshed by a
   different mesher than v2–v4, a small extra uncertainty when comparing.
+- solve #12 RESULT (v5, classic mesher, 9-pass cap): Normal Completion
+  22:54 (1 h 42 min, 117 sweep points) but NOT CONVERGED — ΔS 0.313 / 0.253
+  / 0.169 at passes 7 / 8 / 9 (157,686 elements). Banked
+  (`solved_v5_tau088.txt`); numbers in `results/v5_tau088/` are UNRELIABLE
+  and must not be used to judge the denser array (they read: 79 % coverage,
+  −4.69 dB at 0.80 GHz, large locus radius). The classic mesher's initial
+  mesh is too poor for a 9-pass budget.
+  (My session process restarted once during this solve; AEDT and the solve
+  were unaffected.)
+- solve #13 — reason: v5 again with `LOGPER_MESH_METHOD=AnsoftTAU`,
+  `LOGPER_MESH_PHI=0` (solution cleared first); meshing passed, submitted
+  23:02, tuning mode, 9-pass cap, SOLVE_CORES=3.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

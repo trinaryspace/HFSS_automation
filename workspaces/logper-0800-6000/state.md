@@ -579,6 +579,18 @@ Live state:
 - solve #24 — reason: coarse scan point k_el 1.356, τ 0.84 (board
   ≈ 264 mm, largest arm 81.4 mm) aimed at dropping the element-1 harmonic to
   ≈ 1.62 GHz, below the 1.71 GHz band edge; submitted 05:03, solving.
+- solve #24 RESULT (coarse, k_el 1.356, τ 0.84): Normal Completion 06:05,
+  62 min (100 sweep points); pass 6 ΔS 0.030, 159,175 elements. Banked
+  (`solved_coarse_k1356.txt`), `results/coarse_k1356/`. EVERY listed band
+  ≤ −10 dB: ISM 902–928 −20.6; 1.71–1.78 −12.5; 1.805–1.88 −15.5;
+  1.85–1.99 −10.5 (thin); 2.11–2.20 −17.0; 2.30–2.40 −16.1; ISM 2.40–2.48
+  −15.3; 2.5–2.69 −15.4; 3.3–3.8 −14.5; Wi-Fi 5.15–5.9 −12.2; 6.00 GHz
+  −10.1; first −10 dB crossing 0.695 GHz. Spikes inside 0.8–6: 1.04–1.06
+  (−7.6) and 1.64–1.65 (−9.2), both outside the listed bands.
+- solve #27 — reason: FULL-ACCURACY run of k_el 1.356, τ 0.84 (board
+  ≈ 264 × 203 mm): 9-pass cap, FieldPts + 5° sphere, SOLVE_CORES=3. Mesher:
+  pad_div 7 → error (#25), 6 → error (#26), 7.5 → MESHED (#27, 50 mm
+  clearance); submitted 06:08, solving at 06:11.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

@@ -524,6 +524,24 @@ Live state:
 - solve #19 — reason: coarse scan point k_el 1.27, τ 0.844 (board
   251.9 mm, largest arm 76.2 mm; predicted 2f0 ≈ 1.43, 2f1 ≈ 1.69 GHz);
   SOLVE_CORES=5; submitted 02:45.
+- solve #19 RESULT (coarse, k_el 1.27, τ 0.844): Normal Completion 03:26,
+  41 min at 5 parallel points (95 sweep points); pass 6 ΔS 0.038, 103,768
+  elements. Banked (`solved_coarse_k127.txt`), `results/coarse_k127/`.
+  Band scores: ISM 902–928 worst −14.4 dB; cell 1.71–1.99 worst −9.2 (only
+  at the 1.71 edge); cell 2.1 DL −12.8; cell 2.3 −13.6; ISM 2.40–2.48
+  −16.0; cell 2.5–2.69 −16.2; cell 3.3–3.8 −11.9; Wi-Fi 5.15–5.9 −12.1;
+  S11 at 6.00 GHz −10.0; first −10 dB crossing 0.698 GHz. Spikes above
+  −10 dB inside 0.8–6: 1.57–1.58 (−9.1), 1.70–1.71 (−9.0), 1.99–2.02 (−8.8).
+  ⇒ the τ trick restores the top end; element harmonics 1.70 / 2.00 GHz
+  STRADDLE the 1.71–1.99 cell band with ≈ 10 MHz of margin each side.
+- CHOSEN for the full run: k_el 1.27, τ 0.844, N 15, feed 1.6 / 1.6 mm,
+  tip pad 3 × 3.7 mm, micro-coax; board 251.9 × 192.4 mm, largest arm
+  76.2 mm.
+- solve #20 — reason: FULL-ACCURACY run of the chosen geometry for the
+  morning report: 9-pass cap, pad_div 6, FieldPts 1…6 GHz + 5° FF_Sphere,
+  no far-field reports in the design, SOLVE_CORES=3; submitted 03:28.
+  After it: bank → `30_variant_qa.py --tag v3_k127` → `33_pattern_cuts.py`
+  → `tools/band_report.py` → plots → report.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

@@ -1,0 +1,5 @@
+board  length 264.0683  base width 202.7200  tip width 20.0000  thickness 0.508
+front copper bbox x 0.0000..263.0683  y -68.3424..81.3600  vertices 70  area 6916.69 mm2
+back  copper bbox x 0.0000..264.0683  y -81.3600..68.3424  vertices 135  area 6920.30 mm2
+narrowest copper: element 15 root 0.590 mm
+front strip ends 1.000 mm before the tip (gap to the tip edge)

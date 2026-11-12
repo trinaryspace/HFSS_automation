@@ -198,7 +198,10 @@ holes, stiffener and connector are not modelled.
 Gerbers, DXF, a bare-board STEP and an A3 mechanical drawing, generated from
 `design_ro4350b_final.yaml` by `tools/export_fab.py`; see `fab/README.md`.
 The outline adds a Ø0.5 mm half-hole at the tip that the HFSS model does not
-have (it notches by the wire radius only).
+have (it notches by the wire radius only). Four M3 mounting holes on
+copper-free tabs beside elements 3 and 6 were added to the board for a
+turntable fixture (axis at mid-length on the centreline); they are not in the
+HFSS model and their effect is estimated as negligible, not simulated.
 
 ## Learning-loop notes
 

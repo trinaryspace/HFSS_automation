@@ -632,6 +632,13 @@ Live state:
   exporter rewrites it in the older format (KiCad converts on open). Tip
   half-hole Ø0.5 mm is NOT in the HFSS model. The project was saved
   2026-11-12 10:57 and the user declared the work done for now.
+- MOUNTING HOLES (user decision 2026-11-12, "don't simulate anything yet"):
+  the antenna turns on a turntable about an axis normal to the board at
+  mid-length on the centreline (x 132.03). Four M3 (Ø3.2 NPTH) holes on
+  10 mm copper-free tabs at x 95.53 / 168.53 (36.5 mm either side of the
+  axis, beside elements 3 and 6), y ±73.31 / ±48.05. In `export_fab.py` and
+  every fab output; NOT in any HFSS design. The PLA fixture is the user's
+  to design; re-simulate with it (and any metal below) before trusting it.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

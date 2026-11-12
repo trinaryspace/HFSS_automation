@@ -24,7 +24,7 @@ import textwrap
 import uuid
 from pathlib import Path
 
-from shapely.geometry import Point, Polygon, box
+from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
 HERE = Path(__file__).resolve().parent.parent
@@ -33,6 +33,13 @@ FAB = HERE / "fab"
 ORIGIN_X, ORIGIN_Y = 40.0, 150.0
 N = 15
 NOTCH_R = 0.25          # half-hole at the tip for the 0.31 mm centre conductor
+# Mounting: four M3 holes on copper-free tabs outside the slanted edges, one
+# pair HOLE_DX behind and one pair HOLE_DX ahead of the turntable axis at the
+# middle of the board length (user decision 2026-11-12). NOT in the HFSS model.
+HOLE_D = 3.2            # M3 clearance
+HOLE_DX = 36.5          # puts the pairs beside elements 3 and 6
+HOLE_OUTSET = 5.0       # hole centre outside the trapezoid edge, measured in y
+TAB_W = 10.0            # tab width; its end is a half-circle about the hole
 
 
 def read_vars():
@@ -86,12 +93,27 @@ def geometry(v):
     notch = Point(length, 0).buffer(NOTCH_R, 32)
     outline = Polygon([(0, -w_base / 2), (length, -v["pcb_Wtip"] / 2),
                        (length, v["pcb_Wtip"] / 2), (0, w_base / 2)])
+    slope = (w_base - v["pcb_Wtip"]) / 2 / length
+    axis_x = length / 2
+    holes = [(axis_x + sx * HOLE_DX,
+              sy * (w_base / 2 - slope * (axis_x + sx * HOLE_DX) + HOLE_OUTSET))
+             for sx in (-1, 1) for sy in (1, -1)]
+    trapezoid = outline
+    for x, y in holes:
+        inward = (x, y - math.copysign(HOLE_OUTSET + TAB_W / 2, y))
+        outline = outline.union(LineString([(x, y), inward]).buffer(TAB_W / 2, 32))
+    outline = outline.difference(notch)
+    if outline.geom_type != "Polygon" or outline.interiors:
+        raise SystemExit("board outline is not one simple polygon")
     front = layer(True)
     back = layer(False).difference(notch)
+    for name, copper in (("front", front), ("back", back)):
+        if not trapezoid.buffer(1e-6).contains(copper):
+            raise SystemExit(f"{name} copper leaves the trapezoid")
     if back.geom_type != "Polygon":
         raise SystemExit("back copper split after the notch cut")
     return dict(v=v, length=length, w_base=w_base, coax_l=coax_l, elements=elements,
-                front=front, back=back, outline=outline)
+                front=front, back=back, outline=outline, holes=holes, axis_x=axis_x)
 
 
 def kxy(x, y):
@@ -108,6 +130,27 @@ def poly_block(poly, layer):
     return ("\t(gr_poly\n\t\t(pts\n" + "\n".join(rows) + "\n\t\t)\n"
             "\t\t(stroke (width 0) (type solid))\n\t\t(fill solid)\n"
             f"\t\t(layer \"{layer}\")\n\t\t(uuid \"{uid()}\")\n\t)\n")
+
+
+def outline_block(poly, layer="Edge.Cuts"):
+    pts = list(poly.exterior.coords)[:-1]
+    rows = ["\t\t\t" + " ".join(kxy(x, y) for x, y in pts[i:i + 4]) for i in range(0, len(pts), 4)]
+    return ("\t(gr_poly\n\t\t(pts\n" + "\n".join(rows) + "\n\t\t)\n"
+            "\t\t(stroke (width 0.05) (type solid))\n\t\t(fill none)\n"
+            f"\t\t(layer \"{layer}\")\n\t\t(uuid \"{uid()}\")\n\t)\n")
+
+
+def hole_block(x, y, ref):
+    """A non-plated M3 clearance hole as a one-pad footprint, so KiCad drills it."""
+    return ("\t(footprint \"MountingHole_3.2mm_M3\"\n\t\t(layer \"F.Cu\")\n\t\t(uuid \"%s\")\n"
+            "\t\t(at %.4f %.4f)\n"
+            "\t\t(property \"Reference\" \"%s\"\n\t\t\t(at 0 -3.2 0)\n\t\t\t(layer \"F.Fab\")\n"
+            "\t\t\t(uuid \"%s\")\n\t\t\t(effects\n\t\t\t\t(font\n\t\t\t\t\t(size 1 1)\n"
+            "\t\t\t\t\t(thickness 0.15)\n\t\t\t\t)\n\t\t\t)\n\t\t)\n"
+            "\t\t(attr exclude_from_pos_files exclude_from_bom)\n"
+            "\t\t(pad \"\" np_thru_hole circle\n\t\t\t(at 0 0)\n\t\t\t(size %.2f %.2f)\n"
+            "\t\t\t(drill %.2f)\n\t\t\t(layers \"*.Cu\" \"*.Mask\")\n\t\t\t(uuid \"%s\")\n\t\t)\n\t)\n"
+            % (uid(), ORIGIN_X + x, ORIGIN_Y - y, ref, uid(), HOLE_D, HOLE_D, HOLE_D, uid()))
 
 
 def line_block(a, b, layer, width=0.1):
@@ -202,13 +245,11 @@ def write_kicad(g):
     out = [HEADER % dict(thick=v["h"] + 0.07, h=v["h"])]
     out.append(poly_block(g["front"], "F.Cu"))
     out.append(poly_block(g["back"], "B.Cu"))
-    # outline: trapezoid with a half-hole at the tip centre for the wire
-    out.append(line_block((0, -w_base / 2), (length, -w_tip / 2), "Edge.Cuts"))
-    out.append(line_block((length, -w_tip / 2), (length, -NOTCH_R), "Edge.Cuts"))
-    out.append(arc_block((length, -NOTCH_R), (length - NOTCH_R, 0), (length, NOTCH_R), "Edge.Cuts"))
-    out.append(line_block((length, NOTCH_R), (length, w_tip / 2), "Edge.Cuts"))
-    out.append(line_block((length, w_tip / 2), (0, w_base / 2), "Edge.Cuts"))
-    out.append(line_block((0, w_base / 2), (0, -w_base / 2), "Edge.Cuts"))
+    # outline: trapezoid + four mounting tabs, with a half-hole at the tip
+    # centre for the wire; then the mounting holes themselves
+    out.append(outline_block(g["outline"]))
+    for i, (x, y) in enumerate(g["holes"]):
+        out.append(hole_block(x, y, "H%d" % (i + 1)))
     # notes for whoever opens the board
     out.append(line_block((0, 0), (g["coax_l"], 0), "Dwgs.User", width=0.15))
     notes = [
@@ -216,7 +257,8 @@ def write_kicad(g):
         "feed strip along this line from the base edge to x = %.2f mm." % g["coax_l"],
         "Centre conductor wraps the tip edge through the half-hole to the B.Cu strip.",
         "Board: RO4350B 0.508 mm, 1 oz copper, no solder mask. %.2f x %.2f mm." % (length, w_base),
-        "No mounting holes or stiffener are in the simulated design.",
+        "Four M3 holes on copper-free tabs; turntable axis at x = %.2f mm on the centreline." % g["axis_x"],
+        "The tabs, holes and any fixture are NOT in the simulated design.",
     ]
     for i, line in enumerate(notes):
         out.append(text_block(line, 0, -w_base / 2 - 10 - 4.2 * i, "Cmts.User", size=2.4))
@@ -268,7 +310,21 @@ def write_drawing(g):
     ax.text(L * 0.45, 3.0, "coax on front (F.Cu) feed strip, braid soldered full length",
             fontsize=8, color=COAX, ha="center")
     ax.text(L + 3, WT / 2 + 7, "tip (beam direction →)", fontsize=8.5, color=INK, va="bottom")
-    dim(ax, (0, -WB / 2), (L, -WB / 2), "%.2f" % L, -14, INK)
+    for hx, hy in g["holes"]:
+        ax.add_patch(plt.Circle((hx, hy), HOLE_D / 2, fc="white", ec=INK, lw=0.9, zorder=5))
+    ax.plot([g["axis_x"]], [0], marker="+", ms=16, mew=1.4, color=INK, zorder=6)
+    ax.add_patch(plt.Circle((g["axis_x"], 0), 3, fc="none", ec=INK, lw=1.0, zorder=6))
+    ax.text(g["axis_x"] + 2, -9, "axis", fontsize=8, color=INK)
+    (rx, ry), (fx, fy) = g["holes"][0], g["holes"][2]
+    ax.text(rx + 7, ry + 2, "4x Ø%.1f\nx %.2f, y ±%.2f" % (HOLE_D, rx, ry), fontsize=8, color=INK)
+    ax.text(fx + 7, fy + 2, "x %.2f, y ±%.2f" % (fx, fy), fontsize=8, color=INK)
+    for hx in (rx, g["axis_x"], fx):
+        ax.plot([hx, hx], [-WB / 2 - 4, -8 if hx == g["axis_x"] else -(WB / 2 - (WB - WT) / 2 / L * hx)],
+                color=MUTED, lw=0.4, ls=(0, (3, 3)))
+    dim(ax, (rx, -WB / 2), (g["axis_x"], -WB / 2), "%.2f" % (g["axis_x"] - rx), -4, MUTED)
+    dim(ax, (g["axis_x"], -WB / 2), (fx, -WB / 2), "%.2f" % (fx - g["axis_x"]), -4, MUTED)
+    dim(ax, (0, -WB / 2), (g["axis_x"], -WB / 2), "%.2f" % g["axis_x"], -14, MUTED)
+    dim(ax, (0, -WB / 2), (L, -WB / 2), "%.2f" % L, -24, INK)
     dim(ax, (0, -WB / 2), (0, WB / 2), "%.2f" % WB, -34, INK, horizontal=False)
     dim(ax, (L, -WT / 2), (L, WT / 2), "%.2f" % WT, 24, INK, horizontal=False)
     e1 = g["elements"][0]
@@ -333,11 +389,14 @@ def write_drawing(g):
         "TIP  The 0.31 mm centre conductor leaves the coax %.2f mm before the tip, wraps the tip edge "
         "through the Ø%.1f half-hole and is soldered to the back strip. Keep it as short as possible."
         % (v["bend_R"], 2 * NOTCH_R),
-        "NOT IN THE SIMULATED DESIGN  mounting holes, stiffener, enclosure, SMA body. The board is "
-        "flexible at this size and needs support.",
+        "MOUNTING  Four Ø%.1f holes (M3 clearance) on copper-free tabs %.0f mm wide: x = %.2f, y = ±%.2f and "
+        "x = %.2f, y = ±%.2f from the centreline. Turntable axis at x = %.2f on the centreline. Use nylon "
+        "screws. The tabs, holes, fixture, stiffener and SMA body are NOT in the simulated design."
+        % (HOLE_D, TAB_W, g["holes"][0][0], abs(g["holes"][0][1]), g["holes"][2][0],
+           abs(g["holes"][2][1]), g["axis_x"]),
         "SUPPORT GUIDANCE (not simulated)  Keep all metal and solid plastic away from the feed strips and "
         "the element arms. Preferred: low-permittivity foam bonded to the back face, or a frame touching "
-        "only the outline. Any mounting holes or a tab behind the base edge should be re-simulated.",
+        "only the outline. Keep metal (motor, bearing, plate) well below the board; re-simulate with the fixture.",
         "HEIGHT  The soldered coax stands about 1.2 mm proud of the front face along the whole centreline "
         "(plus solder); the wire wrap adds about 0.3 mm beyond the tip edge and on the back face at the tip.",
         "RF (simulated)  First -10 dB crossing 0.685 GHz; S11 at or below -13 dB across the 902-928 MHz, "
@@ -372,6 +431,14 @@ def main():
         "back  copper bbox x %.4f..%.4f  y %.4f..%.4f  vertices %d  area %.2f mm2"
         % (bb[0], bb[2], bb[1], bb[3], len(g["back"].exterior.coords) - 1, g["back"].area),
         "narrowest copper: element %d root %.3f mm" % (N, g["elements"][-1]["root_w"]),
+        "turntable axis x %.4f on the centreline" % g["axis_x"],
+    ] + [
+        "hole H%d  x %.4f  y %+.4f  dia %.2f  edge to nearest copper %.2f mm"
+        % (i + 1, x, y, HOLE_D, g["front"].union(g["back"]).distance(Point(x, y)) - HOLE_D / 2)
+        for i, (x, y) in enumerate(g["holes"])
+    ] + [
+        "outline bbox with tabs  x %.4f..%.4f  y %.4f..%.4f"
+        % tuple(g["outline"].bounds[i] for i in (0, 2, 1, 3)),
         "front strip ends %.3f mm before the tip (gap to the tip edge)" % g["v"]["bend_R"],
     ]
     (FAB / "geometry_check.txt").write_text("\n".join(check) + "\n", encoding="utf-8")

@@ -460,6 +460,25 @@ Live state:
   `pad_div` 4 (radiation box λ/4 at 0.8 GHz = 93.7 mm), FieldPts + FF_Sphere,
   9-pass cap (it converged at pass 9 before), `SOLVE_KEEP_SOLUTIONS=1`,
   `SOLVE_CORES=3`; submitted 23:41, disk free 76 GB.
+- solve #14 status 01:28 (2026-11-12): CRAWLING. Adaptive done (8 passes),
+  5 of 6 field points solved, ≈ 35 min per field point with `ansysedt` at
+  100 % CPU and unresponsive — AEDT recomputes the far-field report left in
+  v3 (`AgentReadout_AntennaParams`, 2° sphere) as each field point lands. A
+  scripted abort did not return in 150 s; the session may not kill AEDT.
+  LESSON: before any solve with FieldPts, delete far-field reports from the
+  design and/or coarsen FF_Sphere.
+- USER BANDS (2026-11-12, verbatim): "the 800 MHz ISM, 1.8/1.9GHz cell,
+  2.4GHz ISM, and then 5.1-5.9 GHz wifi matter most and any other cell
+  signals in there as well. I like the idea of scaling up a bit."
+- v6 PLAN (`design_ro4350b_v6.yaml` = `make_spec.py ro4350b_v6 1.21 1.6mm
+  0.85 16 1.0`; design `LogPer_RO4350B_v6`; validate_spec 0 errors): k_el
+  1.21 moves the largest element's harmonics from ≈ 1.6 / 2.4 GHz to
+  ≈ 1.50 / 2.25 GHz (the 2.20–2.30 GHz gap; k 1.25 would land on the 2.1
+  GHz cell downlink edge). N 16 adds a tip element so the upper band edge
+  is not pulled down into 5.8–5.9 GHz. Board 250.2 mm, largest arm 72.6 mm,
+  smallest 6.34 mm. Known risk: element 1's 2nd harmonic ≈ 1.77 GHz sits in
+  the 1.8/1.9 cell band at any usable scale (seen once at −9.94 dB). NOT
+  BUILT — waiting for AEDT to be free.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

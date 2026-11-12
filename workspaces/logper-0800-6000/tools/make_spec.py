@@ -152,7 +152,7 @@ def main() -> None:
     # below read from the module global, so it is set before anything builds:
     #   make_spec.py ro4350b_v5 <k_el> <feed_W> <tau> <N> <spacing factor>
     global N
-    if len(sys.argv) > 1 and sys.argv[1] == "ro4350b_v5":
+    if len(sys.argv) > 1 and sys.argv[1] in ("ro4350b_v5", "ro4350b_v6"):
         N = int(sys.argv[5]) if len(sys.argv) > 5 else 19
     text = [HEADER.rstrip("\n")]
     text.append("  s0: 1")
@@ -339,10 +339,27 @@ qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]
         spacing = sys.argv[6] if len(sys.argv) > 6 else "0.8"
         body = to_denser(to_tip_pad(to_ro4350b_v2(to_ro4350b(body), k_el, feed_w, feed_w)),
                          tau, spacing)
+    elif variant == "ro4350b_v6":
+        # v6 = the v3 candidate re-scaled so the largest element's harmonics
+        # fall between the user's bands, with one more element at the tip:
+        #   make_spec.py ro4350b_v6 <k_el> <feed_W> <tau> <N> <spacing factor>
+        # Same machinery as v5 (scale, tau, N, spacing), its own file and name.
+        filename = "design_ro4350b_v6.yaml"
+        k_el = sys.argv[2] if len(sys.argv) > 2 else "1.21"
+        feed_w = sys.argv[3] if len(sys.argv) > 3 else "1.6mm"
+        tau = sys.argv[4] if len(sys.argv) > 4 else "0.85"
+        spacing = sys.argv[6] if len(sys.argv) > 6 else "1.0"
+        body = to_denser(to_tip_pad(to_ro4350b_v2(to_ro4350b(body), k_el, feed_w, feed_w)),
+                         tau, spacing)
+        body = body[len(V5_NOTE):]
+        body = _sub_once(r"^name: logper-ro4350b-v5\n", "name: logper-ro4350b-v6\n", body)
+        body = _sub_once(r"^(  tau: [0-9.]+) +# denser than the baseline's 0\.85\n",
+                         f"  tau: {tau}                       # scaling ratio\n", body)
+        body = V6_NOTE + body
     else:
         raise SystemExit(
             f"unknown variant {variant!r} "
-            "(fr4 | ro4350b | ro4350b_v2 | ro4350b_v3 | ro4350b_v5)")
+            "(fr4 | ro4350b | ro4350b_v2 | ro4350b_v3 | ro4350b_v5 | ro4350b_v6)")
     target = Path(__file__).resolve().parent.parent / filename
     target.write_text(body, encoding="utf-8", newline="\n")
     print(f"wrote {target}")
@@ -532,6 +549,21 @@ V5_NOTE = '''\
 #   N        raised so the smallest element stays about as small as before
 #   spacing  first-element spacing scaled by (1 - tau_new) / (1 - 0.85), which
 #            keeps the taper angle - and so the board length - unchanged
+#
+'''
+
+
+V6_NOTE = '''\
+# REDESIGN v6 = the v3 candidate re-scaled - design "LogPer_RO4350B_v6".
+# Why: v3's two S11 spikes are the 2nd and 3rd harmonics of the largest
+# element (about 0.79 GHz), at about 1.6 and 2.4 GHz - the upper one on the
+# 2.4 GHz ISM band. They move with element size. The user's bands (2026-11-12):
+# 800/900 MHz ISM, 1.8/1.9 GHz cell, 2.4 GHz ISM, 5.1-5.9 GHz Wi-Fi, other cell.
+#   k_el 1.21  puts the harmonics near 1.50 and 2.25 GHz, in the gap between
+#              the 2.1 GHz cell downlink (to 2.20) and 2.3 GHz
+#   N 16       one more small element at the tip, so scaling the elements up
+#              does not pull the upper band edge down into 5.8-5.9 GHz
+# tau, spacing rule, feed strips, coax and tip pad are v3's.
 #
 '''
 

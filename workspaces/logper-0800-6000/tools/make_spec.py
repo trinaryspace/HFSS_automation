@@ -148,6 +148,12 @@ def lines_for_layer(prefix: str, z: str, even_sign: int, feed_len: str) -> list[
 
 
 def main() -> None:
+    # The denser-array variant changes the element COUNT, which the loops
+    # below read from the module global, so it is set before anything builds:
+    #   make_spec.py ro4350b_v5 <k_el> <feed_W> <tau> <N> <spacing factor>
+    global N
+    if len(sys.argv) > 1 and sys.argv[1] == "ro4350b_v5":
+        N = int(sys.argv[5]) if len(sys.argv) > 5 else 19
     text = [HEADER.rstrip("\n")]
     text.append("  s0: 1")
     for n in range(1, N):
@@ -325,9 +331,18 @@ qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]
         feed_wt = sys.argv[3] if len(sys.argv) > 3 else "1.6mm"
         feed_wb = sys.argv[4] if len(sys.argv) > 4 else feed_wt
         body = to_tip_pad(to_ro4350b_v2(to_ro4350b(body), k_el, feed_wt, feed_wb))
+    elif variant == "ro4350b_v5":
+        filename = "design_ro4350b_v5.yaml"
+        k_el = sys.argv[2] if len(sys.argv) > 2 else "1.15"
+        feed_w = sys.argv[3] if len(sys.argv) > 3 else "1.6mm"
+        tau = sys.argv[4] if len(sys.argv) > 4 else "0.88"
+        spacing = sys.argv[6] if len(sys.argv) > 6 else "0.8"
+        body = to_denser(to_tip_pad(to_ro4350b_v2(to_ro4350b(body), k_el, feed_w, feed_w)),
+                         tau, spacing)
     else:
         raise SystemExit(
-            f"unknown variant {variant!r} (fr4 | ro4350b | ro4350b_v2 | ro4350b_v3)")
+            f"unknown variant {variant!r} "
+            "(fr4 | ro4350b | ro4350b_v2 | ro4350b_v3 | ro4350b_v5)")
     target = Path(__file__).resolve().parent.parent / filename
     target.write_text(body, encoding="utf-8", newline="\n")
     print(f"wrote {target}")
@@ -467,7 +482,7 @@ def to_ro4350b_v2(body: str, k_el: str, feed_wt: str, feed_wb: str) -> str:
     body = _sub_once(r"^  bend_R: [^\n]*\n",
                      "  bend_R: 1mm                     # centre-conductor bend radius\n"
                      '  feed_cut: "bend_R"              # coax-side strip stops one bend radius short\n', body)
-    body = _sub_once(r'^(  xc14: [^\n]*\n)',
+    body = _sub_once(rf'^(  xc{N-1}: [^\n]*\n)',
                      f'  xc{N-1}: "xc{N-2} + bt_sp1 * s{N-2}"\n'
                      "  tip_len: 7.55mm                 # last element centre to the tip, as the baseline\n"
                      f'  pcb_L: "xc{N-1} + tip_len"\n'
@@ -503,6 +518,35 @@ V3_NOTE = '''\
 # pad_L before the coax end.  C_extra = eps0 * 3.66 * (pad_W - feed_W) * pad_L / h
 #
 '''
+
+
+V5_NOTE = '''\
+# REDESIGN v5 = v3 with a DENSER array - design "LogPer_RO4350B_v5".
+# Why: v3's remaining S11 spikes sit at 1.6 and 2.4 GHz, the 2nd and 3rd
+# harmonics of the largest element's 0.8 GHz resonance, and a matched
+# termination at the base did not move them (v4). They come from energy that
+# gets past the active region and re-excites the big elements. A higher
+# scaling ratio puts more elements in every octave, so the active region
+# absorbs more and less leaks past it.
+#   tau      raised from 0.85 (more elements per octave)
+#   N        raised so the smallest element stays about as small as before
+#   spacing  first-element spacing scaled by (1 - tau_new) / (1 - 0.85), which
+#            keeps the taper angle - and so the board length - unchanged
+#
+'''
+
+
+def to_denser(body: str, tau: str, spacing: str) -> str:
+    """v3 with a higher scaling ratio; N is already set by main()."""
+    body = body[len(V3_NOTE) + len(V2_NOTE):]
+    body = _sub_once(r"^name: logper-ro4350b-v3\n", "name: logper-ro4350b-v5\n", body)
+    body = _sub_once(r"^  tau: 0\.85 [^\n]*\n",
+                     f"  tau: {tau}                       # denser than the baseline's 0.85\n",
+                     body)
+    body = _sub_once(r'^  bt_sp1: "30mm \* k_el"\n',
+                     f'  sp_fac: {spacing}                     # spacing factor, keeps the taper angle\n'
+                     '  bt_sp1: "30mm * k_el * sp_fac"\n', body)
+    return V5_NOTE + V3_NOTE + V2_NOTE + body
 
 
 def to_tip_pad(body: str) -> str:

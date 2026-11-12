@@ -405,6 +405,25 @@ Live state:
   failed with `GrpcApiError GetPropValue` on a far-field table; the report
   module's own `ExportToFile` works. Far-field CSVs are WIDE: one row per
   frequency, one column per direction named in the header.
+- v4 (`LogPer_RO4350B_v4`) = v3 spec + `23_base_termination.py` R = 50 Ω
+  (lumped RLC on a via-like sheet 0.5–1.0 mm from the base). solve #10 —
+  reason: test the end-reflection hypothesis for the spikes; submitted
+  19:52, Normal Completion 20:55 (63 min, converged pass 8, ΔS 0.0146,
+  135,370 elements). Banked (`solved_v4_term50.txt`). `results/v4_term50/`:
+  per-GHz mean S11 −16.12 / −15.94 / −15.91 / −14.87 / −15.41 dB; 99 % ≤
+  −10 dB; violations at 0.96–0.97, 1.60–1.62 (−7.92 dB) and 2.39–2.41 GHz.
+  Radiation efficiency 0.771 / 0.821 / 0.790 / 0.807 / 0.792 / 0.759 (1 GHz
+  down from 0.824). VERDICT: REJECTED — the spikes did not move, and the
+  resistor costs efficiency at the low end. Hypothesis "end reflection" is
+  wrong.
+- Spike frequencies 1.6 and 2.4 GHz are the 2nd and 3rd harmonics of the
+  largest element's 0.8 GHz resonance, reproducible across v3-verify and v4
+  ⇒ leakage past the active region re-exciting the big elements. Cure to
+  try: denser array.
+- v5 (`design_ro4350b_v5.yaml` = `make_spec.py ro4350b_v5 1.15 1.6mm 0.88
+  19 0.8`; design `LogPer_RO4350B_v5`): τ 0.88, N 19, spacing × 0.8 (same
+  taper angle, board ≈ 235 mm, smallest arm 6.9 mm), tip pad kept, no
+  termination. validate_spec 0 errors.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

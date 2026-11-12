@@ -1,13 +1,13 @@
 ** Drc report for logper_ro4350b.kicad_pcb **
-** Created on 2026-11-12T10:46:39 **
+** Created on 2026-11-12T10:51:41 **
 ** Report includes: Errors, Warnings **
 
 ** Found 2 DRC violations **
-[copper_edge_clearance]: Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.0000 mm)
+[copper_edge_clearance]: Board edge clearance violation
     Rule: board setup constraints edge; error
     @(40.0000 mm, 48.6400 mm): Segment on Edge.Cuts
     @(102.0737 mm, 150.8000 mm): Polygon [<no net>] on F.Cu
-[copper_edge_clearance]: Board edge clearance violation (board setup constraints edge clearance 0.5000 mm; actual 0.0000 mm)
+[copper_edge_clearance]: Board edge clearance violation
     Rule: board setup constraints edge; error
     @(304.0683 mm, 160.0000 mm): Segment on Edge.Cuts
     @(40.0000 mm, 150.8000 mm): Polygon [<no net>] on B.Cu

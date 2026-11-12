@@ -8,6 +8,7 @@ exports listed at the bottom.
 | File | Use |
 |---|---|
 | `logper_ro4350b.kicad_pcb` | KiCad board (opens in KiCad 8 or later). F.Cu = coax side, B.Cu = far side, Edge.Cuts = outline. |
+| `logper_ro4350b.kicad_pro` | KiCad project file; open this from the KiCad project manager. There is no schematic. |
 | `gerbers/` | F.Cu (`.gtl`), B.Cu (`.gbl`), outline (`.gm1`) for LPKF CircuitPro. |
 | `dxf/` | The same three layers as DXF, in mm, for CAD. |
 | `logper_ro4350b_board.step` | Bare board solid (outline x thickness) for the mechanical model. |

@@ -154,6 +154,8 @@ def main() -> None:
     global N
     if len(sys.argv) > 1 and sys.argv[1] in ("ro4350b_v5", "ro4350b_v6"):
         N = int(sys.argv[5]) if len(sys.argv) > 5 else 19
+    if len(sys.argv) > 1 and sys.argv[1] == "ro4350b_final":
+        N = int(sys.argv[5]) if len(sys.argv) > 5 else 15
     text = [HEADER.rstrip("\n")]
     text.append("  s0: 1")
     for n in range(1, N):
@@ -356,10 +358,31 @@ qa_signals: [convergence, ports_excited, in_band_resonance, energy_pass]
         body = _sub_once(r"^(  tau: [0-9.]+) +# denser than the baseline's 0\.85\n",
                          f"  tau: {tau}                       # scaling ratio\n", body)
         body = V6_NOTE + body
+    elif variant == "ro4350b_final":
+        # The candidate as solved on 2026-11-12: the v3 structure (15 elements,
+        # tip pad) with the scale and scaling ratio the coarse scan settled on.
+        # Those two were reached by VARIABLE edits on the live v3 design, so
+        # this spec exists to make the candidate rebuildable from one file.
+        #   make_spec.py ro4350b_final <k_el> <feed_W> <tau> <N>
+        filename = "design_ro4350b_final.yaml"
+        k_el = sys.argv[2] if len(sys.argv) > 2 else "1.356"
+        feed_w = sys.argv[3] if len(sys.argv) > 3 else "1.6mm"
+        tau = sys.argv[4] if len(sys.argv) > 4 else "0.84"
+        body = to_denser(to_tip_pad(to_ro4350b_v2(to_ro4350b(body), k_el, feed_w, feed_w)),
+                         tau, "1.0")
+        body = body[len(V5_NOTE):]
+        body = _sub_once(r"^name: logper-ro4350b-v5\n", "name: logper-ro4350b-final\n", body)
+        body = _sub_once(r"^(  tau: [0-9.]+) +# denser than the baseline's 0\.85\n",
+                         f"  tau: {tau}                       # lowered so the smallest element keeps its size\n",
+                         body)
+        body = _sub_once(r"^  pad_div: 6 [^\n]*\n",
+                         "  pad_div: 7.5                    # 50 mm box: the size the mesher accepted\n",
+                         body)
+        body = FINAL_NOTE + body
     else:
         raise SystemExit(
-            f"unknown variant {variant!r} "
-            "(fr4 | ro4350b | ro4350b_v2 | ro4350b_v3 | ro4350b_v5 | ro4350b_v6)")
+            f"unknown variant {variant!r} (fr4 | ro4350b | ro4350b_v2 | "
+            "ro4350b_v3 | ro4350b_v5 | ro4350b_v6 | ro4350b_final)")
     target = Path(__file__).resolve().parent.parent / filename
     target.write_text(body, encoding="utf-8", newline="\n")
     print(f"wrote {target}")
@@ -552,6 +575,23 @@ V5_NOTE = '''\
 #
 '''
 
+
+FINAL_NOTE = '''\
+# RO4350B CANDIDATE (2026-11-12) - the geometry solved as "v3_k1356".
+# Built on the live design LogPer_RO4350B_v3 by variable edits; this file
+# states the same values so the candidate can be rebuilt from scratch.
+#   k_el 1.356  every element dimension and spacing vs the FR-4 baseline. It
+#               places the two largest elements' 2nd harmonics (S11 spikes)
+#               at about 1.53 and 2.26 GHz, between the bands that matter:
+#               900 MHz ISM, 1.7-2.0 GHz cell, 2.4 GHz ISM, 5.15-5.9 GHz Wi-Fi.
+#   tau 0.84    = (1.15 * 0.85^14 / k_el)^(1/14): the smallest element keeps
+#               its size, so the upper band edge stays above 6 GHz.
+# Full-accuracy result: every listed band at or below -11.7 dB; see state.md.
+# Add-on stages still apply: 20 (bend), 22 (setup). The default initial
+# mesher is sensitive to the air-box size on this geometry; pad_div 7.5 is
+# the value it accepted (7 and 6 failed).
+#
+'''
 
 V6_NOTE = '''\
 # REDESIGN v6 = the v3 candidate re-scaled - design "LogPer_RO4350B_v6".

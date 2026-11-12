@@ -591,6 +591,38 @@ Live state:
   ≈ 264 × 203 mm): 9-pass cap, FieldPts + 5° sphere, SOLVE_CORES=3. Mesher:
   pad_div 7 → error (#25), 6 → error (#26), 7.5 → MESHED (#27, 50 mm
   clearance); submitted 06:08, solving at 06:11.
+- solve #27 RESULT — FULL RUN of k_el 1.356, τ 0.84 (pad_div 7.5, 50 mm
+  box): Normal Completion 07:56, 107 min; CONVERGED at pass 8 (ΔS 0.0186,
+  249,644 elements); 83 sweep points. Banked (`solved_v3_k1356.txt`).
+  `results/v3_k1356/` incl. `report_s11.png`, `report_patterns.png`.
+  S11: first −10 dB crossing 0.685 GHz; per-GHz mean −15.88 / −15.31 /
+  −16.58 / −14.70 / −15.32 dB; 99 % of 1–6 GHz ≤ −10 dB; −17.2 dB at
+  0.80 GHz; −11.6 dB at 6.00 GHz. Above −10 dB inside 0.8–6 GHz ONLY at
+  1.53 GHz (−9.8, one point) and 2.26–2.27 GHz (−9.5), both between bands.
+  Bands (worst / mean dB): cell 0.70–0.89 −11.7 / −17.7; ISM 902–928
+  −14.7 / −14.8; 1.71–1.78 −14.1 / −17.0; 1.805–1.88 −13.2 / −14.8;
+  1.85–1.99 −13.5 / −15.2; 2.11–2.20 −17.0 / −18.0; 2.30–2.40 −13.4 /
+  −13.6; ISM 2.40–2.4835 −13.8 / −14.8; 2.5–2.69 −15.1 / −18.6; 3.3–3.8
+  −12.6 / −15.6; Wi-Fi 5.15–5.895 −14.0 / −16.2. EVERY listed band passes.
+  Radiation at 1…6 GHz: peak directivity 6.30 / 6.92 / 6.73 / 5.64 / 6.47 /
+  5.95 dBi; radiation efficiency 0.816 / 0.806 / 0.788 / 0.767 / 0.760 /
+  0.736; peak realized gain 5.27 / 5.83 / 5.51 / 4.40 / 5.12 / 4.31 dBi.
+  Beam (5° cuts): one main lobe at every frequency; peak straight off the
+  tip (0–5°) at 1, 2, 3, 5 and 6 GHz; at 4 GHz a broad flat-topped beam
+  whose peak is 65° out of the board plane (5.64 dBi) with 4.79 dBi toward
+  the tip. E-plane −3 dB width 65–80°, H-plane 105–175°; front/back
+  20–30 dB.
+- CANDIDATE FOR REVIEW = `LogPer_RO4350B_v3` as it now stands: k_el 1.356,
+  τ 0.84, N 15, feed 1.6 / 1.6 mm, tip pad 3 × 3.7 mm, Taoglas 1.37 mm
+  coax, 20 mil RO4350B; board 264.1 × 202.7 mm; largest arm 81.4 mm. The
+  design is left at these values, solved, with pad_div 7.5.
+  `design_ro4350b_v3.yaml` still says k_el 1.15 / τ 0.85 (the live design
+  was moved by variable edits). The candidate's values are stated in
+  `design_ro4350b_final.yaml` (`make_spec.py ro4350b_final 1.356 1.6mm 0.84
+  15`; validate_spec 0 errors) — NOT yet compiled or replayed against the
+  live design.
+  NOT done: Review gate with the user, replay verification, λ/4-box check,
+  denser array, any fabrication output.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions

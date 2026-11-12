@@ -119,6 +119,81 @@ Deliverables in `results/`: `s11_vs_cst_meas.png`, `s11_comparison.csv`,
 `AgentReadout_dB_S_1_1.csv`, `AgentReadout_AntennaParams.csv`,
 `convergence.txt`, `model_top.jpg`, `model_bottom.jpg`, `model_isometric.jpg`.
 
+## RO4350B redesign (2026-11-10 to 2026-11-12)
+
+After the FR-4 replica, the user dropped the PLA case and asked for the same
+antenna on 20 mil RO4350B, to be fabricated. Targets: 0.8–6 GHz, S11 below
+−10 dB, one forward lobe, board short enough for a 300 mm coax pigtail; bands
+that matter most: 900 MHz ISM, 1.8/1.9 GHz cell, 2.4 GHz ISM, 5.1–5.9 GHz
+Wi-Fi, and other cell bands. The full solve-by-solve record is `state.md`.
+
+**Candidate** — design `LogPer_RO4350B_v3` in the same project, spec
+`design_ro4350b_final.yaml` (validated offline; the live design reached these
+values by variable edits, and the spec has not been compiled against it):
+
+- 20 mil RO4350B (Dk 3.66, Df 0.0037), 1 oz copper, board 264.1 × 202.7 mm
+- 15 bow-ties per layer, element scale 1.356 on the FR-4 dimensions, scaling
+  ratio 0.84; largest arm 81.4 mm, smallest 7.1 mm
+- feed strips 1.6 mm on both layers, with a 3 × 3.7 mm matching pad at the tip
+- coax: Taoglas CAB.01061 (1.37 mm micro-coax, jacket stripped, braid
+  1.15 mm) along the top feed strip; centre conductor bent over the tip
+
+**What each change does**
+
+- Element scale: the thin board loads the elements less, so they must be
+  larger for the same frequency; the scale also sets where the two largest
+  elements' second harmonics (the remaining S11 spikes) fall.
+- Scaling ratio 0.84 instead of 0.85: keeps the smallest element at its
+  original size while the largest grow, so the upper band edge stays put.
+- 1.6 mm feed strips: about 50 Ω on 0.508 mm (4 mm, as on FR-4, is about
+  22 Ω and collapses the match).
+- Tip pad: about 0.4 pF, cancelling about 1 nH of series inductance in the
+  centre conductor's loop over the board tip.
+- Thin coax: the shield must be no wider than the feed strip.
+
+**Full-accuracy result** (`results/v3_k1356/`; converged at pass 8, ΔS
+0.0186, 249,644 elements; 50 mm radiation box):
+
+| Band (GHz) | Worst S11 (dB) | Mean S11 (dB) |
+|---|---|---|
+| 0.70–0.89 cell | −11.7 | −17.7 |
+| 0.902–0.928 ISM | −14.7 | −14.8 |
+| 1.71–1.99 cell | −13.2 | −16.2 |
+| 2.11–2.20 cell | −17.0 | −18.0 |
+| 2.30–2.40 cell | −13.4 | −13.6 |
+| 2.40–2.4835 ISM | −13.8 | −14.8 |
+| 2.5–2.69 cell | −15.1 | −18.6 |
+| 3.3–3.8 cell | −12.6 | −15.6 |
+| 5.15–5.895 Wi-Fi | −14.0 | −16.2 |
+
+First −10 dB crossing 0.685 GHz; −11.6 dB at 6.00 GHz; 99 % of 1–6 GHz at or
+below −10 dB. Above −10 dB inside 0.8–6 GHz only at 1.53 GHz (−9.8 dB) and
+2.26–2.27 GHz (−9.5 dB). Band edges are the usual US allocations, chosen by
+the agent, not given by the user.
+
+| Freq (GHz) | Peak directivity (dBi) | Rad. efficiency | Peak realized gain (dBi) |
+|---|---|---|---|
+| 1 | 6.30 | 0.816 | 5.27 |
+| 2 | 6.92 | 0.806 | 5.83 |
+| 3 | 6.73 | 0.788 | 5.51 |
+| 4 | 5.64 | 0.767 | 4.40 |
+| 5 | 6.47 | 0.760 | 5.12 |
+| 6 | 5.95 | 0.736 | 4.31 |
+
+Beam: one main lobe at every frequency; straight off the tip at 1, 2, 3, 5
+and 6 GHz; at 4 GHz a broad flat-topped beam whose peak sits 65° out of the
+board plane, 0.85 dB above the value toward the tip.
+
+**Tried and not kept**: identical copper on Rogers (match collapses); unequal
+feed strips (standing wave); 50 Ω termination at the base (spikes unmoved,
+efficiency lost); 19-element denser array (could not be converged on this
+machine — untested, not disproven); a 16th tip element (the initial mesher
+fails on it).
+
+**Not done**: Review gate on the candidate; replay verification; a check with
+a λ/4 radiation box (the mesher failed at every larger box tried); mounting
+holes, stiffener and connector are not modelled; no fabrication output.
+
 ## Learning-loop notes
 
 Candidates only — none is approved; the playbook changes only with explicit

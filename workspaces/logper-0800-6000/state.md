@@ -506,6 +506,24 @@ Live state:
   → S11 + `33_pattern_cuts.py` → morning report.
 - solve #18 — reason: coarse scan point k_el 1.21 (board 246.5 mm);
   submitted 01:59.
+- solve #18 RESULT (coarse, k_el 1.21, τ 0.85): Normal Completion 02:43,
+  44 min at 3 parallel points (the old SOLVE_CORES=3 persisted in AEDT);
+  pass 6 ΔS 0.121, 105,465 elements — COARSE BY DESIGN. Banked
+  (`solved_coarse_k121.txt`), `results/coarse_k121/`. Band scores
+  (`tools/band_report.py`): ISM 902–928 worst −17.3 dB; cell 1.71–1.99
+  worst −9.5 (spike 1.76–1.78 = element 1's 2nd harmonic); ISM 2.40–2.48
+  worst −11.3 (CLEAR); Wi-Fi 5.15–5.9 worst −7.7 (S11 > −10 dB from
+  5.74 GHz); other spikes 1.42–1.47 (−7.0, element 0's 2nd harmonic, in the
+  0.96–1.71 gap) and 3.26–3.29 (−9.2). The 3rd-harmonic spike is not
+  visible near 2.2 GHz. ⇒ scaling moves the spikes as predicted; the upper
+  band edge follows the smallest element (6.1 → 5.74 GHz).
+- NEXT LEVERS, both plain variables on v3 (default mesher works): (1) lower
+  τ slightly so the smallest element stays at its v3 size while the largest
+  grows — τ = (1.15·0.85¹⁴ / k_el)^(1/14); (2) scale further so element 1's
+  2nd harmonic drops below 1.71 GHz.
+- solve #19 — reason: coarse scan point k_el 1.27, τ 0.844 (board
+  251.9 mm, largest arm 76.2 mm; predicted 2f0 ≈ 1.43, 2f1 ≈ 1.69 GHz);
+  SOLVE_CORES=5; submitted 02:45.
 - DISK BASELINE: 40 GB free at session start → ≈ 14–19 GB idle now. The
   Windows pagefile grew to ≈ 21 GB and will not shrink without a reboot.
 - (superseded) Redesign (THINK ONLY until the user answers the 7 clarification questions
